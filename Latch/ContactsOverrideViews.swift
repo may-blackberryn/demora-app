@@ -1064,7 +1064,6 @@ struct EmailContactProfileView: View {
                            : tr("You've sent too many codes today. Try again tomorrow.")
         } catch {
             self.error = tr("Couldn't send the code. Check your connection and try again.")
-                + "\n\n[debug] " + String(describing: error)
         }
     }
 
@@ -1887,7 +1886,6 @@ struct ContactGateView: View {
             usage = try? await EmailCodeService.usage()
         } catch {
             self.error = tr("Couldn't send the request — check your connection and try again.")
-                + "\n\n[debug] " + String(describing: error)
         }
         // Record whatever actually went out — even on a partial failure — so
         // Home's "Awaiting approval" list matches reality.
