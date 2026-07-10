@@ -3,11 +3,6 @@
 //  Handles CloudKit silent pushes so a trusted contact's override approval
 //  applies in the background — without the user reopening Demora.
 //
-//  Requires (enable in Xcode → Signing & Capabilities on the Latch target):
-//    • Push Notifications
-//    • Background Modes → Remote notifications
-//  and, in CloudKit Dashboard, the OverrideApproval field `requesterCode`
-//  marked Queryable, with the schema deployed to Production.
 //
 
 import UIKit
@@ -39,12 +34,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     /// newly-approved override changes in the background.
     func application(
         _ application: UIApplication,
-        didReceiveRemoteNotification userInfo: [AnyHashable: Any]
-    ) async -> UIBackgroundFetchResult {
-        guard let note = CKNotification(fromRemoteNotificationDictionary: userInfo),
-              note.subscriptionID == ContactsRelay.approvalSubscriptionID
-        else { return .noData }
-        let applied = await ContactsRelay.processApprovalsInBackground()
-        return applied ? .newData : .noData
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler:
+            @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        let isOurs = CKNotification(fromRemoteNotificationDictionary: userInfo)?
+            .subscriptionID == ContactsRelay.approvalSubscriptionID
+        guard isOurs else { completionHandler(.noData); return }
+        Task {
+            let applied = await ContactsRelay.processApprovalsInBackground()
+            completionHandler(applied ? .newData : .noData)
+        }
     }
 }

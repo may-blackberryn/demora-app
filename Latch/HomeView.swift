@@ -453,8 +453,13 @@ struct PendingChangeRow: View {
                     Text(tr("Applying…")).font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text(timerInterval: Date.now...max(change.appliesAt,
-                                                       Date.now.addingTimeInterval(1)),
+                    // `appliesAt` is anchored to TimeGuard's tamper-resistant
+                    // clock, but Text(timerInterval:) ticks on the system clock.
+                    // Project the TimeGuard-based remaining time onto the system
+                    // clock so the countdown is correct — and doesn't flicker at
+                    // ~1s — even when the two clocks disagree (e.g. after sleep).
+                    let remaining = max(1, change.appliesAt.timeIntervalSince(TimeGuard.now()))
+                    Text(timerInterval: Date.now...Date.now.addingTimeInterval(remaining),
                          countsDown: true)
                         .font(.headline.monospacedDigit())
                 }

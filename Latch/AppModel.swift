@@ -29,11 +29,6 @@ enum TutorialStep: Int {
 final class AppModel: ObservableObject {
     @Published var state = SharedStore.loadState()
     @Published var authorized = false
-    /// When we last saw a successful authorization grant. `authorizationStatus`
-    /// can read stale (not yet `.approved`) for a moment right after the user
-    /// approves, and the Screen Time prompt triggers a foreground refresh — so
-    /// without this guard the re-auth banner flips back on right after granting.
-    private var authorizedAt: Date?
 
     /// Non-nil while the first-run tutorial is running.
     @Published var tutorial: TutorialStep?
@@ -111,7 +106,17 @@ final class AppModel: ObservableObject {
         }
         isReplay = SharedStore.isReplaying
         migrateScreenTimeCodeToKeychain()
-        refreshAuthorization()   // reflect current Screen Time status at launch
+        // Fast path so an approved install doesn't flash the banner.
+        authorized = AuthorizationCenter.shared.authorizationStatus == .approved
+        // authorizationStatus is unreliable — it can read .notDetermined even
+        // when access is granted, which showed the re-auth banner on every
+        // launch. requestAuthorization is authoritative: it returns SILENTLY
+        // when already approved, so confirm with it for a set-up install. It
+        // won't prompt unless access is genuinely missing, and never runs during
+        // onboarding/the tutorial (which handle authorization themselves).
+        if SharedStore.loadState().isSetUp && tutorial == nil {
+            Task { [weak self] in await self?.verifyAuthorization() }
+        }
         // Re-check due changes every 30s while the app is open so a
         // countdown hitting zero applies without relaunching.
         timer = Timer.publish(every: 30, on: .main, in: .common)
@@ -361,7 +366,6 @@ final class AppModel: ObservableObject {
             try await AuthorizationCenter.shared
                 .requestAuthorization(for: .individual)
             authorized = true
-            authorizedAt = Date()
         } catch {
             authorized = false
         }
@@ -369,20 +373,38 @@ final class AppModel: ObservableObject {
             .requestAuthorization(options: [.alert, .sound, .badge])
     }
 
+    /// Authoritative authorization check. `authorizationStatus` can read stale
+    /// (.notDetermined even when granted), so we confirm with
+    /// requestAuthorization, which returns SILENTLY when already approved. It
+    /// prompts only if access is genuinely undetermined, and throws (handled)
+    /// only if the user previously denied — so it reliably clears a false
+    /// "not authorized" without nagging an approved user.
+    func verifyAuthorization() async {
+        if AuthorizationCenter.shared.authorizationStatus == .approved {
+            authorized = true
+            return
+        }
+        do {
+            try await AuthorizationCenter.shared
+                .requestAuthorization(for: .individual)
+            authorized = true
+        } catch {
+            authorized = false
+        }
+    }
+
     /// Sync the published `authorized` flag with the live Screen Time status.
     /// Called on launch and whenever the app becomes active, so an authorization
     /// that was lost or revoked (e.g. after a TestFlight→App Store install, or a
     /// change in Settings) is reflected even for an already-set-up install that
     /// never re-runs onboarding.
+    /// Manual poke (e.g. on foreground): only ever upgrades to authorized. The
+    /// observer set up in init is the source of truth and handles a real loss of
+    /// access; this just catches a grant made in Settings promptly, and never
+    /// downgrades on a possibly-stale synchronous read.
     func refreshAuthorization() {
         if AuthorizationCenter.shared.authorizationStatus == .approved {
             authorized = true
-        } else if let t = authorizedAt, Date().timeIntervalSince(t) < 10 {
-            // Just granted — the status can read stale for a beat. Don't flip
-            // the banner back on from a transient read; the real value settles.
-            return
-        } else {
-            authorized = false
         }
     }
 

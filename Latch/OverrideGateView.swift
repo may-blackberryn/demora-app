@@ -34,8 +34,11 @@ struct OverrideGateView: View {
                             } else if change.isDue {
                                 Text(tr("now")).foregroundStyle(.secondary)
                             } else {
-                                Text(timerInterval: Date.now...max(change.appliesAt,
-                                                                   Date.now.addingTimeInterval(1)),
+                                // Project the TimeGuard-based remaining time onto
+                                // the system clock so the countdown matches (and
+                                // doesn't flicker) when the clocks disagree.
+                                let remaining = max(1, change.appliesAt.timeIntervalSince(TimeGuard.now()))
+                                Text(timerInterval: Date.now...Date.now.addingTimeInterval(remaining),
                                      countsDown: true)
                                     .monospacedDigit()
                             }
