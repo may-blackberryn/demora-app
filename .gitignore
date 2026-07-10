@@ -1,0 +1,25 @@
+# Xcode build & user state
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# macOS
+.DS_Store
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Dependencies (unused, but ignored for safety)
+node_modules/
+Pods/
+Carthage/Build/
+
+# Archives & signing artifacts
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.mobileprovision

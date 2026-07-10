@@ -1,0 +1,193 @@
+{
+  "fill" : {
+    "linear-gradient" : [
+      "srgb:0.09412,0.09020,0.07843,1.00000",
+      "srgb:0.09412,0.09020,0.07843,1.00000"
+    ]
+  },
+  "groups" : [
+    {
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : "automatic"
+            }
+          ],
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "C6715A89-35A0-4FE6-A582-3ACFA82E23FA.png",
+          "name" : "C6715A89-35A0-4FE6-A582-3ACFA82E23FA",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 0
+            }
+          ],
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              8.9,
+              -12.399999999999999
+            ]
+          }
+        },
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : "system-light"
+            }
+          ],
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "C6715A89-35A0-4FE6-A582-3ACFA82E23FA copy 3.png",
+          "name" : "C6715A89-35A0-4FE6-A582-3ACFA82E23FA copy 3",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 0
+            }
+          ],
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              7.5,
+              -14.932798818108722
+            ]
+          }
+        },
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : "system-dark"
+            }
+          ],
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "C6715A89-35A0-4FE6-A582-3ACFA82E23FA copy.png",
+          "name" : "C6715A89-35A0-4FE6-A582-3ACFA82E23FA copy",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 0
+            }
+          ],
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -9.583361298206455,
+              93
+            ]
+          }
+        },
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : "system-dark"
+            }
+          ],
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "C6715A89-35A0-4FE6-A582-3ACFA82E23FA copy 2.png",
+          "name" : "C6715A89-35A0-4FE6-A582-3ACFA82E23FA copy 2",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 0
+            }
+          ],
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.6
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.2
+      }
+    },
+    {
+      "hidden" : false,
+      "layers" : [
+        {
+          "glass" : true,
+          "image-name" : "635ACB4F-CC26-465F-847F-48A8315F2EA1 copy 2.png",
+          "name" : "635ACB4F-CC26-465F-847F-48A8315F2EA1 copy 2",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              8,
+              -11
+            ]
+          }
+        },
+        {
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "635ACB4F-CC26-465F-847F-48A8315F2EA1 copy 3.png",
+          "name" : "635ACB4F-CC26-465F-847F-48A8315F2EA1 copy 3",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -9.3,
+              95
+            ]
+          }
+        },
+        {
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "635ACB4F-CC26-465F-847F-48A8315F2EA1 copy.png",
+          "name" : "635ACB4F-CC26-465F-847F-48A8315F2EA1 copy",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              7,
+              -10
+            ]
+          }
+        },
+        {
+          "fill" : "none",
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "635ACB4F-CC26-465F-847F-48A8315F2EA1.png",
+          "name" : "635ACB4F-CC26-465F-847F-48A8315F2EA1",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.6
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.2
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "iOS"
+    ]
+  }
+}
