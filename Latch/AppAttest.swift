@@ -35,12 +35,19 @@ enum AppAttest {
     /// call throws `DCError.invalidKey`. We discard the stale key, generate a
     /// fresh one, and try once more — otherwise the app is stuck failing forever.
     static func assertionHeaders(for body: Data) async throws -> [String: String] {
-        guard isSupported else { throw AppAttestError.unsupported }
+        guard isSupported else {
+            NSLog("Demora AppAttest: NOT supported on this device")
+            throw AppAttestError.unsupported
+        }
         do {
             return try await buildHeaders(for: body)
         } catch let error as DCError where error.code == .invalidKey {
+            NSLog("Demora AppAttest: invalidKey — regenerating key and retrying once")
             resetKey()
             return try await buildHeaders(for: body)
+        } catch {
+            NSLog("Demora AppAttest FAILED: \(String(describing: error)) — DCError code=\((error as? DCError)?.code.rawValue ?? -1)")
+            throw error
         }
     }
 
@@ -63,8 +70,14 @@ enum AppAttest {
         let keyId = try await currentKeyId()
         let challenge = try await EmailCodeService.challenge()
         let clientDataHash = Data(SHA256.hash(data: challengeData(challenge) + body))
-        let assertion = try await service.generateAssertion(keyId,
+        let assertion: Data
+        do {
+            assertion = try await service.generateAssertion(keyId,
                                                             clientDataHash: clientDataHash)
+        } catch {
+            NSLog("Demora AppAttest: generateAssertion failed — \(String(describing: error))")
+            throw error
+        }
         return [
             "X-Attest-Key": keyId,
             "X-Attest-Challenge": challenge,
@@ -79,8 +92,14 @@ enum AppAttest {
         let keyId = try await currentKeyId()
         let challenge = try await EmailCodeService.challenge()
         let clientDataHash = Data(SHA256.hash(data: challengeData(challenge)))
-        let attestation = try await service.attestKey(keyId,
+        let attestation: Data
+        do {
+            attestation = try await service.attestKey(keyId,
                                                       clientDataHash: clientDataHash)
+        } catch {
+            NSLog("Demora AppAttest: attestKey (registration) failed — \(String(describing: error))")
+            throw error
+        }
         try await EmailCodeService.registerAttestation(
             keyId: keyId, challenge: challenge, attestation: attestation)
         defaults.set(true, forKey: registeredKey)

@@ -420,11 +420,15 @@ struct PlannedWindow: Codable, Identifiable, Equatable {
     var startsAt: Date
     var endsAt: Date
 
+    // Wall clock (Date), not TimeGuard: startsAt/endsAt are set in wall-clock
+    // time and enforced by DeviceActivity, which is also wall-clock. Using
+    // TimeGuard here made the window's active state disagree with when it
+    // actually starts/ends once the clocks drift (e.g. after the device sleeps).
     var isActive: Bool {
-        let now = TimeGuard.now()
+        let now = Date()
         return now >= startsAt && now < endsAt
     }
-    var isPast: Bool { TimeGuard.now() >= endsAt }
+    var isPast: Bool { Date() >= endsAt }
     var activityName: String { "planned-\(id.uuidString)" }
 }
 
@@ -454,7 +458,10 @@ struct BlockSession: Codable, Identifiable, Equatable {
     var startedAt: Date
     var endsAt: Date
 
-    var isActive: Bool { TimeGuard.now() < endsAt }
+    // Wall clock (Date), not TimeGuard — endsAt and the DeviceActivity that
+    // ends the session are both wall-clock, so a session's active state must
+    // use the same clock or it won't expire when the clocks drift apart.
+    var isActive: Bool { Date() < endsAt }
     var activityName: String { "session-\(id.uuidString)" }
 
     init(name: String, kind: SessionKind, selection: FamilyActivitySelection,
