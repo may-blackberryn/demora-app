@@ -41,8 +41,15 @@ enum AppAttest {
         }
         do {
             return try await buildHeaders(for: body)
-        } catch let error as DCError where error.code == .invalidKey {
-            NSLog("Demora AppAttest: invalidKey — regenerating key and retrying once")
+        } catch let error as DCError where error.code == .invalidKey || error.code == .invalidInput {
+            // invalidKey: the stored key no longer exists (reinstall).
+            // invalidInput on attestKey: the key was already attested once — this
+            // happens when a prior /attest registration failed *after* attestKey
+            // succeeded (e.g. back when the Worker didn't yet accept the prod app
+            // id), leaving the key attested-but-unregistered and permanently stuck.
+            // Either way the only recovery is a brand-new key, so discard and retry.
+            let kind = error.code == .invalidKey ? "invalidKey" : "invalidInput"
+            NSLog("Demora AppAttest: \(kind) — regenerating key and retrying once")
             resetKey()
             return try await buildHeaders(for: body)
         } catch {
@@ -100,8 +107,20 @@ enum AppAttest {
             NSLog("Demora AppAttest: attestKey (registration) failed — \(String(describing: error))")
             throw error
         }
-        try await EmailCodeService.registerAttestation(
-            keyId: keyId, challenge: challenge, attestation: attestation)
+        do {
+            try await EmailCodeService.registerAttestation(
+                keyId: keyId, challenge: challenge, attestation: attestation)
+        } catch {
+            // attestKey succeeded, but the server didn't accept the registration.
+            // The one-time challenge is already spent, so this exact (key,
+            // attestation) can never be registered — and calling attestKey on this
+            // key again throws invalidInput forever. Discard the key so the next
+            // send starts clean with a fresh key + challenge instead of getting
+            // stuck. Then surface the real registration error.
+            NSLog("Demora AppAttest: registerAttestation failed — discarding key. \(String(describing: error))")
+            resetKey()
+            throw error
+        }
         defaults.set(true, forKey: registeredKey)
     }
 
