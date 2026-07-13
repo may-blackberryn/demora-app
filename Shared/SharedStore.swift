@@ -180,4 +180,47 @@ struct SharedStore {
         let c = Calendar.current.dateComponents([.year, .month, .day], from: date)
         return "\(c.year ?? 0)-\(c.month ?? 0)-\(c.day ?? 0)"
     }
+
+    // MARK: - Reported usage (block-vs-report reconcile)
+    //
+    // Blocking is driven by the DeviceActivity threshold, which can diverge from
+    // the minutes the LatchReport extension measures and the user actually sees —
+    // stranding a limit shielded while the app shows it under budget, stuck until
+    // the next daily reset. The report writes its per-limit minutes here (with a
+    // freshness stamp) so the app can reconcile the block against what's on screen.
+
+    private static let reportedUsageKey = "latch.reportedUsage.v1"
+    private static let reportedUsageAtKey = "latch.reportedUsageAt.v1"
+
+    static func saveReportedUsage(_ minutes: [UUID: Int]) {
+        saveDict(minutes, reportedUsageKey)
+        defaults.set(Date().timeIntervalSince1970, forKey: reportedUsageAtKey)
+    }
+    /// (per-limit minutes, when last written), or nil if never written.
+    static func reportedUsage() -> (minutes: [UUID: Int], at: Date)? {
+        guard defaults.object(forKey: reportedUsageAtKey) != nil else { return nil }
+        return (loadDict(reportedUsageKey),
+                Date(timeIntervalSince1970: defaults.double(forKey: reportedUsageAtKey)))
+    }
+
+    // Limits the foreground reconcile unblocked today because the report showed
+    // them under budget while the OS threshold had them blocked. Their background
+    // event is suppressed for the rest of the day so the same divergent threshold
+    // can't immediately re-block them. Reset each day.
+    private static let reconciledUnblockedKey = "latch.reconciledUnblocked.v1"
+
+    static func reconciledUnblockedToday() -> Set<UUID> {
+        let dict = (defaults.dictionary(forKey: reconciledUnblockedKey) as? [String: String]) ?? [:]
+        let today = dayKey(for: TimeGuard.now())
+        return Set(dict.compactMap { $0.value == today ? UUID(uuidString: $0.key) : nil })
+    }
+    static func setReconciledUnblocked(_ id: UUID, _ on: Bool) {
+        var dict = (defaults.dictionary(forKey: reconciledUnblockedKey) as? [String: String]) ?? [:]
+        if on { dict[id.uuidString] = dayKey(for: TimeGuard.now()) }
+        else { dict.removeValue(forKey: id.uuidString) }
+        defaults.set(dict, forKey: reconciledUnblockedKey)
+    }
+    static func clearReconciledUnblocked() {
+        defaults.removeObject(forKey: reconciledUnblockedKey)
+    }
 }

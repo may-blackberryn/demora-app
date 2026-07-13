@@ -169,6 +169,7 @@ struct ShieldController {
     static func clearForNewDay() {
         SharedStore.saveBlockedLimitIDs([])
         SharedStore.clearUsageTracking()
+        SharedStore.clearReconciledUnblocked()   // yesterday's overrides don't carry
         refresh()
     }
 }
