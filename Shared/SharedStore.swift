@@ -98,16 +98,60 @@ struct SharedStore {
     }
     #endif
 
+    private static var blockedLimitsFileURL: URL {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: LatchConstants.appGroupID)!
+            .appendingPathComponent("blockedLimits.json")
+    }
+
     /// Limit IDs whose daily threshold has been reached today (written by the
     /// monitor extension, read by ShieldController).
     static func loadBlockedLimitIDs() -> Set<UUID> {
-        guard let raw = defaults.array(forKey: LatchConstants.blockedKey) as? [String]
-        else { return [] }
+        guard let raw = defaults.array(forKey: LatchConstants.blockedKey) as? [String] else { return [] }
         return Set(raw.compactMap(UUID.init(uuidString:)))
     }
 
     static func saveBlockedLimitIDs(_ ids: Set<UUID>) {
-        defaults.set(ids.map(\.uuidString), forKey: LatchConstants.blockedKey)
+        let coordinator = NSFileCoordinator()
+        var error: NSError?
+        coordinator.coordinate(writingItemAt: blockedLimitsFileURL, options: [], error: &error) { url in
+            if let data = try? JSONEncoder().encode(ids.map(\.uuidString)) {
+                do {
+                    try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+                    defaults.set(ids.map(\.uuidString), forKey: LatchConstants.blockedKey)
+                } catch {
+                    NSLog("Demora: Failed to write blocked limits: \(error)")
+                }
+            }
+        }
+    }
+
+    /// Safely load, modify, and save the blocked limit IDs with an atomic lock
+    /// across the app and extension processes.
+    /// WARNING: Do not call loadBlockedLimitIDs() or saveBlockedLimitIDs() inside
+    /// the mutation closure, as nested coordination on the same file will deadlock.
+    static func mutateBlockedLimitIDs(_ mutation: (inout Set<UUID>) -> Void) {
+        let coordinator = NSFileCoordinator()
+        var error: NSError?
+        coordinator.coordinate(writingItemAt: blockedLimitsFileURL, options: [], error: &error) { url in
+            var ids = Set<UUID>()
+            if let data = try? Data(contentsOf: url),
+               let raw = try? JSONDecoder().decode([String].self, from: data) {
+                ids = Set(raw.compactMap(UUID.init(uuidString:)))
+            } else if let raw = defaults.array(forKey: LatchConstants.blockedKey) as? [String] {
+                ids = Set(raw.compactMap(UUID.init(uuidString:)))
+            }
+
+            mutation(&ids)
+
+            if let data = try? JSONEncoder().encode(ids.map(\.uuidString)) {
+                do {
+                    try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+                    defaults.set(ids.map(\.uuidString), forKey: LatchConstants.blockedKey)
+                } catch {
+                    NSLog("Demora: Failed to write mutated blocked limits: \(error)")
+                }
+            }
+        }
     }
 
     // MARK: - Free-period credit (per limit, per day, in minutes)

@@ -363,9 +363,9 @@ enum ChangeEngine {
             }
         case .removeLimit(let id):
             state.limits.removeAll { $0.id == id }
-            var blocked = SharedStore.loadBlockedLimitIDs()
-            blocked.remove(id)
-            SharedStore.saveBlockedLimitIDs(blocked)
+            SharedStore.mutateBlockedLimitIDs { blocked in
+                blocked.remove(id)
+            }
         case .setStrictDelay(let t):
             state.strictDelay = t
         case .setLenientDelay(let t):
@@ -792,9 +792,9 @@ enum ChangeEngine {
             SharedStore.saveFreeWindowUsage([:])
             SharedStore.freeWindowStart = nil
             if !usage.isEmpty {
-                var blocked = SharedStore.loadBlockedLimitIDs()
-                blocked.subtract(usage.keys)
-                SharedStore.saveBlockedLimitIDs(blocked)
+                SharedStore.mutateBlockedLimitIDs { blocked in
+                    blocked.subtract(usage.keys)
+                }
             }
         }
         reconfigureDailyMonitoring(state: SharedStore.loadState())

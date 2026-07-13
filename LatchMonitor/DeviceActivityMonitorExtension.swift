@@ -80,9 +80,9 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         if raw.hasPrefix("limit-"),
            let id = UUID(uuidString: String(raw.dropFirst(6))) {
             // Budget spent → block for the rest of the day.
-            var blocked = SharedStore.loadBlockedLimitIDs()
-            blocked.insert(id)
-            SharedStore.saveBlockedLimitIDs(blocked)
+            SharedStore.mutateBlockedLimitIDs { blocked in
+                blocked.insert(id)
+            }
             ShieldController.refresh()
         } else if raw.hasPrefix("fw-") {
             // Silent free-window checkpoint — per-limit usage inside the window.
