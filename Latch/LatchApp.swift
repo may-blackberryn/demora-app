@@ -55,6 +55,12 @@ struct LatchApp: App {
         }
         .onChange(of: scenePhase) { phase in
             if phase == .active {
+                if !SharedStore.defaults.bool(forKey: "latch.healedRaceCondition") {
+                    SharedStore.saveBlockedLimitIDs([])
+                    ShieldController.refresh()
+                    SharedStore.defaults.set(true, forKey: "latch.healedRaceCondition")
+                }
+
                 // Re-register OS monitoring so the current limits/thresholds are
                 // installed (e.g. includesPastActivity). Housekeeping's 30s tick
                 // only reconfigures when a pending change is due, so without this
