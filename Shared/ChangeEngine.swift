@@ -317,11 +317,29 @@ enum ChangeEngine {
     /// Periodic maintenance: apply due changes, drop finished sessions,
     /// re-derive shields. Called on app foreground/timer and from extensions.
     static func housekeeping() {
+        rolloverIfNewDay()
         applyDueChanges()
         pruneExpiredSessions()
         prunePastPlanned()
         ShieldController.refresh()
         reconcileFreeWindow()
+    }
+
+    /// Foreground fallback for the midnight reset. iOS doesn't guarantee the
+    /// monitor's daily `intervalDidStart` fires on time in the background, so a
+    /// limit spent yesterday can still be shielded after midnight — and, because
+    /// `housekeeping()` otherwise just re-derives shields from the stale
+    /// `blockedLimitIDs`, opening the app wouldn't clear it either. Mirroring the
+    /// monitor's reset here guarantees an app open on a new day always unblocks.
+    /// Uses the same `lastResetDay` guard as the monitor, so the two never
+    /// double-reset. Skipped during the tutorial/replay (simulation).
+    static func rolloverIfNewDay() {
+        guard !SharedStore.simulating else { return }
+        let today = SharedStore.dayKey(for: TimeGuard.now())
+        guard SharedStore.lastResetDay != today else { return }
+        ShieldController.clearForNewDay()          // clears blocks + usage
+        SharedStore.lastResetDay = today
+        reconfigureDailyMonitoring(state: SharedStore.loadState())
     }
 
     /// Planned windows in the past expire on their own — no delay needed.

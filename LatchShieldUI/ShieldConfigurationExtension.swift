@@ -17,7 +17,9 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
             icon: UIImage(systemName: "hourglass.circle.fill"),
             title: .init(text: tr("Blocked by Demora"),
                          color: .white),
-            subtitle: .init(text: tr("This app is blocked right now — by a limit, a schedule, or a session. Changing your rules takes a delay; open Demora to queue a change."),
+            subtitle: .init(text: tr("This app is blocked right now — by a limit, a schedule, or a session. Changing your rules takes a delay; open Demora to queue a change.")
+                            + "\n\n"
+                            + tr("If it should already be unblocked, iOS is sometimes slow to apply a background change — open Demora for an immediate unblock."),
                             color: UIColor.white.withAlphaComponent(0.8)),
             primaryButtonLabel: .init(text: tr("OK"), color: .black),
             primaryButtonBackgroundColor: .white

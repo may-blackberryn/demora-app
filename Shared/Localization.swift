@@ -16,8 +16,15 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 
     static var current: AppLanguage {
         get {
-            AppLanguage(rawValue: SharedStore.defaults
-                .string(forKey: "latch.language") ?? "") ?? .english
+            // An explicit in-app choice always wins.
+            if let saved = SharedStore.defaults.string(forKey: "latch.language"),
+               let lang = AppLanguage(rawValue: saved) {
+                return lang
+            }
+            // Otherwise follow the device: start in Spanish if the device's top
+            // preferred language is Spanish, English for everything else.
+            let preferred = Locale.preferredLanguages.first ?? "en"
+            return preferred.hasPrefix("es") ? .spanish : .english
         }
         set {
             SharedStore.defaults.set(newValue.rawValue, forKey: "latch.language")
@@ -575,6 +582,7 @@ private let spanishStrings: [String: String] = [
     "Temporarily lifts limits, schedules, and block sessions for the chosen apps.": "Levanta temporalmente límites, horarios y sesiones de bloqueo para las apps elegidas.",
     "Thanks for testing Demora!": "¡Gracias por probar Demora!",
     "This app is blocked right now — by a limit, a schedule, or a session. Changing your rules takes a delay; open Demora to queue a change.": "Esta app está bloqueada ahora — por un límite, un horario o una sesión. Cambiar tus reglas toma una espera; abre Demora para programar un cambio.",
+    "If it should already be unblocked, iOS is sometimes slow to apply a background change — open Demora for an immediate unblock.": "Si ya debería estar desbloqueada, iOS a veces tarda en aplicar un cambio en segundo plano — abre Demora para desbloquearla de inmediato.",
     "Two delays rule everything": "Dos esperas lo gobiernan todo",
     "Type": "Tipo",
     "Unblock": "Desbloqueo",
