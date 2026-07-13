@@ -59,7 +59,12 @@ struct LatchApp: App {
                 // installed (e.g. includesPastActivity). Housekeeping's 30s tick
                 // only reconfigures when a pending change is due, so without this
                 // an already-spent limit never gets a threshold that can fire.
-                ChangeEngine.reconfigureDailyMonitoring(state: SharedStore.loadState())
+                // Windows (schedules, sessions, free periods) are re-armed here
+                // too so enforcement self-heals on open if a monitor was ever
+                // dropped — e.g. across a TestFlight→App Store switch.
+                let state = SharedStore.loadState()
+                ChangeEngine.reconfigureDailyMonitoring(state: state)
+                ChangeEngine.reconfigureWindowMonitoring(state: state)
                 model.refreshAuthorization()
                 model.tick()
             }
