@@ -93,7 +93,7 @@ struct LimitsUsageReport: nonisolated DeviceActivityReportScene {
             }
         }
 
-        let rows = loadLimits().map { limit -> LimitUsageRow in
+        return loadLimits().map { limit in
             var used: TimeInterval = 0
             for t in limit.selection.applicationTokens { used += perApp[t] ?? 0 }
             for t in limit.selection.categoryTokens { used += perCat[t] ?? 0 }
@@ -101,16 +101,6 @@ struct LimitsUsageReport: nonisolated DeviceActivityReportScene {
                                  usedMinutes: Int(used / 60),
                                  budget: limit.minutesPerDay)
         }
-        // Publish measured minutes so the app can reconcile a divergent OS block
-        // against what the user actually sees. Keys must match SharedStore's
-        // reportedUsage helpers.
-        if let d = UserDefaults(suiteName: AppGroup.id) {
-            let usage = Dictionary(uniqueKeysWithValues:
-                rows.map { ($0.id.uuidString, $0.usedMinutes) })
-            d.set(usage, forKey: "latch.reportedUsage.v1")
-            d.set(Date().timeIntervalSince1970, forKey: "latch.reportedUsageAt.v1")
-        }
-        return rows
     }
 
     private func loadLimits() -> [MiniLimit] {

@@ -321,55 +321,8 @@ enum ChangeEngine {
         applyDueChanges()
         pruneExpiredSessions()
         prunePastPlanned()
-        reconcileBlocksAgainstReport()
         ShieldController.refresh()
         reconcileFreeWindow()
-    }
-
-    /// Make the block state agree with the minutes the user actually sees. The
-    /// DeviceActivity threshold that drives blocking can diverge from the report
-    /// extension's measured usage, stranding a limit shielded while the app shows
-    /// it under budget — and because a blocked limit gets no live event, only the
-    /// once-daily reset would ever clear it. When the (fresh) report says a
-    /// blocked limit is under budget, trust the report: unblock it and suppress
-    /// its background event for the day so the divergent threshold can't
-    /// immediately re-block. If measured usage later reaches the budget,
-    /// enforcement resumes.
-    static func reconcileBlocksAgainstReport() {
-        guard !SharedStore.simulating else { return }
-        guard let report = SharedStore.reportedUsage() else { return }
-        // Only trust fresh numbers: the report recomputes only while its view is
-        // on screen, so stale data from a past session must never unblock.
-        guard Date().timeIntervalSince(report.at) < 600 else { return }
-
-        let state = SharedStore.loadState()
-        let credit = SharedStore.loadFreeCreditByLimit()
-        var blocked = SharedStore.loadBlockedLimitIDs()
-        let reconciled = SharedStore.reconciledUnblockedToday()
-        var changed = false
-
-        for limit in state.limits where limit.minutesPerDay > 0 {
-            guard let used = report.minutes[limit.id] else { continue }
-            let budget = limit.minutesPerDay + (credit[limit.id] ?? 0)
-            if used < budget {
-                // Report is under budget — a block here contradicts the screen.
-                if blocked.contains(limit.id) {
-                    blocked.remove(limit.id)
-                    SharedStore.setReconciledUnblocked(limit.id, true)
-                    changed = true
-                }
-            } else if reconciled.contains(limit.id) {
-                // Measured usage caught up to the budget — resume enforcement.
-                SharedStore.setReconciledUnblocked(limit.id, false)
-                blocked.insert(limit.id)
-                changed = true
-            }
-        }
-        if changed {
-            SharedStore.saveBlockedLimitIDs(blocked)
-            reconfigureDailyMonitoring(state: state)
-            ShieldController.refresh()
-        }
     }
 
     /// Foreground fallback for the midnight reset. iOS doesn't guarantee the
@@ -514,16 +467,12 @@ enum ChangeEngine {
         guard !state.limits.isEmpty else { return }
 
         let blocked = SharedStore.loadBlockedLimitIDs()
-        let reconciled = SharedStore.reconciledUnblockedToday()
         var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
 
         for limit in state.limits {
             // A 0-minute limit is always blocked (handled by the shield), and a
             // limit already at its cap stays blocked — neither needs an event.
             if limit.minutesPerDay == 0 || blocked.contains(limit.id) { continue }
-            // Report-reconciled "under budget" today: don't re-arm the divergent
-            // threshold, or it would immediately re-block them again.
-            if reconciled.contains(limit.id) { continue }
 
             // includesPastActivity:true makes the OS count usage that already
             // happened earlier today — including time spent before this limit
@@ -553,7 +502,6 @@ enum ChangeEngine {
             }
             events[DeviceActivityEvent.Name("limit-\(limit.id.uuidString)")] = limitEvent
         }
-        SharedStore.saveBlockedLimitIDs(blocked)
 
         let schedule = DeviceActivitySchedule(
             intervalStart: DateComponents(hour: 0, minute: 0),
