@@ -365,15 +365,22 @@ struct SessionsListView: View {
                 }
                 ForEach(model.state.sessions.filter(\.isActive)) { session in
                     VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(session.kind == .block ? "⛔️"
-                                 : session.kind == .free ? "🌴" : "✅")
-                            Text(session.name).font(.headline)
-                            Spacer()
-                            Text(timerInterval: Date.now...max(session.endsAt, Date.now.addingTimeInterval(1)),
-                                 countsDown: true)
-                                .font(.headline.monospacedDigit())
+                        NavigationLink { detailView(for: session) } label: {
+                            HStack {
+                                Text(session.kind == .block ? "⛔️"
+                                     : session.kind == .free ? "🌴" : "✅")
+                                Text(session.name).font(.headline)
+                                    .foregroundStyle(Ink.ink)
+                                Spacer()
+                                Text(timerInterval: Date.now...max(session.endsAt, Date.now.addingTimeInterval(1)),
+                                     countsDown: true)
+                                    .font(.headline.monospacedDigit())
+                                    .foregroundStyle(Ink.ink)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption).foregroundStyle(Ink.faint)
+                            }
                         }
+                        .buttonStyle(.plain)
                         Button(tr("End early…")) {
                             model.queue(.endSessionEarly(id: session.id))
                         }
@@ -394,6 +401,21 @@ struct SessionsListView: View {
         .casedNavigationTitle(tr("Sessions"))
         .refreshable { model.tick() }
         .sheet(isPresented: $showAdd) { SessionStartView() }
+    }
+
+    /// Same session-info page the "now & next" rows push — shows what the
+    /// session does and which apps it covers.
+    private func detailView(for s: BlockSession) -> ScheduledItemDetailView {
+        ScheduledItemDetailView(
+            title: s.name,
+            summary: s.kind == .block ? tr("Blocking the selected apps")
+                   : s.kind == .free ? tr("Free period — nothing is blocked")
+                   : tr("Unblocking the selected apps"),
+            timing: String(format: tr("until %@"),
+                           s.endsAt.formatted(date: .omitted, time: .shortened)),
+            appsTitle: s.kind == .free ? nil
+                     : (s.kind == .block ? tr("Apps blocked") : tr("Apps unblocked")),
+            selection: s.kind == .free ? nil : s.selection)
     }
 }
 

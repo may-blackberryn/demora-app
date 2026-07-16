@@ -498,6 +498,22 @@ final class AppModel: ObservableObject {
         tutorialScreen = "limits"
     }
 
+    /// Jump to the Settings tab and open a specific section (Delays, Overrides,
+    /// …), always landing on that section's *main* page. Reassigning the path to
+    /// a different value rebuilds the stack and drops any closure-based
+    /// sub-pushes (e.g. a Contacts page inside Overrides). If we happen to already
+    /// be at this exact route, clear it first so we still pop back to the root
+    /// instead of leaving a deeper page on screen.
+    func openSettings(to route: SettingsRoute) {
+        selectedTab = 3
+        if settingsPath == [route] {
+            settingsPath = []
+            DispatchQueue.main.async { self.settingsPath = [route] }
+        } else {
+            settingsPath = [route]
+        }
+    }
+
     private func advanceTutorial(to step: TutorialStep) {
         tutorial = step
         switch step {

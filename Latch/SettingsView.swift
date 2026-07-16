@@ -91,6 +91,10 @@ struct HelpHubView: View {
                     GridCard(symbol: "book", title: tr("Guide"),
                              subtitle: tr("how each part works"))
                 }
+                NavigationLink { LimitationsView() } label: {
+                    GridCard(symbol: "exclamationmark.triangle", title: tr("Limitations"),
+                             subtitle: tr("iOS reporting notes"))
+                }
                 NavigationLink { ContactView() } label: {
                     GridCard(symbol: "envelope", title: tr("Contact"),
                              subtitle: tr("bug, feature, help"))
@@ -113,6 +117,45 @@ struct HelpHubView: View {
         .buttonStyle(.plain)
         .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(tr("Help"))
+    }
+}
+
+// MARK: - Limitations
+
+/// Reference page for the informational notes shown around the app (which can be
+/// dismissed where they appear). The pre-iOS-17.4 counting note only shows when
+/// it actually applies to this device.
+struct LimitationsView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                limitation(
+                    symbol: "clock.arrow.circlepath",
+                    title: tr("Today's usage reporting"),
+                    body: tr("Today's usage is reported by iOS Screen Time, which can be slow to load or briefly show nothing. If it looks empty, tap the refresh arrow a couple of times."))
+                if #unavailable(iOS 17.4) {
+                    limitation(
+                        symbol: "calendar.badge.exclamationmark",
+                        title: tr("Daily counting on older iOS"),
+                        body: tr("Heads up: on your iOS version, a limit only counts screen time from the moment you add it — time you already spent earlier today isn't included. Update to iOS 17.4 or later for exact daily counting."))
+                }
+            }
+            .padding(20).frame(maxWidth: 640)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Ink.paper.ignoresSafeArea())
+        .casedNavigationTitle(tr("Limitations"))
+    }
+
+    private func limitation(symbol: String, title: String,
+                            body: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: symbol)
+                .font(.headline).foregroundStyle(Ink.ink)
+            Text(body)
+                .font(.body).foregroundStyle(Ink.ink)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 

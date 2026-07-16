@@ -38,6 +38,12 @@ func tr(_ key: String) -> String {
 }
 
 private let spanishStrings: [String: String] = [
+    "Dismiss": "Descartar",
+    "This is a demo — nothing you do here is saved or actually blocked.": "Esto es una demostración — nada de lo que haces aquí se guarda ni se bloquea de verdad.",
+    "Limitations": "Limitaciones",
+    "iOS reporting notes": "notas de reporte de iOS",
+    "Today's usage reporting": "Reporte del uso de hoy",
+    "Daily counting on older iOS": "Conteo diario en iOS antiguo",
     "%@ #%d of every month": "%@ #%d de cada mes",
     "%d / %d min": "%d / %d min",
     "blocked until midnight": "bloqueado hasta medianoche",

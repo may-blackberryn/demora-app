@@ -31,6 +31,10 @@ struct LimitsView: View {
     // Coalesces overlapping hard rebuilds — tearing down an extension that a
     // previous rebuild just spawned is exactly what caused the flakiness.
     @State private var reloadInFlight = false
+    // Dismissible informational notes. Once dismissed they stay hidden here but
+    // remain available under Help → Limitations.
+    @AppStorage("limits.usageNoteDismissed") private var usageNoteDismissed = false
+    @AppStorage("limits.countingNoteDismissed") private var countingNoteDismissed = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -40,9 +44,12 @@ struct LimitsView: View {
                     Section { EnforcementBanner() }
                 }
                 if #unavailable(iOS 17.4) {
-                    Section {
-                        Text(tr("Heads up: on your iOS version, a limit only counts screen time from the moment you add it — time you already spent earlier today isn't included. Update to iOS 17.4 or later for exact daily counting."))
-                            .font(.footnote).italic().foregroundStyle(.secondary)
+                    if !countingNoteDismissed {
+                        Section {
+                            DismissibleNote(
+                                text: tr("Heads up: on your iOS version, a limit only counts screen time from the moment you add it — time you already spent earlier today isn't included. Update to iOS 17.4 or later for exact daily counting."),
+                                onDismiss: { countingNoteDismissed = true })
+                        }
                     }
                 }
                 if !model.state.limits.isEmpty {
@@ -66,8 +73,11 @@ struct LimitsView: View {
                             .buttonStyle(.plain).foregroundStyle(.tint)
                         }
                     } footer: {
-                        Text(tr("Today's usage is reported by iOS Screen Time, which can be slow to load or briefly show nothing. If it looks empty, tap the refresh arrow a couple of times."))
-                            .font(.caption).italic().foregroundStyle(.secondary)
+                        if !usageNoteDismissed {
+                            DismissibleNote(
+                                text: tr("Today's usage is reported by iOS Screen Time, which can be slow to load or briefly show nothing. If it looks empty, tap the refresh arrow a couple of times."),
+                                onDismiss: { usageNoteDismissed = true })
+                        }
                     }
                 }
                 Section {
@@ -433,6 +443,31 @@ struct AppPickerSheet: View {
                         Button(tr("Done")) { dismiss() }
                     }
                 }
+        }
+    }
+}
+
+// MARK: - Dismissible note
+
+/// A small italic informational note with an X to dismiss it. Dismissing only
+/// hides it where it appears; the same notes stay available under
+/// Help → Limitations.
+struct DismissibleNote: View {
+    let text: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(text)
+                .font(.caption).italic().foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            Button(action: onDismiss) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel(tr("Dismiss"))
+            }
+            .buttonStyle(.plain)
         }
     }
 }

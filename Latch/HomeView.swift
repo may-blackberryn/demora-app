@@ -93,7 +93,8 @@ struct HomeView: View {
                         }
                     } header: {
                         collapsibleHeader(tr("Current delays"),
-                                          collapsed: $delaysCollapsed)
+                                          collapsed: $delaysCollapsed,
+                                          changeTarget: .delays)
                     }
                 }
 
@@ -118,7 +119,8 @@ struct HomeView: View {
                         }
                     } header: {
                         collapsibleHeader(tr("Current overrides"),
-                                          collapsed: $overridesCollapsed)
+                                          collapsed: $overridesCollapsed,
+                                          changeTarget: .overrides)
                     }
                 }
 
@@ -324,7 +326,8 @@ struct HomeView: View {
     }
 
     private func collapsibleHeader(_ title: String,
-                                   collapsed: Binding<Bool>) -> some View {
+                                   collapsed: Binding<Bool>,
+                                   changeTarget: SettingsRoute) -> some View {
         HStack {
             Button {
                 withAnimation { collapsed.wrappedValue.toggle() }
@@ -340,8 +343,7 @@ struct HomeView: View {
             Spacer()
             if !model.inTutorial {
                 Button(tr("change")) {
-                    model.selectedTab = 3
-                    model.settingsPath = [.rules]
+                    model.openSettings(to: changeTarget)
                 }
                 .font(.footnote)
                 .italic()

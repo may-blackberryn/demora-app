@@ -185,9 +185,12 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             Text(tr("Everything here is just a sample — nothing is saved and nothing is actually blocked. It's only to show how the app works."))
-                .font(.footnote)
+                .font(.footnote.weight(.semibold))
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.black)
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(Color.yellow, in: RoundedRectangle(cornerRadius: 12))
             Spacer()
             Button(tr("Add my first limit")) { model.beginTutorial() }
                 .buttonStyle(.borderedProminent)
@@ -429,6 +432,23 @@ struct TutorialCallout: View {
             .padding(.bottom, model.applyBarVisible ? 150 : 56)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
+    }
+}
+
+/// Persistent banner pinned to the top of the screen throughout the guided
+/// tour, so it's always obvious the walkthrough runs on sample data.
+struct TutorialDemoBanner: View {
+    var body: some View {
+        Text(tr("This is a demo — nothing you do here is saved or actually blocked."))
+            .font(.caption.weight(.bold))
+            .foregroundStyle(.black)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .background(Color.yellow)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(.black.opacity(0.15)).frame(height: 1)
+            }
     }
 }
 

@@ -141,6 +141,12 @@ struct RootView: View {
                 }
             }
             .overlay(alignment: .bottom) { TutorialCallout() }
+            .overlay(alignment: .top) {
+                if let t = model.tutorial, t != .configure {
+                    TutorialDemoBanner()
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
             .fullScreenCover(isPresented: Binding(
                 get: { model.tutorial == .configure },
                 set: { _ in })) {
