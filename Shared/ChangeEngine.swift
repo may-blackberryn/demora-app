@@ -99,6 +99,8 @@ enum ChangeEngine {
             return .lenient    // unblocking = looser
         case .unlockPreventGuide:
             return .lenient    // gaining access = looser
+        case .unlockPasswordView:
+            return .lenient    // gaining access = looser
         }
     }
 
@@ -176,6 +178,8 @@ enum ChangeEngine {
             return String(format: tr("Unblock website: %@"), d)
         case .unlockPreventGuide:
             return tr("Unlock the “Prevent disabling” guide")
+        case .unlockPasswordView:
+            return tr("Unlock viewing the stored passcode")
         }
     }
 
@@ -228,6 +232,8 @@ enum ChangeEngine {
             return "blockedDomain-\(d.lowercased())"
         case .unlockPreventGuide:
             return "unlockPreventGuide"
+        case .unlockPasswordView:
+            return "unlockPasswordView"
         }
     }
 
@@ -431,6 +437,9 @@ enum ChangeEngine {
         case .unlockPreventGuide:
             // Grant one open: a past timestamp means "ready" (preventReady).
             state.preventUnlockAt = .distantPast
+        case .unlockPasswordView:
+            // Grant one look at the stored passcode (passwordViewReady).
+            state.passwordViewUnlockAt = .distantPast
         }
     }
 
@@ -445,6 +454,12 @@ enum ChangeEngine {
     }
 
     // MARK: - DeviceActivity scheduling
+
+    /// Ask iOS for an extra extension wake this long BEFORE each interval
+    /// boundary (intervalWillStart/EndWarning). Shields are recomputed from
+    /// the wall clock on every wake, so each warning is a free chance to
+    /// self-heal a transition whose main callback gets dropped.
+    private static let boundaryWarning = DateComponents(minute: 5)
 
     /// One repeating daily schedule with a per-limit threshold event. The
     /// threshold is the day's minutes plus the free-period credit *that limit*
@@ -505,8 +520,9 @@ enum ChangeEngine {
 
         let schedule = DeviceActivitySchedule(
             intervalStart: DateComponents(hour: 0, minute: 0),
-            intervalEnd: DateComponents(hour: 23, minute: 59),  
-            repeats: true
+            intervalEnd: DateComponents(hour: 23, minute: 59),
+            repeats: true,
+            warningTime: boundaryWarning
         )
         do {
             try center.startMonitoring(daily, during: schedule, events: events)
@@ -533,6 +549,7 @@ enum ChangeEngine {
         let stale = center.activities.filter {
             $0.rawValue.hasPrefix("sched-") || $0.rawValue.hasPrefix("exempt-")
                 || $0.rawValue.hasPrefix("planned-")
+                || $0.rawValue.hasPrefix("echo-")
         }
         if !stale.isEmpty { center.stopMonitoring(stale) }
         // Tutorial simulation: don't start any real window monitoring.
@@ -563,7 +580,8 @@ enum ChangeEngine {
                     [.year, .month, .day, .hour, .minute], from: start),
                 intervalEnd: cal.dateComponents(
                     [.year, .month, .day, .hour, .minute], from: end),
-                repeats: false
+                repeats: false,
+                warningTime: boundaryWarning
             )
             do {
                 try center.startMonitoring(
@@ -573,6 +591,28 @@ enum ChangeEngine {
                 SharedStore.enforcementDegraded = true
             }
         }
+
+        // Post-midnight echoes: fixed activities whose only job is waking the
+        // extension shortly after midnight (00:05, 01:00, 06:00) so a missed
+        // midnight rollover gets retried — the 06:00 sweep lands before most
+        // people pick up their phone. The rollover is day-key-gated, so these
+        // are no-ops whenever the midnight reset already ran. Registered LAST so
+        // real enforcement activities claim the ~20-activity budget first: a
+        // dropped echo is tolerated redundancy (no enforcementDegraded), whereas
+        // a dropped schedule/window is real lost enforcement.
+        for (i, w) in [(5, 35), (60, 90), (360, 390)].enumerated() {
+            let schedule = DeviceActivitySchedule(
+                intervalStart: DateComponents(hour: w.0 / 60, minute: w.0 % 60),
+                intervalEnd: DateComponents(hour: w.1 / 60, minute: w.1 % 60),
+                repeats: true,
+                warningTime: boundaryWarning)
+            do {
+                try center.startMonitoring(DeviceActivityName("echo-\(i)"),
+                                           during: schedule)
+            } catch {
+                print("Demora: failed to start echo activity \(i): \(error)")
+            }
+        }
     }
 
     private static func startWindowActivities(prefix: String, start: Int,
@@ -580,7 +620,8 @@ enum ChangeEngine {
         let center = DeviceActivityCenter()
         func register(_ name: String, _ s: DateComponents, _ e: DateComponents) {
             let schedule = DeviceActivitySchedule(intervalStart: s,
-                                                  intervalEnd: e, repeats: true)
+                                                  intervalEnd: e, repeats: true,
+                                                  warningTime: boundaryWarning)
             do {
                 try center.startMonitoring(DeviceActivityName(name),
                                            during: schedule)
@@ -651,7 +692,8 @@ enum ChangeEngine {
                                               from: Date().addingTimeInterval(60)),
             intervalEnd: cal.dateComponents([.year, .month, .day, .hour, .minute],
                                             from: end),
-            repeats: false
+            repeats: false,
+            warningTime: boundaryWarning
         )
         try? DeviceActivityCenter().startMonitoring(
             DeviceActivityName(session.activityName), during: schedule)
@@ -820,7 +862,8 @@ enum ChangeEngine {
                                               from: start),
             intervalEnd: cal.dateComponents([.year, .month, .day, .hour, .minute],
                                             from: end),
-            repeats: false
+            repeats: false,
+            warningTime: boundaryWarning
         )
         do {
             try DeviceActivityCenter().startMonitoring(
@@ -828,6 +871,43 @@ enum ChangeEngine {
         } catch {
             print("Demora: failed to schedule apply activity: \(error)")
         }
+    }
+
+    // MARK: - Midnight reset nudge
+
+    /// Scheduled when a limit blocks: a notification for 00:10 that only
+    /// survives if NO reset ran by then — every reset path cancels it via
+    /// `cancelResetNudge()`. Tapping it opens the app, whose foreground
+    /// rollover clears the stale shields. This turns the worst case from
+    /// "user must guess to open the app" into "user gets told to tap".
+    static func scheduleResetNudge() {
+        let content = UNMutableNotificationContent()
+        content.title = tr("Your limits have reset")
+        content.body = tr("If any apps still look blocked, open Demora to refresh them.")
+        content.sound = .default
+        let cal = Calendar.current
+        guard let midnight = cal.date(byAdding: .day, value: 1,
+                                      to: cal.startOfDay(for: Date()))
+        else { return }
+        let comps = cal.dateComponents([.year, .month, .day, .hour, .minute],
+                                       from: midnight.addingTimeInterval(10 * 60))
+        // Stable identifier: multiple limits blocking the same day collapse
+        // into one pending nudge (each add replaces the previous request).
+        UNUserNotificationCenter.current().add(UNNotificationRequest(
+            identifier: LatchConstants.resetNudgeID,
+            content: content,
+            trigger: UNCalendarNotificationTrigger(dateMatching: comps,
+                                                   repeats: false)))
+    }
+
+    /// A day rollover actually ran — the nudge is moot. Also removes one
+    /// that already fired (e.g. an echo reset at 01:00 beat the user to it).
+    static func cancelResetNudge() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(
+            withIdentifiers: [LatchConstants.resetNudgeID])
+        center.removeDeliveredNotifications(
+            withIdentifiers: [LatchConstants.resetNudgeID])
     }
 
     private static func scheduleNotification(for change: PendingChange) {

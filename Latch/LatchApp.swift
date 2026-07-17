@@ -74,6 +74,10 @@ struct LatchApp: App {
                 model.refreshAuthorization()
                 model.tick()
             }
+            if phase == .background {
+                // Keep the overnight background-refresh request freshly queued.
+                appDelegate.scheduleMidnightRefresh()
+            }
         }
     }
 }

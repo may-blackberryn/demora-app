@@ -332,6 +332,33 @@ final class AppModel: ObservableObject {
         state = s
     }
 
+    // MARK: - Stored-passcode viewing (its own delayed, one-time access)
+
+    /// One look at the stored passcode has been granted and not yet spent.
+    var passwordViewReady: Bool {
+        guard let at = state.passwordViewUnlockAt else { return false }
+        return TimeGuard.now() >= at
+    }
+    /// A view-passcode request is still counting down on the Home tab.
+    var passwordViewPending: Bool {
+        state.pending.contains {
+            if case .unlockPasswordView = $0.action { return true }
+            return false
+        }
+    }
+    /// Queue viewing the stored passcode as a pending change (delay + override
+    /// gates apply, like the guide).
+    func requestPasswordViewAccess() {
+        queue(.unlockPasswordView)
+    }
+    /// Spend the one look — re-locks so the next view needs a new wait.
+    func consumePasswordViewAccess() {
+        var s = SharedStore.loadState()
+        s.passwordViewUnlockAt = nil
+        SharedStore.save(s)
+        state = s
+    }
+
     static let screenTimeCodeKey = "latch.screenTimeCode"
 
     /// The stored Screen Time passcode (empty if none saved). Lives in the

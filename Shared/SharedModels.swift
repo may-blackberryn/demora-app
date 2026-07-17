@@ -25,6 +25,12 @@ enum LatchConstants {
     static let blockedKey = "latch.blockedLimitIDs.v1"
     static let dailyActivityName = "latch.daily"
     static let applyActivityPrefix = "latch.apply."
+    /// Identifier of the post-midnight "still blocked?" fallback notification.
+    static let resetNudgeID = "latch.resetNudge"
+    /// BGAppRefreshTask id — an extra background wake source (independent of the
+    /// DeviceActivity extension) to retry the daily rollover overnight. Must
+    /// match BGTaskSchedulerPermittedIdentifiers in Latch/Info.plist.
+    static let bgRefreshID = "latch.midnightReset"
 
     /// Email-code service. Set both after deploying Backend/worker.js
     /// (see Backend/SETUP.md). Empty URL hides the email-contact option.
@@ -510,6 +516,10 @@ struct LatchState: Codable {
     /// unlocked for a single open; opening it re-locks (clears this). When in
     /// the future, access is still counting down the less-strict delay.
     var preventUnlockAt: Date? = nil
+    /// Same one-shot mechanics as `preventUnlockAt`, but for VIEWING the
+    /// stored Screen Time passcode — its own delayed gate, separate from the
+    /// guide's, so looking up the code always costs its own wait.
+    var passwordViewUnlockAt: Date? = nil
     /// The Screen Time passcode a friend set, stored so it isn't lost. Viewing
     /// it lives behind the prevent-disabling delay gate, so it can't be looked
     /// up on impulse to turn Demora off.
@@ -535,6 +545,7 @@ struct LatchState: Codable {
         blockAdultWebsites = try c.decodeIfPresent(Bool.self, forKey: .blockAdultWebsites) ?? false
         blockedDomains = try c.decodeIfPresent([String].self, forKey: .blockedDomains) ?? []
         preventUnlockAt = try c.decodeIfPresent(Date.self, forKey: .preventUnlockAt)
+        passwordViewUnlockAt = try c.decodeIfPresent(Date.self, forKey: .passwordViewUnlockAt)
         screenTimeCode = try c.decodeIfPresent(String.self, forKey: .screenTimeCode) ?? ""
     }
 }
@@ -570,6 +581,9 @@ enum ChangeAction: Codable, Equatable {
     /// is a loosening change, so it waits the less-strict delay (and can be
     /// passed with an override like any other pending change).
     case unlockPreventGuide
+    /// Unlock a single look at the stored Screen Time passcode. Its own gate,
+    /// separate from the guide's — same lenient-delay + one-use mechanics.
+    case unlockPasswordView
 }
 
 struct PendingChange: Codable, Identifiable, Equatable {

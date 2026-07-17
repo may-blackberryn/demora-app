@@ -169,6 +169,8 @@ struct ShieldController {
     static func clearForNewDay() {
         SharedStore.saveBlockedLimitIDs([])
         SharedStore.clearUsageTracking()
+        // The reset ran, so the "still blocked?" fallback nudge is moot.
+        ChangeEngine.cancelResetNudge()
         refresh()
     }
 }

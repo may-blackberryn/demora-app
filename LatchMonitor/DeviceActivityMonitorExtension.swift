@@ -35,6 +35,12 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
             // Otherwise: a mid-day restart. The restart that triggered this
             // already set the correct thresholds, so we leave usage/blocks alone.
         }
+        if raw.hasPrefix("echo-") {
+            // Post-midnight echo (00:05 / 01:00 / 06:00): retry the day
+            // rollover in case the midnight callback was dropped. Day-key
+            // gated, so it's a no-op when midnight already worked.
+            ChangeEngine.rolloverIfNewDay()
+        }
         if raw.hasPrefix("exempt-") {
             // Free period begins: start measuring per-limit usage inside the
             // window so it can be credited back when the window ends.
@@ -73,6 +79,20 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         ShieldController.refresh()
     }
 
+    // Warning callbacks (warningTime on every schedule): free extra wakes a
+    // few minutes before each interval boundary. Everything is derived from
+    // the wall clock, so each wake self-heals whatever an earlier dropped
+    // callback left stale — missed window ends, due changes, day rollover.
+    override func intervalWillStartWarning(for activity: DeviceActivityName) {
+        super.intervalWillStartWarning(for: activity)
+        ChangeEngine.housekeeping()
+    }
+
+    override func intervalWillEndWarning(for activity: DeviceActivityName) {
+        super.intervalWillEndWarning(for: activity)
+        ChangeEngine.housekeeping()
+    }
+
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name,
                                          activity: DeviceActivityName) {
         super.eventDidReachThreshold(event, activity: activity)
@@ -84,6 +104,9 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
                 blocked.insert(id)
             }
             ShieldController.refresh()
+            // Arm the 00:10 fallback notification: if no reset runs by then,
+            // the user gets a tap-to-fix nudge instead of stale shields.
+            ChangeEngine.scheduleResetNudge()
         } else if raw.hasPrefix("fw-") {
             // Silent free-window checkpoint — per-limit usage inside the window.
             ChangeEngine.recordFreeWindowCheckpoint(eventName: raw)
