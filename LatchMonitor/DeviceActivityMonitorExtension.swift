@@ -54,28 +54,26 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         }
         // Covers one-shot apply activities and schedule/session windows too.
         ChangeEngine.applyDueChanges()
+        // A midnight rollover clears daily usage bookkeeping, including the
+        // free-window marker. Reconcile immediately so a free period spanning
+        // midnight resumes its protection before any threshold can block.
+        ChangeEngine.reconcileFreeWindow()
         ShieldController.refresh()
     }
 
     override func intervalDidEnd(for activity: DeviceActivityName) {
         super.intervalDidEnd(for: activity)
         let raw = activity.rawValue
-        if raw.hasPrefix("exempt-") {
-            // Free period over: credit each limit's measured in-window usage.
-            ChangeEngine.exemptWindowEnded()
-        }
         if raw.hasPrefix("session-") {
             ChangeEngine.pruneExpiredSessions()
         }
         if raw.hasPrefix("planned-") {
-            if let id = UUID(uuidString: String(raw.dropFirst(8))),
-               SharedStore.loadState().planned
-                   .first(where: { $0.id == id })?.kind == .free {
-                ChangeEngine.exemptWindowEnded()
-            }
             ChangeEngine.prunePastPlanned()
         }
         ChangeEngine.applyDueChanges()
+        // End tracking only when no free source remains active. This also
+        // handles overlapping recurring, planned, and session free periods.
+        ChangeEngine.reconcileFreeWindow()
         ShieldController.refresh()
     }
 
@@ -97,8 +95,19 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
                                          activity: DeviceActivityName) {
         super.eventDidReachThreshold(event, activity: activity)
         let raw = event.rawValue
-        if raw.hasPrefix("limit-"),
+        if activity.rawValue == LatchConstants.dailyActivityName,
+           raw.hasPrefix("limit-"),
            let id = UUID(uuidString: String(raw.dropFirst(6))) {
+            // A free window lifts every limit and credits its usage afterward.
+            // Never persist a new block while one is active: Screen Time can
+            // also emit an incorrect immediate threshold callback after a
+            // monitor restart, which would otherwise stay hidden until the
+            // free window ended and then block a 0-minute-used limit.
+            if SharedStore.freeWindowStart != nil
+                || ChangeEngine.isFreeWindowActive() {
+                SharedStore.recordFreeWindowSuppressedLimitID(id)
+                return
+            }
             // Budget spent → block for the rest of the day.
             SharedStore.mutateBlockedLimitIDs { blocked in
                 blocked.insert(id)

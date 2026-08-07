@@ -307,6 +307,18 @@ enum ChangeEngine {
         let due = state.pending.filter(\.isDue).sorted { $0.appliesAt < $1.appliesAt }
         guard !due.isEmpty else { return }
 
+        // Starting a session, changing an override, etc. does not alter daily
+        // limit events. Restarting the daily monitor for every change exposed
+        // us to spurious immediate threshold callbacks from Screen Time.
+        let dailyLimitsChanged = due.contains { change in
+            switch change.action {
+            case .addLimit, .updateLimitMinutes, .removeLimit:
+                return true
+            default:
+                return false
+            }
+        }
+
         for change in due {
             apply(change.action, to: &state)
             state.pending.removeAll { $0.id == change.id }
@@ -314,10 +326,15 @@ enum ChangeEngine {
                 .stopMonitoring([DeviceActivityName(change.activityName)])
         }
         SharedStore.save(state)
-        reconfigureDailyMonitoring(state: state)
+        // Reconcile first. If this batch starts a free window, its guard is in
+        // place before a genuinely-required daily-monitor restart can deliver
+        // callbacks. If it ends one, credit is committed before the restart.
+        reconcileFreeWindow()
+        if dailyLimitsChanged {
+            reconfigureDailyMonitoring(state: state)
+        }
         reconfigureWindowMonitoring(state: state)
         ShieldController.refresh()
-        reconcileFreeWindow()   // a free session may have started or ended early
     }
 
     /// Periodic maintenance: apply due changes, drop finished sessions,
@@ -715,9 +732,9 @@ enum ChangeEngine {
         SharedStore.save(state)
         DeviceActivityCenter().stopMonitoring(
             expired.map { DeviceActivityName($0.activityName) })
-        ShieldController.refresh()
         // A free session may have just expired — credit its in-window usage.
         reconcileFreeWindow()
+        ShieldController.refresh()
     }
 
     /// Name of the one-shot activity that measures per-limit usage inside the
@@ -742,11 +759,15 @@ enum ChangeEngine {
     /// so it also recovers if a monitor start/end callback was missed. Sessions
     /// can be ended early, which no other free period can — this is what keeps
     /// their tracking correct without a dedicated per-session callback.
-    static func reconcileFreeWindow() {
+    static func isFreeWindowActive() -> Bool {
         let state = SharedStore.loadState()
-        let active = state.exemptions.contains { $0.isActive() }
+        return state.exemptions.contains { $0.isActive() }
             || state.planned.contains { $0.kind == .free && $0.isActive }
             || state.sessions.contains { $0.kind == .free && $0.isActive }
+    }
+
+    static func reconcileFreeWindow() {
+        let active = isFreeWindowActive()
         let running = SharedStore.freeWindowStart != nil
         if active && !running { exemptWindowStarted() }
         else if !active && running { exemptWindowEnded() }
@@ -755,6 +776,12 @@ enum ChangeEngine {
     static func exemptWindowStarted() {
         // Don't reset an already-running window (overlapping free periods).
         if SharedStore.freeWindowStart == nil {
+            // Preserve real pre-window blocks. Threshold callbacks can arrive
+            // while shields are lifted, but free-window usage must never create
+            // a new persistent block that appears when the window closes.
+            SharedStore.freeWindowBlockedSnapshot =
+                SharedStore.loadBlockedLimitIDs()
+            SharedStore.clearFreeWindowSuppressedLimitIDs()
             SharedStore.freeWindowStart = TimeGuard.now()
             SharedStore.saveFreeWindowUsage([:])
             startFreeWindowTracking()
@@ -817,29 +844,49 @@ enum ChangeEngine {
     }
 
     /// A free period just ended: credit each limit's measured in-window usage
-    /// to its daily budget, and unblock only the limits that earned credit —
-    /// their raised threshold re-fires if the day's total (which includes the
-    /// window on iOS 17.4+) is still over. Limits untouched during the window
-    /// get no credit and stay exactly as they were.
+    /// to its daily budget, restore the exact set of limits blocked before the
+    /// window, and rearm events only if usage or a suppressed callback requires
+    /// it. Limits untouched during the window get no credit or new block.
     static func exemptWindowEnded() {
         DeviceActivityCenter().stopMonitoring(
             [DeviceActivityName(freeWindowActivityName)])
+        var shouldRearmDailyMonitoring = false
         if SharedStore.freeWindowStart != nil {
             let usage = SharedStore.loadFreeWindowUsage()
+            let suppressed = SharedStore.loadFreeWindowSuppressedLimitIDs()
             var credit = SharedStore.loadFreeCreditByLimit()
             for (id, minutes) in usage where minutes > 0 {
                 credit[id, default: 0] += min(minutes, 24 * 60)
             }
             SharedStore.saveFreeCreditByLimit(credit)
-            SharedStore.saveFreeWindowUsage([:])
-            SharedStore.freeWindowStart = nil
-            if !usage.isEmpty {
+
+            if let snapshot = SharedStore.freeWindowBlockedSnapshot {
+                // Restore exactly the limits that were spent before the free
+                // window. New threshold callbacks were either free usage or a
+                // spurious Screen Time callback and must not survive it.
+                let validIDs = Set(SharedStore.loadState().limits.map(\.id))
+                SharedStore.saveBlockedLimitIDs(snapshot.intersection(validIDs))
+            } else if !usage.isEmpty {
+                // Migration fallback for a free window started by an older app
+                // version that did not save a pre-window snapshot.
                 SharedStore.mutateBlockedLimitIDs { blocked in
                     blocked.subtract(usage.keys)
                 }
             }
+
+            SharedStore.saveFreeWindowUsage([:])
+            SharedStore.freeWindowStart = nil
+            SharedStore.freeWindowBlockedSnapshot = nil
+            SharedStore.clearFreeWindowSuppressedLimitIDs()
+
+            // No limited app usage and no suppressed callback means the daily
+            // monitor is still valid. Avoiding an unnecessary restart avoids
+            // the iOS immediate-threshold regression altogether.
+            shouldRearmDailyMonitoring = !usage.isEmpty || !suppressed.isEmpty
         }
-        reconfigureDailyMonitoring(state: SharedStore.loadState())
+        if shouldRearmDailyMonitoring {
+            reconfigureDailyMonitoring(state: SharedStore.loadState())
+        }
         ShieldController.refresh()
     }
 

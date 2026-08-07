@@ -167,6 +167,8 @@ struct SharedStore {
     private static let freeCreditKey = "latch.freeCreditByLimit.v1"
     private static let freeWindowUsageKey = "latch.freeWindowUsage.v1"
     private static let freeWindowStartKey = "latch.freeWindowStart.v1"
+    private static let freeWindowBlockedSnapshotKey = "latch.freeWindowBlockedSnapshot.v1"
+    private static let freeWindowSuppressedLimitsKey = "latch.freeWindowSuppressedLimits.v1"
 
     private static func loadDict(_ key: String) -> [UUID: Int] {
         guard let raw = defaults.dictionary(forKey: key) as? [String: Int]
@@ -199,10 +201,52 @@ struct SharedStore {
         set { defaults.set(newValue?.timeIntervalSince1970 ?? 0, forKey: freeWindowStartKey) }
     }
 
+    /// The limits that were genuinely blocked before the current free window.
+    /// An optional distinguishes "the snapshot was empty" from older installs
+    /// that began a free window before this bookkeeping existed.
+    static var freeWindowBlockedSnapshot: Set<UUID>? {
+        get {
+            guard let raw = defaults.array(forKey: freeWindowBlockedSnapshotKey)
+                    as? [String]
+            else { return nil }
+            return Set(raw.compactMap(UUID.init(uuidString:)))
+        }
+        set {
+            if let newValue {
+                defaults.set(newValue.map(\.uuidString),
+                             forKey: freeWindowBlockedSnapshotKey)
+            } else {
+                defaults.removeObject(forKey: freeWindowBlockedSnapshotKey)
+            }
+        }
+    }
+
+    /// Daily-limit callbacks delivered while a free window was active. They
+    /// must not block immediately because all usage in that window is exempt,
+    /// but their events need rearming when the window closes.
+    static func loadFreeWindowSuppressedLimitIDs() -> Set<UUID> {
+        guard let raw = defaults.array(forKey: freeWindowSuppressedLimitsKey)
+                as? [String]
+        else { return [] }
+        return Set(raw.compactMap(UUID.init(uuidString:)))
+    }
+
+    static func recordFreeWindowSuppressedLimitID(_ id: UUID) {
+        var ids = loadFreeWindowSuppressedLimitIDs()
+        ids.insert(id)
+        defaults.set(ids.map(\.uuidString), forKey: freeWindowSuppressedLimitsKey)
+    }
+
+    static func clearFreeWindowSuppressedLimitIDs() {
+        defaults.removeObject(forKey: freeWindowSuppressedLimitsKey)
+    }
+
     static func clearUsageTracking() {
         saveFreeCreditByLimit([:])
         saveFreeWindowUsage([:])
         freeWindowStart = nil
+        freeWindowBlockedSnapshot = nil
+        clearFreeWindowSuppressedLimitIDs()
     }
 
     // MARK: - Daily reset bookkeeping
