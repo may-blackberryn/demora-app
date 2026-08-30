@@ -6,7 +6,6 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.may.screentimedelay</string>
 		<string>group.com.may.screentimedelay.dev</string>
 	</array>
 </dict>

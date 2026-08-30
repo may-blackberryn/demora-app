@@ -10,17 +10,14 @@ import ManagedSettings
 // MARK: - Constants
 
 enum LatchConstants {
-    /// App Group for shared state. The dev build (a separate app with a `.dev`
-    /// bundle id) uses its own group so it never shares — or corrupts — the
-    /// production app's data. Derived from the bundle id, so this is inert
-    /// until the dev bundle id actually exists; both must be listed in the
-    /// entitlements / registered for the build to use them.
-    static let appGroupID: String = {
-        let base = "group.com.may.screentimedelay"
-        let id = Bundle.main.bundleIdentifier ?? ""
-        let isDev = id.hasSuffix(".dev") || id.contains(".dev.")
-        return isDev ? base + ".dev" : base
-    }()
+    /// Debug and production use distinct App Groups. Compile-time selection is
+    /// intentional: a display-name or bundle-setting mistake must never make a
+    /// build open the other environment's limits.
+#if DEBUG
+    static let appGroupID = "group.com.may.screentimedelay.dev"
+#else
+    static let appGroupID = "group.com.may.screentimedelay"
+#endif
     static let stateKey = "latch.state.v1"
     static let blockedKey = "latch.blockedLimitIDs.v1"
     static let dailyActivityName = "latch.daily"

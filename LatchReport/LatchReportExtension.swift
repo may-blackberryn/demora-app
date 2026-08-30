@@ -31,14 +31,13 @@ struct LatchReportExtension: DeviceActivityReportExtension {
 // MARK: - Minimal state mirror (decoded from the App Group)
 
 enum AppGroup {
-    /// Matches the app's App Group, including the dev split (a `.dev` bundle id
-    /// uses the `.dev` group). Kept in sync with LatchConstants.appGroupID.
-    static let id: String = {
-        let base = "group.com.may.screentimedelay"
-        let bid = Bundle.main.bundleIdentifier ?? ""
-        let isDev = bid.hasSuffix(".dev") || bid.contains(".dev.")
-        return isDev ? base + ".dev" : base
-    }()
+    /// Kept in sync with LatchConstants.appGroupID. Compile-time selection
+    /// prevents a configuration typo from exposing the other environment.
+#if DEBUG
+    static let id = "group.com.may.screentimedelay.dev"
+#else
+    static let id = "group.com.may.screentimedelay"
+#endif
     static let stateKey = "latch.state.v1"
 }
 
@@ -69,7 +68,13 @@ struct LimitUsageRow: Identifiable {
 // it from `body` and clears the Swift 6 isolated-conformance diagnostic.
 struct LimitsUsageReport: nonisolated DeviceActivityReportScene {
     // Must match the Context the app passes to DeviceActivityReport(_:filter:).
-    let context: DeviceActivityReport.Context = .init("Limits Usage")
+#if DEBUG
+    let context: DeviceActivityReport.Context = .init(
+        "app.demora.dev.limits-usage")
+#else
+    let context: DeviceActivityReport.Context = .init(
+        "app.demora.production.limits-usage")
+#endif
     let content: ([LimitUsageRow]) -> LimitsUsageView
 
     func makeConfiguration(

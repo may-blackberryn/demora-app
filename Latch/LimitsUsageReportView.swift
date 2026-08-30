@@ -15,7 +15,17 @@ struct LimitsUsageReportView: View {
     /// which is what renders blank).
     let refreshedAt: Date
 
-    private let context = DeviceActivityReport.Context("Limits Usage")
+    // DeviceActivity report extensions can remain alive and cached after their
+    // containing app leaves the foreground. Dev and production must therefore
+    // use different contexts; sharing "Limits Usage" allowed iOS to reuse the
+    // dev report while rendering the production Limits screen.
+#if DEBUG
+    private let context = DeviceActivityReport.Context(
+        "app.demora.dev.limits-usage")
+#else
+    private let context = DeviceActivityReport.Context(
+        "app.demora.production.limits-usage")
+#endif
 
     private var filter: DeviceActivityFilter {
         // Start of day → now, so every refresh produces a genuinely different
