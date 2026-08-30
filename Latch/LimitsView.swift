@@ -36,6 +36,8 @@ struct LimitsView: View {
     @AppStorage("limits.usageNoteDismissed") private var usageNoteDismissed = false
     @AppStorage("limits.countingNoteDismissed") private var countingNoteDismissed = false
     @Environment(\.scenePhase) private var scenePhase
+    @State private var recheckInFlight = false
+    @State private var recheckMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -63,6 +65,17 @@ struct LimitsView: View {
                             HStack { Spacer(); ProgressView(); Spacer() }
                                 .frame(minHeight: CGFloat(model.state.limits.count) * 66 + 12)
                         }
+                        Button { beginLimitRecheck() } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "checkmark.shield")
+                                Text(tr(recheckInFlight
+                                    ? "Takes around 30 seconds"
+                                    : "Recheck blocked limits"))
+                                Spacer()
+                                if recheckInFlight { ProgressView() }
+                            }
+                        }
+                        .disabled(recheckInFlight)
                     } header: {
                         HStack {
                             Text(tr("Today's usage"))
@@ -73,10 +86,14 @@ struct LimitsView: View {
                             .buttonStyle(.plain).foregroundStyle(.tint)
                         }
                     } footer: {
-                        if !usageNoteDismissed {
-                            DismissibleNote(
-                                text: tr("Today's usage is reported by iOS Screen Time, which can be slow to load or briefly show nothing. If it looks empty, tap the refresh arrow a couple of times."),
-                                onDismiss: { usageNoteDismissed = true })
+                        VStack(alignment: .leading, spacing: 8) {
+                            if !usageNoteDismissed {
+                                DismissibleNote(
+                                    text: tr("Today's usage is reported by iOS Screen Time, which can be slow to load or briefly show nothing. If it looks empty, tap the refresh arrow a couple of times."),
+                                    onDismiss: { usageNoteDismissed = true })
+                            }
+                            Text(tr("Recheck keeps current blocks in place while iOS verifies today's usage. Limits iOS confirms stay blocked."))
+                                .font(.caption).italic()
                         }
                     }
                 }
@@ -158,6 +175,49 @@ struct LimitsView: View {
             }
             .sheet(isPresented: $showAdd) { LimitEditorView(existing: nil) }
             .sheet(item: $editTarget) { LimitEditorView(existing: $0) }
+            .alert(tr("Limit recheck"), isPresented: Binding(
+                get: { recheckMessage != nil },
+                set: { if !$0 { recheckMessage = nil } }
+            )) {
+                Button(tr("OK"), role: .cancel) {}
+            } message: {
+                Text(recheckMessage ?? "")
+            }
+        }
+    }
+
+    private func beginLimitRecheck() {
+        guard !recheckInFlight else { return }
+        recheckInFlight = true
+        Task {
+            let result = await ChangeEngine.recheckBlockedLimits()
+            switch result {
+            case .completed(let released, let confirmed):
+                if released > 0 {
+                    recheckMessage = String(
+                        format: tr("Released %d stale limit blocks. %d limits were freshly confirmed by iOS."),
+                        released, confirmed)
+                } else {
+                    recheckMessage = tr("iOS freshly confirmed all current limit blocks.")
+                }
+            case .noBlockedLimits:
+                recheckMessage = tr("No blocked limits need to be rechecked.")
+            case .freeWindowActive:
+                recheckMessage = tr("Wait until the active free period ends, then recheck again.")
+            case .cooldown(let remaining):
+                recheckMessage = String(
+                    format: tr("You can recheck again in %@."),
+                    remaining.shortDelayLabel)
+            case .unsupportedVersion:
+                recheckMessage = tr("Safe limit rechecking requires iOS 17.4 or later. No blocks were changed.")
+            case .monitorUnavailable:
+                recheckMessage = tr("iOS couldn't complete the verification safely. No blocks were changed. Try again later.")
+            case .cancelled:
+                recheckMessage = tr("The recheck was interrupted. No blocks were changed.")
+            }
+            recheckInFlight = false
+            refreshReport()
+            model.tick()
         }
     }
 

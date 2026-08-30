@@ -115,7 +115,8 @@ struct OverrideGateView: View {
                     if model.inTutorial {
                         TutorialContactGateView(onSuccess: succeed)
                     } else if !changes.isEmpty {
-                        ContactGateView(changes: changes, onSuccess: succeed)
+                        ContactGateView(changes: changes,
+                                        onSuccess: succeedFromContact)
                     }
                 }
             }
@@ -123,7 +124,13 @@ struct OverrideGateView: View {
     }
 
     private func succeed() {
-        for c in changes { model.applyNow(c) }
+        model.applyNow(changes)
+        method = nil
+        dismiss()
+    }
+
+    private func succeedFromContact() async {
+        await model.applyNowAndWait(changes)
         method = nil
         dismiss()
     }
@@ -431,4 +438,3 @@ struct PasswordGateView: View {
         }
     }
 }
-

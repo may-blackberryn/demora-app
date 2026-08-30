@@ -154,6 +154,57 @@ struct SharedStore {
         }
     }
 
+    // MARK: - Limit threshold verification
+
+    /// Latest genuine (non-free-window) threshold callback received for each
+    /// limit. A manual recheck compares these timestamps with its start time so
+    /// it never blindly clears every block: limits iOS freshly confirms remain
+    /// blocked, while unconfirmed stale markers can be released.
+    private static let thresholdCallbackTimesKey =
+        "latch.limitThresholdCallbackTimes.v1"
+    private static let lastLimitRecheckKey = "latch.lastLimitRecheck.v1"
+    private static let confirmedRecheckControlKey =
+        "latch.confirmedLimitRecheckControl.v1"
+
+    static func recordLimitThresholdCallback(_ id: UUID, at date: Date = Date()) {
+        var values = defaults.dictionary(forKey: thresholdCallbackTimesKey)
+            as? [String: Double] ?? [:]
+        values[id.uuidString] = date.timeIntervalSince1970
+        defaults.set(values, forKey: thresholdCallbackTimesKey)
+    }
+
+    static func limitsConfirmedSince(_ date: Date,
+                                     among ids: Set<UUID>) -> Set<UUID> {
+        let values = defaults.dictionary(forKey: thresholdCallbackTimesKey)
+            as? [String: Double] ?? [:]
+        return Set(ids.filter {
+            (values[$0.uuidString] ?? 0) >= date.timeIntervalSince1970
+        })
+    }
+
+    static var lastLimitRecheckAt: Date? {
+        get {
+            let value = defaults.double(forKey: lastLimitRecheckKey)
+            return value > 0 ? Date(timeIntervalSince1970: value) : nil
+        }
+        set {
+            defaults.set(newValue?.timeIntervalSince1970 ?? 0,
+                         forKey: lastLimitRecheckKey)
+        }
+    }
+
+    static func clearLimitThresholdCallbacks() {
+        defaults.removeObject(forKey: thresholdCallbackTimesKey)
+    }
+
+    static func recordLimitRecheckControl(_ id: UUID) {
+        defaults.set(id.uuidString, forKey: confirmedRecheckControlKey)
+    }
+
+    static func wasLimitRecheckControlConfirmed(_ id: UUID) -> Bool {
+        defaults.string(forKey: confirmedRecheckControlKey) == id.uuidString
+    }
+
     // MARK: - Free-period credit (per limit, per day, in minutes)
     //
     // DeviceActivity never reports "minutes used", so while a free window is
@@ -247,6 +298,7 @@ struct SharedStore {
         freeWindowStart = nil
         freeWindowBlockedSnapshot = nil
         clearFreeWindowSuppressedLimitIDs()
+        clearLimitThresholdCallbacks()
     }
 
     // MARK: - Daily reset bookkeeping

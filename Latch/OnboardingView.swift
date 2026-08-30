@@ -43,15 +43,26 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: Step 0 — the dictionary entry (with the language toggle)
+    // MARK: Step 0 — the dictionary entry
 
     private var dictionaryStep: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 20) {
                 Spacer()
-                Button(model.language == .english ? "english" : "español") {
-                    model.language = model.language == .english
-                        ? .spanish : .english
+                Menu {
+                    ForEach(AppLanguage.allCases) { language in
+                        Button {
+                            model.language = language
+                        } label: {
+                            if model.language == language {
+                                Label(language.label, systemImage: "checkmark")
+                            } else {
+                                Text(language.label)
+                            }
+                        }
+                    }
+                } label: {
+                    Label(model.language.label, systemImage: "globe")
                 }
                 Button((Appearance(rawValue: appearanceRaw) ?? .system)
                         .label.lowercased()) {

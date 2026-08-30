@@ -1655,7 +1655,7 @@ struct ContactGateView: View {
     /// Show the requested-change list at the top. On when opened standalone
     /// (from Home); off inside OverrideGateView, which already shows it.
     var showChangeList: Bool = false
-    let onSuccess: () -> Void
+    let onSuccess: () async -> Void
 
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -1920,7 +1920,7 @@ struct ContactGateView: View {
                 if let decisions = try? await ContactsRelay.decisions(
                     requestId: requestId, since: since) {
                     if decisions.approved {
-                        await finish()
+                        await finish(relayApproved: true)
                         return
                     }
                     if decisions.denied {
@@ -1950,12 +1950,24 @@ struct ContactGateView: View {
     }
 
     @MainActor
-    private func finish() async {
+    private func finish(relayApproved: Bool = false) async {
         pollTask?.cancel()
-        ContactsRelay.clearSent(reqId)
-        ContactsRelay.clearOutgoing(reqId)
-        await ContactsRelay.cleanup(requestId: reqId)
-        onSuccess()
+        if relayApproved {
+            _ = await ContactsRelay.applyKnownApproval(requestId: reqId)
+            // The relay consumer already committed the approved changes. Run
+            // the caller's completion too: its idempotent apply refreshes the
+            // model and, when this sheet is nested in OverrideGateView, closes
+            // the parent gate instead of leaving a stale pending-change screen.
+            await onSuccess()
+        } else {
+            // Email verification has already proved the override. Wait until
+            // the serialized off-main application finishes before forgetting
+            // the request, so interruption cannot lose an approved change.
+            await onSuccess()
+            ContactsRelay.clearSent(reqId)
+            ContactsRelay.clearOutgoing(reqId)
+            await ContactsRelay.cleanup(requestId: reqId)
+        }
         dismiss()
     }
 }

@@ -23,6 +23,7 @@ struct LatchApp: App {
                 .tint(Ink.accent)
                 .serifDesign()
                 .textCase((TextCasing(rawValue: textCasingRaw) ?? .lower).textCase)
+                .environment(\.locale, model.language.locale)
                 .preferredColorScheme(
                     (Appearance(rawValue: appearanceRaw) ?? .system).colorScheme)
                 // Hidden screenshot helper: tap to flip light ⇄ dark. Invisible.
@@ -61,18 +62,13 @@ struct LatchApp: App {
                     SharedStore.defaults.set(true, forKey: "latch.healedRaceCondition")
                 }
 
-                // Re-register OS monitoring so the current limits/thresholds are
-                // installed (e.g. includesPastActivity). Housekeeping's 30s tick
-                // only reconfigures when a pending change is due, so without this
-                // an already-spent limit never gets a threshold that can fire.
-                // Windows (schedules, sessions, free periods) are re-armed here
-                // too so enforcement self-heals on open if a monitor was ever
-                // dropped — e.g. across a TestFlight→App Store switch.
-                let state = SharedStore.loadState()
-                ChangeEngine.reconfigureDailyMonitoring(state: state)
-                ChangeEngine.reconfigureWindowMonitoring(state: state)
                 model.refreshAuthorization()
                 model.tick()
+                // Self-heal monitors that iOS actually dropped or whose saved
+                // configuration is outdated. Healthy monitors are left alone:
+                // restarting them on every foreground entry exposed users to
+                // iOS 26's premature DeviceActivity threshold regression.
+                Task { await ChangeEngine.ensureMonitoringOffMain() }
             }
             if phase == .background {
                 // Keep the overnight background-refresh request freshly queued.

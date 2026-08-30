@@ -219,7 +219,8 @@ struct HomeView: View {
                                         || model.tutorial == .applyViaContact)
                                         && model.tutorialScreen == "home",
                                     onCancel: { model.cancel(change) },
-                                    onOverride: { overrideTarget = change }
+                                    onOverride: { overrideTarget = change },
+                                    onDebugApply: { model.applyNow(change) }
                                 )
                             }
                         }
@@ -299,7 +300,7 @@ struct HomeView: View {
                                     #if DEBUG
                                     print("✅ approval applying \(target.changes.count) change(s)")
                                     #endif
-                                    for c in target.changes { model.applyNow(c) }
+                                    await model.applyNowAndWait(target.changes)
                                 })
             }
             .alert(tr("Heads up"), isPresented: Binding(
@@ -379,7 +380,7 @@ struct HomeView: View {
 
     private func bulkApply() {
         let chosen = selectedChanges
-        for c in chosen where c.isDue { model.applyNow(c) }
+        model.applyNow(chosen.filter(\.isDue))
         let needGate = chosen.filter { !$0.isDue }
         if !needGate.isEmpty {
             if model.state.overrides.anyEnabled {
@@ -437,6 +438,7 @@ struct PendingChangeRow: View {
     var reportHole: Bool = false
     let onCancel: () -> Void
     let onOverride: () -> Void
+    let onDebugApply: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -477,6 +479,13 @@ struct PendingChangeRow: View {
                         Button(tr("Apply now…"), action: onOverride)
                             .buttonStyle(.bordered).controlSize(.small)
                     }
+#if DEBUG
+                    if !change.isDue {
+                        Button("Skip delay (dev)", action: onDebugApply)
+                            .buttonStyle(.bordered).controlSize(.small)
+                            .tint(.purple)
+                    }
+#endif
                 }
             }
         }

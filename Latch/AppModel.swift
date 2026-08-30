@@ -91,6 +91,7 @@ final class AppModel: ObservableObject {
     @Published var settingsPath: [SettingsRoute] = []
 
     private var timer: AnyCancellable?
+    private var housekeepingInFlight = false
 
     init() {
         // A replay interrupted by a force-quit: restore the user's real setup
@@ -127,14 +128,20 @@ final class AppModel: ObservableObject {
 
     /// Apply due changes, prune finished sessions, refresh shields & state.
     func tick() {
-        ChangeEngine.housekeeping()
-        state = SharedStore.loadState()
-        enforcementDegraded = SharedStore.enforcementDegraded
-        checkContactApprovals()
-        checkContactInvites()
-        sendPendingEmailInvites()
-        refreshIncomingInviteCount()
-        Task { await TimeGuard.syncWithNetwork() }
+        guard !housekeepingInFlight else { return }
+        housekeepingInFlight = true
+        Task { [weak self] in
+            await ChangeEngine.housekeepingOffMain()
+            guard let self else { return }
+            self.housekeepingInFlight = false
+            self.state = SharedStore.loadState()
+            self.enforcementDegraded = SharedStore.enforcementDegraded
+            self.checkContactApprovals()
+            self.checkContactInvites()
+            self.sendPendingEmailInvites()
+            self.refreshIncomingInviteCount()
+            await TimeGuard.syncWithNetwork()
+        }
     }
 
     /// Demora-user contacts must accept an invite before they can approve for
@@ -283,20 +290,9 @@ final class AppModel: ObservableObject {
         guard !relayRequests.isEmpty else { return }
         Task { [weak self] in
             for req in relayRequests {
-                let since = ContactsRelay.relaySentDate(req.requestId) ?? .distantPast
-                let decisions = try? await ContactsRelay.decisions(
-                    requestId: req.requestId, since: since)
-                if decisions?.approved == true {
-                    ContactsRelay.clearSent(req.requestId)
-                    ContactsRelay.clearOutgoing(req.requestId)
-                    await ContactsRelay.cleanup(requestId: req.requestId)
-                    await MainActor.run {
-                        guard let self else { return }
-                        for change in self.state.pending
-                        where req.changeIds.contains(change.id) {
-                            self.applyNow(change)
-                        }
-                    }
+                if await ContactsRelay.processApprovalIfAvailable(req) {
+                    guard let self else { return }
+                    self.refreshAfterExternalApply()
                 }
             }
         }
@@ -393,6 +389,7 @@ final class AppModel: ObservableObject {
             try await AuthorizationCenter.shared
                 .requestAuthorization(for: .individual)
             authorized = true
+            rebuildMonitoringAfterAuthorization()
         } catch {
             authorized = false
         }
@@ -431,8 +428,20 @@ final class AppModel: ObservableObject {
     /// downgrades on a possibly-stale synchronous read.
     func refreshAuthorization() {
         if AuthorizationCenter.shared.authorizationStatus == .approved {
+            let wasAuthorized = authorized
             authorized = true
+            if !wasAuthorized { rebuildMonitoringAfterAuthorization() }
         }
+    }
+
+    /// A real authorization transition is one of the few times a forced
+    /// rebuild is warranted: Screen Time may retain activity names while their
+    /// underlying events were invalidated by the revoked permission.
+    private func rebuildMonitoringAfterAuthorization() {
+        let current = SharedStore.loadState()
+        ChangeEngine.reconfigureDailyMonitoring(state: current)
+        ChangeEngine.reconfigureWindowMonitoring(state: current)
+        ShieldController.refresh()
     }
 
     // MARK: - Changes
@@ -489,7 +498,24 @@ final class AppModel: ObservableObject {
     }
 
     func applyNow(_ change: PendingChange) {
-        ChangeEngine.applyNow(change)
+        applyNow([change])
+    }
+
+    func applyNow(_ changes: [PendingChange]) {
+        Task { [weak self] in
+            await self?.applyNowAndWait(changes)
+        }
+    }
+
+    /// Used by async override gates (notably trusted contacts) so their request
+    /// is not cleared until Screen Time maintenance has completed off-main.
+    func applyNowAndWait(_ changes: [PendingChange]) async {
+        guard !changes.isEmpty else { return }
+        _ = await ChangeEngine.applyNowOffMain(changeIDs: changes.map(\.id))
+        refreshAfterExternalApply()
+    }
+
+    func refreshAfterExternalApply() {
         state = SharedStore.loadState()
         // Tutorial: once all the staged changes are applied, move on.
         if tutorial == .applyBoth, state.pending.isEmpty {

@@ -10,9 +10,28 @@ import Foundation
 enum AppLanguage: String, CaseIterable, Identifiable {
     case english = "en"
     case spanish = "es"
+    case german = "de"
+    case french = "fr"
+    case portuguese = "pt"
+    case polish = "pl"
+    case turkish = "tr"
+    case hindi = "hi"
 
     var id: String { rawValue }
-    var label: String { self == .english ? "English" : "Español" }
+    var label: String {
+        switch self {
+        case .english: return "English"
+        case .spanish: return "Español"
+        case .german: return "Deutsch"
+        case .french: return "Français"
+        case .portuguese: return "Português"
+        case .polish: return "Polski"
+        case .turkish: return "Türkçe"
+        case .hindi: return "हिन्दी"
+        }
+    }
+
+    var locale: Locale { Locale(identifier: rawValue) }
 
     static var current: AppLanguage {
         get {
@@ -21,10 +40,12 @@ enum AppLanguage: String, CaseIterable, Identifiable {
                let lang = AppLanguage(rawValue: saved) {
                 return lang
             }
-            // Otherwise follow the device: start in Spanish if the device's top
-            // preferred language is Spanish, English for everything else.
+            // Otherwise follow the device when Demora supports its preferred
+            // language, falling back to English.
             let preferred = Locale.preferredLanguages.first ?? "en"
-            return preferred.hasPrefix("es") ? .spanish : .english
+            let code = Locale(identifier: preferred).language.languageCode?
+                .identifier ?? String(preferred.prefix(2))
+            return AppLanguage(rawValue: code) ?? .english
         }
         set {
             SharedStore.defaults.set(newValue.rawValue, forKey: "latch.language")
@@ -33,12 +54,34 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 }
 
 func tr(_ key: String) -> String {
-    guard AppLanguage.current == .spanish else { return key }
-    return spanishStrings[key] ?? key
+    let table: [String: String]?
+    switch AppLanguage.current {
+    case .english: table = nil
+    case .spanish: table = spanishStrings
+    case .german: table = germanStrings
+    case .french: table = frenchStrings
+    case .portuguese: table = portugueseStrings
+    case .polish: table = polishStrings
+    case .turkish: table = turkishStrings
+    case .hindi: table = hindiStrings
+    }
+    return table?[key] ?? key
 }
 
-private let spanishStrings: [String: String] = [
+let spanishStrings: [String: String] = [
     "Dismiss": "Descartar",
+    "Recheck blocked limits": "Volver a verificar límites bloqueados",
+    "Takes around 30 seconds": "Tarda unos 30 segundos",
+    "Recheck keeps current blocks in place while iOS verifies today's usage. Limits iOS confirms stay blocked.": "La verificación mantiene los bloqueos actuales mientras iOS comprueba el uso de hoy. Los límites que iOS confirme permanecen bloqueados.",
+    "Limit recheck": "Verificación de límites",
+    "Released %d stale limit blocks. %d limits were freshly confirmed by iOS.": "Se quitaron %d bloqueos de límites obsoletos. iOS confirmó de nuevo %d límites.",
+    "iOS freshly confirmed all current limit blocks.": "iOS confirmó de nuevo todos los bloqueos de límites actuales.",
+    "No blocked limits need to be rechecked.": "No hay límites bloqueados que necesiten verificarse.",
+    "Wait until the active free period ends, then recheck again.": "Espera a que termine el periodo libre activo y vuelve a verificar.",
+    "You can recheck again in %@.": "Podrás volver a verificar en %@.",
+    "The recheck was interrupted. No blocks were changed.": "La verificación se interrumpió. No se cambió ningún bloqueo.",
+    "iOS couldn't complete the verification safely. No blocks were changed. Try again later.": "iOS no pudo completar la verificación de forma segura. No se cambió ningún bloqueo. Inténtalo de nuevo más tarde.",
+    "Safe limit rechecking requires iOS 17.4 or later. No blocks were changed.": "La verificación segura de límites requiere iOS 17.4 o posterior. No se cambió ningún bloqueo.",
     "This is a demo — nothing you do here is saved or actually blocked.": "Esto es una demostración — nada de lo que haces aquí se guarda ni se bloquea de verdad.",
     "Limitations": "Limitaciones",
     "iOS reporting notes": "notas de reporte de iOS",

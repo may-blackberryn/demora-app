@@ -96,6 +96,11 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         super.eventDidReachThreshold(event, activity: activity)
         let raw = event.rawValue
         if activity.rawValue == LatchConstants.dailyActivityName,
+           raw.hasPrefix("recheck-control-"),
+           let id = UUID(uuidString: String(
+                raw.dropFirst("recheck-control-".count))) {
+            SharedStore.recordLimitRecheckControl(id)
+        } else if activity.rawValue == LatchConstants.dailyActivityName,
            raw.hasPrefix("limit-"),
            let id = UUID(uuidString: String(raw.dropFirst(6))) {
             // A free window lifts every limit and credits its usage afterward.
@@ -108,6 +113,12 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
                 SharedStore.recordFreeWindowSuppressedLimitID(id)
                 return
             }
+            // A manual recheck keeps current shields in place and asks iOS for
+            // fresh callbacks. Recording this before the idempotent insert lets
+            // the app distinguish a newly-confirmed spent limit from a stale
+            // block marker without exposing Screen Time usage outside Apple's
+            // report extension.
+            SharedStore.recordLimitThresholdCallback(id)
             // Budget spent → block for the rest of the day.
             SharedStore.mutateBlockedLimitIDs { blocked in
                 blocked.insert(id)

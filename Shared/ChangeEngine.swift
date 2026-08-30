@@ -10,6 +10,16 @@ import DeviceActivity
 import FamilyControls
 import UserNotifications
 
+enum LimitRecheckResult: Equatable {
+    case completed(released: Int, confirmed: Int)
+    case noBlockedLimits
+    case freeWindowActive
+    case cooldown(remaining: TimeInterval)
+    case unsupportedVersion
+    case monitorUnavailable
+    case cancelled
+}
+
 /// Combined "how hard is this math gate" score, so a config change can be
 /// classified stricter vs lenient. Harder level, more problems, and a harsher
 /// wrong-answer penalty all increase it.
@@ -19,6 +29,40 @@ func mathStrictnessScore(_ difficulty: MathDifficulty, _ count: Int,
 }
 
 enum ChangeEngine {
+
+    /// DeviceActivity talks to Screen Time through synchronous XPC. If its
+    /// daemon is slow, making those calls on the main actor can trigger an iOS
+    /// watchdog kill. App-driven maintenance and override application are
+    /// serialized here so the UI remains responsive and two approval listeners
+    /// cannot reconfigure the same monitors concurrently.
+    private static let deviceActivityWorkQueue = DispatchQueue(
+        label: "app.demora.device-activity-work", qos: .userInitiated)
+
+    static func applyNowOffMain(changeIDs: [UUID]) async -> Int {
+        await withCheckedContinuation { continuation in
+            deviceActivityWorkQueue.async {
+                continuation.resume(returning: applyNow(changeIDs: changeIDs))
+            }
+        }
+    }
+
+    static func housekeepingOffMain() async {
+        await withCheckedContinuation { continuation in
+            deviceActivityWorkQueue.async {
+                housekeeping()
+                continuation.resume()
+            }
+        }
+    }
+
+    static func ensureMonitoringOffMain() async {
+        await withCheckedContinuation { continuation in
+            deviceActivityWorkQueue.async {
+                ensureMonitoring(state: SharedStore.loadState())
+                continuation.resume()
+            }
+        }
+    }
 
     // MARK: - Classification
 
@@ -277,25 +321,37 @@ enum ChangeEngine {
 
     /// Apply `change` immediately — caller must have passed an override gate first.
     static func applyNow(_ change: PendingChange) {
+        _ = applyNow(changeIDs: [change.id])
+    }
+
+    /// Mark a group due in one store write, then let the normal application
+    /// engine merge the whole batch. Deliberately does not stop the pending
+    /// activities here: applyDueChanges performs one batched cleanup after the
+    /// resulting state is safely persisted.
+    @discardableResult
+    private static func applyNow(changeIDs: [UUID]) -> Int {
         var state = SharedStore.loadState()
-        guard let idx = state.pending.firstIndex(where: { $0.id == change.id })
-        else {
+        let requested = Set(changeIDs)
+        let matching = state.pending.filter { requested.contains($0.id) }
+        guard !matching.isEmpty else {
             #if DEBUG
-            print("⚠️ applyNow: \(change.id.uuidString.prefix(8)) NOT in pending")
+            print("⚠️ applyNow: requested changes are no longer pending")
             #endif
-            return
+            return 0
         }
         #if DEBUG
-        print("   applyNow OK: \(change.summary)")
+        print("   applyNow OK: \(matching.count) change(s)")
         #endif
-        var c = state.pending[idx]
-        c.appliesAt = .distantPast   // due immediately under any clock
-        state.pending[idx] = c
+        for index in state.pending.indices
+        where requested.contains(state.pending[index].id) {
+            state.pending[index].appliesAt = .distantPast
+        }
         SharedStore.save(state)
-        DeviceActivityCenter().stopMonitoring([DeviceActivityName(change.activityName)])
         UNUserNotificationCenter.current()
-            .removePendingNotificationRequests(withIdentifiers: [change.id.uuidString])
+            .removePendingNotificationRequests(
+                withIdentifiers: matching.map { $0.id.uuidString })
         applyDueChanges()
+        return matching.count
     }
 
     // MARK: - Applying
@@ -319,13 +375,55 @@ enum ChangeEngine {
             }
         }
 
+        let windowMonitoringChanged = due.contains { change in
+            switch change.action {
+            case .addSchedule, .removeSchedule,
+                 .addExemption, .removeExemption,
+                 .addPlanned, .removePlanned:
+                return true
+            default:
+                return false
+            }
+        }
+
+        // Capture cleanup targets before mutating the state. Pending-change
+        // wake activities are stopped together; removed planned windows and
+        // ended sessions also contribute their own activity names.
+        var cleanupActivityNames = Set(due.map(\.activityName))
+        for change in due {
+            switch change.action {
+            case .removePlanned(let id):
+                if let planned = state.planned.first(where: { $0.id == id }) {
+                    cleanupActivityNames.insert(planned.activityName)
+                }
+            case .endSessionEarly(let id):
+                if let session = state.sessions.first(where: { $0.id == id }) {
+                    cleanupActivityNames.insert(session.activityName)
+                }
+            default:
+                break
+            }
+        }
+        let sessionIDsBefore = Set(state.sessions.map(\.id))
+
         for change in due {
             apply(change.action, to: &state)
             state.pending.removeAll { $0.id == change.id }
-            DeviceActivityCenter()
-                .stopMonitoring([DeviceActivityName(change.activityName)])
         }
+
+        // Persist the approved configuration before touching Apple's XPC
+        // service. If Screen Time stalls or the process is interrupted, the
+        // rule is still committed and the next maintenance pass can self-heal.
         SharedStore.save(state)
+
+        if !SharedStore.simulating && !cleanupActivityNames.isEmpty {
+            DeviceActivityCenter().stopMonitoring(cleanupActivityNames.map {
+                DeviceActivityName($0)
+            })
+        }
+        for session in state.sessions where !sessionIDsBefore.contains(session.id) {
+            startSessionCleanupActivity(session)
+        }
         // Reconcile first. If this batch starts a free window, its guard is in
         // place before a genuinely-required daily-monitor restart can deliver
         // callbacks. If it ends one, credit is committed before the restart.
@@ -333,7 +431,9 @@ enum ChangeEngine {
         if dailyLimitsChanged {
             reconfigureDailyMonitoring(state: state)
         }
-        reconfigureWindowMonitoring(state: state)
+        if windowMonitoringChanged {
+            reconfigureWindowMonitoring(state: state)
+        }
         ShieldController.refresh()
     }
 
@@ -420,10 +520,6 @@ enum ChangeEngine {
         case .addPlanned(let w):
             state.planned.append(w)
         case .removePlanned(let id):
-            if let w = state.planned.first(where: { $0.id == id }) {
-                DeviceActivityCenter()
-                    .stopMonitoring([DeviceActivityName(w.activityName)])
-            }
             state.planned.removeAll { $0.id == id }
         case .startSession(let name, let kind, let selection, let minutes):
             // The delay already ran (this is apply time) — session starts now.
@@ -432,12 +528,7 @@ enum ChangeEngine {
                 startedAt: Date(),
                 endsAt: Date().addingTimeInterval(TimeInterval(minutes) * 60))
             state.sessions.append(session)
-            startSessionCleanupActivity(session)
         case .endSessionEarly(let id):
-            if let session = state.sessions.first(where: { $0.id == id }) {
-                DeviceActivityCenter()
-                    .stopMonitoring([DeviceActivityName(session.activityName)])
-            }
             state.sessions.removeAll { $0.id == id }
         case .setBlockAppRemoval(let on):
             state.blockAppRemoval = on
@@ -472,6 +563,201 @@ enum ChangeEngine {
 
     // MARK: - DeviceActivity scheduling
 
+    private static let dailyMonitorFingerprintKey =
+        "latch.dailyMonitorFingerprint.v2"
+#if DEBUG
+    // Allow rapid abuse-testing in the separately installed dev build. The
+    // verification delay and conservative anti-bypass checks still apply.
+    static let limitRecheckCooldown: TimeInterval = 0
+#else
+    static let limitRecheckCooldown: TimeInterval = 10 * 60
+#endif
+    private static let limitRecheckVerificationDelay: UInt64 =
+        30 * 1_000_000_000
+
+    /// A compact description of everything that changes a daily event's
+    /// threshold. Limit selections are immutable after creation; a replacement
+    /// gets a new UUID, while minute edits retain the UUID and change the value.
+    private static func dailyMonitorFingerprint(state: LatchState) -> String {
+        let credit = SharedStore.loadFreeCreditByLimit()
+        let limits = state.limits.sorted { $0.id.uuidString < $1.id.uuidString }
+            .map {
+                "\($0.id.uuidString):\($0.minutesPerDay):\(credit[$0.id] ?? 0)"
+            }
+            .joined(separator: "|")
+        return "3;\(SharedStore.dayKey(for: Date()));\(limits)"
+    }
+
+    /// Foreground self-healing without tearing down healthy Screen Time
+    /// monitors. Genuine configuration changes already reconfigure at their
+    /// apply sites; this catches monitors iOS silently dropped, app upgrades,
+    /// and an interrupted setup while avoiding iOS 26's restart-triggered
+    /// premature threshold callbacks.
+    static func ensureMonitoring(state: LatchState) {
+        let center = DeviceActivityCenter()
+        let running = Set(center.activities.map(\.rawValue))
+        let daily = LatchConstants.dailyActivityName
+        let shouldHaveDaily = !SharedStore.simulating && !state.limits.isEmpty
+        let savedFingerprint = SharedStore.defaults
+            .string(forKey: dailyMonitorFingerprintKey)
+        let expectedFingerprint = dailyMonitorFingerprint(state: state)
+
+        if shouldHaveDaily {
+            if !running.contains(daily)
+                || savedFingerprint != expectedFingerprint {
+                reconfigureDailyMonitoring(state: state)
+            }
+        } else {
+            if running.contains(daily) {
+                reconfigureDailyMonitoring(state: state)
+            } else {
+                SharedStore.defaults.removeObject(
+                    forKey: dailyMonitorFingerprintKey)
+            }
+        }
+
+        let expectedWindows = expectedWindowActivityNames(state: state)
+        let runningWindows = Set(running.filter {
+            $0.hasPrefix("sched-") || $0.hasPrefix("exempt-")
+                || $0.hasPrefix("planned-")
+        })
+        if runningWindows != expectedWindows {
+            reconfigureWindowMonitoring(state: state)
+        } else if !SharedStore.simulating {
+            // Echoes are redundant midnight wake-ups. Restore only the missing
+            // ones without tearing down healthy enforcement windows.
+            startMissingEchoActivities(alreadyRunning: running)
+        }
+    }
+
+    private static func expectedWindowActivityNames(state: LatchState)
+        -> Set<String> {
+        guard !SharedStore.simulating else { return [] }
+        var names = Set<String>()
+
+        func add(prefix: String, start: Int, end: Int,
+                 recurrence: Recurrence) {
+            let wraps = start >= end
+            switch recurrence {
+            case .daily:
+                let segments: [(Int, Int)] = wraps
+                    ? [(start, 24 * 60 - 1), (0, end)]
+                    : [(start, end)]
+                for (index, segment) in segments.enumerated() {
+                    let paddedEnd = min(max(segment.1, segment.0 + 15),
+                                        24 * 60 - 1)
+                    if paddedEnd - segment.0 >= 15 {
+                        names.insert("\(prefix)-\(index)")
+                    }
+                }
+            case .weekly(let days):
+                for day in days {
+                    names.insert("\(prefix)-w\(day)")
+                }
+            case .monthlyDay:
+                names.insert("\(prefix)-m")
+            case .monthlyOrdinal:
+                names.insert("\(prefix)-o")
+            }
+        }
+
+        for schedule in state.schedules {
+            add(prefix: "sched-\(schedule.id.uuidString)",
+                start: schedule.startMinutes, end: schedule.endMinutes,
+                recurrence: schedule.recurrence)
+        }
+        for exemption in state.exemptions {
+            add(prefix: "exempt-\(exemption.id.uuidString)",
+                start: exemption.startMinutes, end: exemption.endMinutes,
+                recurrence: exemption.recurrence)
+        }
+        for planned in state.planned where !planned.isPast {
+            names.insert(planned.activityName)
+        }
+        return names
+    }
+
+    /// Conservatively verify existing daily-limit blocks. Current shields stay
+    /// in place during the check. Re-registering with includesPastActivity asks
+    /// iOS to emit fresh callbacks for genuinely-spent limits; only stale IDs
+    /// that receive no fresh callback are released. The events remain armed, so
+    /// a late callback immediately restores a legitimate block.
+    @MainActor
+    static func recheckBlockedLimits() async -> LimitRecheckResult {
+        guard #available(iOS 17.4, *) else { return .unsupportedVersion }
+        if let last = SharedStore.lastLimitRecheckAt {
+            let remaining = limitRecheckCooldown
+                - Date().timeIntervalSince(last)
+            if remaining > 0 { return .cooldown(remaining: remaining) }
+        }
+        guard !isFreeWindowActive() else { return .freeWindowActive }
+
+        let state = SharedStore.loadState()
+        let eligible = Set(state.limits.filter { $0.minutesPerDay > 0 }
+            .map(\.id))
+        let candidates = SharedStore.loadBlockedLimitIDs()
+            .intersection(eligible)
+        guard !candidates.isEmpty else { return .noBlockedLimits }
+
+        let startedAt = Date()
+        let controlID = UUID()
+        // includeBlockedLimits is essential: normal monitoring omits already
+        // spent limits because they need no second event, while this repair
+        // specifically needs iOS to confirm each stored block again.
+        guard reconfigureDailyMonitoring(state: state,
+                                         includeBlockedLimits: true,
+                                         recheckControlID: controlID) else {
+            // Registration failure means iOS never performed a recheck. Keep
+            // every current block rather than treating silence as clearance.
+            return .monitorUnavailable
+        }
+        SharedStore.lastLimitRecheckAt = startedAt
+        let verificationFingerprint = dailyMonitorFingerprint(state: state)
+        let verificationDay = SharedStore.dayKey(for: Date())
+
+        do {
+            try await Task.sleep(nanoseconds: limitRecheckVerificationDelay)
+        } catch {
+            // Never release a block if the verification task was interrupted.
+            return .cancelled
+        }
+
+        // Any state transition that replaced the verification monitor makes
+        // silence ambiguous. Likewise, never resolve a check across midnight or
+        // while a free period has since begun. All of these paths keep blocks.
+        guard SharedStore.dayKey(for: Date()) == verificationDay else {
+            return .noBlockedLimits
+        }
+        guard !isFreeWindowActive() else { return .freeWindowActive }
+        let dailyStillRunning = DeviceActivityCenter().activities.contains {
+            $0.rawValue == LatchConstants.dailyActivityName
+        }
+        guard dailyStillRunning,
+              SharedStore.defaults.string(forKey: dailyMonitorFingerprintKey)
+                == verificationFingerprint else {
+            return .monitorUnavailable
+        }
+        // An all-activity 1-minute control event must also have fired. Because a
+        // blocked-limit candidate necessarily represents at least one minute
+        // of claimed activity, absence of this control means Screen Time is not
+        // reliably evaluating the fresh monitor; silence cannot authorize an
+        // unblock in that state.
+        guard SharedStore.wasLimitRecheckControlConfirmed(controlID) else {
+            return .monitorUnavailable
+        }
+
+        let confirmed = SharedStore.limitsConfirmedSince(startedAt,
+                                                          among: candidates)
+        let stale = candidates.subtracting(confirmed)
+        if !stale.isEmpty {
+            SharedStore.mutateBlockedLimitIDs { blocked in
+                blocked.subtract(stale)
+            }
+        }
+        ShieldController.refresh()
+        return .completed(released: stale.count, confirmed: confirmed.count)
+    }
+
     /// Ask iOS for an extra extension wake this long BEFORE each interval
     /// boundary (intervalWillStart/EndWarning). Shields are recomputed from
     /// the wall clock on every wake, so each warning is a free chance to
@@ -485,7 +771,12 @@ enum ChangeEngine {
     /// real limit — and untouched limits get no extra time. On iOS 17.4+
     /// `includesPastActivity` makes the event fire at the true daily total
     /// regardless of monitoring restarts.
-    static func reconfigureDailyMonitoring(state: LatchState) {
+    @discardableResult
+    static func reconfigureDailyMonitoring(
+        state: LatchState,
+        includeBlockedLimits: Bool = false,
+        recheckControlID: UUID? = nil
+    ) -> Bool {
         // Optimistic reset; any startMonitoring failure below (or in the window
         // pass that follows) flips it back on. Drives the "enforcement degraded"
         // banner.
@@ -495,8 +786,14 @@ enum ChangeEngine {
         let daily = DeviceActivityName(LatchConstants.dailyActivityName)
         center.stopMonitoring([daily])
         // Tutorial simulation: don't start any real limit monitoring.
-        if SharedStore.simulating { return }
-        guard !state.limits.isEmpty else { return }
+        if SharedStore.simulating {
+            SharedStore.defaults.removeObject(forKey: dailyMonitorFingerprintKey)
+            return false
+        }
+        guard !state.limits.isEmpty else {
+            SharedStore.defaults.removeObject(forKey: dailyMonitorFingerprintKey)
+            return false
+        }
 
         let blocked = SharedStore.loadBlockedLimitIDs()
         var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
@@ -504,7 +801,10 @@ enum ChangeEngine {
         for limit in state.limits {
             // A 0-minute limit is always blocked (handled by the shield), and a
             // limit already at its cap stays blocked — neither needs an event.
-            if limit.minutesPerDay == 0 || blocked.contains(limit.id) { continue }
+            if limit.minutesPerDay == 0
+                || (!includeBlockedLimits && blocked.contains(limit.id)) {
+                continue
+            }
 
             // includesPastActivity:true makes the OS count usage that already
             // happened earlier today — including time spent before this limit
@@ -535,6 +835,17 @@ enum ChangeEngine {
             events[DeviceActivityEvent.Name("limit-\(limit.id.uuidString)")] = limitEvent
         }
 
+        if let recheckControlID, #available(iOS 17.4, *) {
+            // Empty selections mean all activity. This independent event proves
+            // the newly-created monitor is actually evaluating past activity;
+            // without it, a missing limit callback is not evidence of anything.
+            events[DeviceActivityEvent.Name(
+                "recheck-control-\(recheckControlID.uuidString)")] =
+                DeviceActivityEvent(
+                    threshold: thresholdComponents(minutes: 1),
+                    includesPastActivity: true)
+        }
+
         let schedule = DeviceActivitySchedule(
             intervalStart: DateComponents(hour: 0, minute: 0),
             intervalEnd: DateComponents(hour: 23, minute: 59),
@@ -543,9 +854,14 @@ enum ChangeEngine {
         )
         do {
             try center.startMonitoring(daily, during: schedule, events: events)
+            SharedStore.defaults.set(dailyMonitorFingerprint(state: state),
+                                     forKey: dailyMonitorFingerprintKey)
+            return true
         } catch {
             print("Demora: failed to start daily monitoring: \(error)")
+            SharedStore.defaults.removeObject(forKey: dailyMonitorFingerprintKey)
             SharedStore.enforcementDegraded = true
+            return false
         }
     }
 
@@ -617,14 +933,26 @@ enum ChangeEngine {
         // real enforcement activities claim the ~20-activity budget first: a
         // dropped echo is tolerated redundancy (no enforcementDegraded), whereas
         // a dropped schedule/window is real lost enforcement.
+        startMissingEchoActivities(alreadyRunning: [])
+    }
+
+    /// Register only absent post-midnight echo activities. These are fallback
+    /// wakes, not enforcement rules, so a failure is tolerated and never causes
+    /// healthy schedule/free-period monitors to be restarted on every launch.
+    private static func startMissingEchoActivities(
+        alreadyRunning: Set<String>
+    ) {
+        let center = DeviceActivityCenter()
         for (i, w) in [(5, 35), (60, 90), (360, 390)].enumerated() {
+            let name = "echo-\(i)"
+            if alreadyRunning.contains(name) { continue }
             let schedule = DeviceActivitySchedule(
                 intervalStart: DateComponents(hour: w.0 / 60, minute: w.0 % 60),
                 intervalEnd: DateComponents(hour: w.1 / 60, minute: w.1 % 60),
                 repeats: true,
                 warningTime: boundaryWarning)
             do {
-                try center.startMonitoring(DeviceActivityName("echo-\(i)"),
+                try center.startMonitoring(DeviceActivityName(name),
                                            during: schedule)
             } catch {
                 print("Demora: failed to start echo activity \(i): \(error)")

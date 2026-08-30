@@ -15,6 +15,33 @@
 import Foundation
 import CloudKit
 
+/// The foreground poller, an open contact sheet, and a CloudKit silent push can
+/// all notice the same approval. Give each request ID one serialized consumer
+/// so they cannot apply and reconfigure Screen Time concurrently.
+private actor ContactApprovalProcessingGate {
+    private var inFlight = Set<String>()
+    private var waiters: [String: [CheckedContinuation<Void, Never>]] = [:]
+
+    func acquire(_ requestID: String) async {
+        if inFlight.insert(requestID).inserted { return }
+        await withCheckedContinuation { continuation in
+            waiters[requestID, default: []].append(continuation)
+        }
+    }
+
+    func release(_ requestID: String) {
+        if var queued = waiters[requestID], !queued.isEmpty {
+            let next = queued.removeFirst()
+            waiters[requestID] = queued.isEmpty ? nil : queued
+            // Ownership passes directly to the resumed waiter, so the request
+            // remains in `inFlight` until that consumer releases it.
+            next.resume()
+        } else {
+            inFlight.remove(requestID)
+        }
+    }
+}
+
 // MARK: - Email codes (worker)
 
 enum EmailCodeError: Error { case rateLimited(global: Bool), attestationRejected }
@@ -190,6 +217,7 @@ enum ContactsRelay {
     private static let sentRelayKey = "latch.sentRelayRequests"
     private static let requestTTL: TimeInterval = 3600
     private static let nameKey = "latch.myName"
+    private static let approvalProcessingGate = ContactApprovalProcessingGate()
 
     /// Short code identifying this install; shown in Settings so a friend
     /// can add you as their approver.
@@ -371,17 +399,7 @@ enum ContactsRelay {
         guard !relayRequests.isEmpty else { return false }
         var appliedAny = false
         for req in relayRequests {
-            let since = relaySentDate(req.requestId) ?? .distantPast
-            guard let decision = try? await decisions(requestId: req.requestId, since: since),
-                  decision.approved else { continue }
-            clearSent(req.requestId)
-            clearOutgoing(req.requestId)
-            await cleanup(requestId: req.requestId)
-            let state = SharedStore.loadState()
-            for change in state.pending where req.changeIds.contains(change.id) {
-                ChangeEngine.applyNow(change)
-                appliedAny = true
-            }
+            if await processApprovalIfAvailable(req) { appliedAny = true }
         }
         return appliedAny
     }
@@ -538,6 +556,53 @@ enum ContactsRelay {
         var d = outgoingDict()
         d.removeValue(forKey: requestId)
         saveOutgoing(d)
+    }
+
+    /// Check and consume one outgoing in-app approval. All callers use this
+    /// path so a push, foreground refresh, and open sheet cannot apply the same
+    /// request at once. The request is cleared only after the state and Screen
+    /// Time maintenance have completed.
+    static func processApprovalIfAvailable(_ request: OutgoingRequest) async -> Bool {
+        await approvalProcessingGate.acquire(request.requestId)
+        guard outgoingDict()[request.requestId] != nil else {
+            await approvalProcessingGate.release(request.requestId)
+            return false
+        }
+
+        let since = relaySentDate(request.requestId) ?? .distantPast
+        let decision = try? await decisions(requestId: request.requestId,
+                                            since: since)
+        guard decision?.approved == true else {
+            await approvalProcessingGate.release(request.requestId)
+            return false
+        }
+
+        let applied = await consumeApprovedRequest(request)
+        await approvalProcessingGate.release(request.requestId)
+        return applied
+    }
+
+    /// The contact sheet already observed a valid approval while polling. It
+    /// still enters the same gate; if another listener consumed it first, the
+    /// missing outgoing record means the work is already complete.
+    static func applyKnownApproval(requestId: String) async -> Bool {
+        await approvalProcessingGate.acquire(requestId)
+        guard let request = outgoingDict()[requestId] else {
+            await approvalProcessingGate.release(requestId)
+            return true
+        }
+        let applied = await consumeApprovedRequest(request)
+        await approvalProcessingGate.release(requestId)
+        return applied
+    }
+
+    private static func consumeApprovedRequest(_ request: OutgoingRequest) async -> Bool {
+        let appliedCount = await ChangeEngine.applyNowOffMain(
+            changeIDs: request.changeIds)
+        clearSent(request.requestId)
+        clearOutgoing(request.requestId)
+        await cleanup(requestId: request.requestId)
+        return appliedCount > 0
     }
 
     // MARK: - Contact invites (consent)

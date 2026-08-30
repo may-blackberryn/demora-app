@@ -313,7 +313,7 @@ struct ContactView: View {
     }
 }
 
-// MARK: - Appearance grid (tap a card to cycle its value)
+// MARK: - Appearance grid
 
 struct AppearanceGridView: View {
     @EnvironmentObject var model: AppModel
@@ -326,8 +326,8 @@ struct AppearanceGridView: View {
     var body: some View {
         ScrollView {
             LazyVGrid(columns: gridCols, spacing: 14) {
-                Button {
-                    model.language = model.language == .english ? .spanish : .english
+                NavigationLink {
+                    LanguagePickerView()
                 } label: {
                     GridCard(symbol: "globe", title: tr("Language"),
                              subtitle: model.language.label)
@@ -374,6 +374,31 @@ struct AppearanceGridView: View {
         .buttonStyle(.plain)
         .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(tr("Appearance"))
+    }
+}
+
+struct LanguagePickerView: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: gridCols, spacing: 14) {
+                ForEach(AppLanguage.allCases) { language in
+                    Button {
+                        model.language = language
+                    } label: {
+                        GridCard(symbol: model.language == language
+                                 ? "checkmark.circle.fill" : "circle",
+                                 title: language.label,
+                                 subtitle: language.rawValue.uppercased())
+                    }
+                }
+            }
+            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .background(Ink.paper.ignoresSafeArea())
+        .casedNavigationTitle(tr("Language"))
     }
 }
 
