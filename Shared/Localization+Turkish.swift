@@ -6,6 +6,12 @@
 import Foundation
 
 let turkishStrings: [String: String] = [
+    "Demora now speaks more languages": "Demora artık daha fazla dil konuşuyor",
+    "We've added support for German, French, Portuguese, Polish, Turkish, and Hindi.": "Almanca, Fransızca, Portekizce, Lehçe, Türkçe ve Hintçe desteği ekledik.",
+    "Choose your language here. You can change it anytime under Settings → Appearance → Language.": "Dilinizi buradan seçin. Daha sonra Ayarlar → Görünüm → Dil bölümünden istediğiniz zaman değiştirebilirsiniz.",
+    "Apply language": "Dili uygula",
+    "Translation in beta": "Beta çeviri",
+    "This language is in beta. Please report any mistranslations or unclear phrasing to hello@getdemora.app.": "Bu çeviri beta aşamasındadır. Lütfen hatalı çevirileri veya anlaşılmayan ifadeleri hello@getdemora.app adresine bildirin.",
     "Dismiss": "Kapat",
     "Recheck blocked limits": "Engellenen sınırları yeniden kontrol et",
     "Takes around 30 seconds": "Yaklaşık 30 saniye sürer",

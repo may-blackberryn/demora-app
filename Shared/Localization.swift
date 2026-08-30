@@ -33,6 +33,12 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 
     var locale: Locale { Locale(identifier: rawValue) }
 
+    /// English and Spanish are the original, reviewed localizations. The newer
+    /// translations invite feedback after the user explicitly commits them.
+    var isBetaTranslation: Bool {
+        self != .english && self != .spanish
+    }
+
     static var current: AppLanguage {
         get {
             // An explicit in-app choice always wins.
@@ -69,6 +75,12 @@ func tr(_ key: String) -> String {
 }
 
 let spanishStrings: [String: String] = [
+    "Demora now speaks more languages": "Demora ahora habla más idiomas",
+    "We've added support for German, French, Portuguese, Polish, Turkish, and Hindi.": "Agregamos soporte para alemán, francés, portugués, polaco, turco e hindi.",
+    "Choose your language here. You can change it anytime under Settings → Appearance → Language.": "Elige tu idioma aquí. Puedes cambiarlo cuando quieras en Ajustes → Apariencia → Idioma.",
+    "Apply language": "Aplicar idioma",
+    "Translation in beta": "Traducción en beta",
+    "This language is in beta. Please report any mistranslations or unclear phrasing to hello@getdemora.app.": "Esta traducción está en beta. Reporta cualquier error de traducción o frase poco clara a hello@getdemora.app.",
     "Dismiss": "Descartar",
     "Recheck blocked limits": "Volver a verificar límites bloqueados",
     "Takes around 30 seconds": "Tarda unos 30 segundos",

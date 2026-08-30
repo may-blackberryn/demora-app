@@ -6,6 +6,12 @@
 import Foundation
 
 let frenchStrings: [String: String] = [
+    "Demora now speaks more languages": "Demora parle désormais plus de langues",
+    "We've added support for German, French, Portuguese, Polish, Turkish, and Hindi.": "Nous avons ajouté la prise en charge de l’allemand, du français, du portugais, du polonais, du turc et de l’hindi.",
+    "Choose your language here. You can change it anytime under Settings → Appearance → Language.": "Choisissez votre langue ici. Vous pourrez la modifier à tout moment dans Paramètres → Apparence → Langue.",
+    "Apply language": "Appliquer la langue",
+    "Translation in beta": "Traduction en version bêta",
+    "This language is in beta. Please report any mistranslations or unclear phrasing to hello@getdemora.app.": "Cette traduction est en version bêta. Merci de signaler toute erreur de traduction ou formulation peu claire à hello@getdemora.app.",
     "Dismiss": "Fermer",
     "Recheck blocked limits": "Revérifier les limites bloquées",
     "Takes around 30 seconds": "Prend environ 30 secondes",

@@ -2,7 +2,7 @@
 //  SettingsView.swift
 //  Language, the two delays, override methods, the app-deletion lock,
 //  and beta credits. Every rule change is queued through the change
-//  engine; language is cosmetic and switches instantly.
+//  engine; language is cosmetic and switches after confirmation.
 //
 
 import SwiftUI
@@ -379,26 +379,48 @@ struct AppearanceGridView: View {
 
 struct LanguagePickerView: View {
     @EnvironmentObject var model: AppModel
+    @State private var selectedLanguage = AppLanguage.current
+    @State private var showLanguageBetaNotice = false
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: gridCols, spacing: 14) {
-                ForEach(AppLanguage.allCases) { language in
-                    Button {
-                        model.language = language
-                    } label: {
-                        GridCard(symbol: model.language == language
-                                 ? "checkmark.circle.fill" : "circle",
-                                 title: language.label,
-                                 subtitle: language.rawValue.uppercased())
+            VStack(spacing: 20) {
+                LazyVGrid(columns: gridCols, spacing: 14) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Button {
+                            selectedLanguage = language
+                        } label: {
+                            GridCard(symbol: selectedLanguage == language
+                                     ? "checkmark.circle.fill" : "circle",
+                                     title: language.label,
+                                     subtitle: language.rawValue.uppercased())
+                        }
                     }
                 }
+
+                Button(tr("Apply language")) { applyLanguage() }
+                    .buttonStyle(.borderedProminent)
+                    .frame(maxWidth: .infinity)
+                    .disabled(selectedLanguage == model.language)
             }
             .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
         .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(tr("Language"))
+        .alert(tr("Translation in beta"),
+               isPresented: $showLanguageBetaNotice) {
+            Button(tr("OK"), role: .cancel) { }
+        } message: {
+            Text(tr("This language is in beta. Please report any mistranslations or unclear phrasing to hello@getdemora.app."))
+        }
+    }
+
+    private func applyLanguage() {
+        model.language = selectedLanguage
+        if selectedLanguage.isBetaTranslation {
+            showLanguageBetaNotice = true
+        }
     }
 }
 

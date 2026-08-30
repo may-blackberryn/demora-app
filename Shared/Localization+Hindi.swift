@@ -6,6 +6,12 @@
 import Foundation
 
 let hindiStrings: [String: String] = [
+    "Demora now speaks more languages": "Demora अब और भाषाओं में उपलब्ध है",
+    "We've added support for German, French, Portuguese, Polish, Turkish, and Hindi.": "हमने जर्मन, फ़्रेंच, पुर्तगाली, पोलिश, तुर्की और हिंदी के लिए समर्थन जोड़ा है।",
+    "Choose your language here. You can change it anytime under Settings → Appearance → Language.": "यहाँ अपनी भाषा चुनें। आप इसे कभी भी सेटिंग्स → दिखावट → भाषा में बदल सकते हैं।",
+    "Apply language": "भाषा लागू करें",
+    "Translation in beta": "बीटा अनुवाद",
+    "This language is in beta. Please report any mistranslations or unclear phrasing to hello@getdemora.app.": "यह अनुवाद अभी बीटा में है। कृपया किसी भी गलत अनुवाद या अस्पष्ट वाक्यांश की सूचना hello@getdemora.app पर दें।",
     "Dismiss": "बंद करें",
     "Recheck blocked limits": "ब्लॉक की गई सीमाएँ दोबारा जाँचें",
     "Takes around 30 seconds": "लगभग 30 सेकंड लगते हैं",

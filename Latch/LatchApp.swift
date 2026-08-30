@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import StoreKit
 
 @main
 struct LatchApp: App {
@@ -80,7 +81,16 @@ struct LatchApp: App {
 
 struct RootView: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.requestReview) private var requestReview
     @State private var tutorialHoles: [CGRect] = []
+    @State private var showLanguageExpansionUpdate = false
+    @State private var wasSetUpAtLaunch = SharedStore.loadState().isSetUp
+    @AppStorage("latch.languageExpansionUpdate.shown",
+                store: SharedStore.defaults)
+    private var languageExpansionUpdateShown = false
+    @AppStorage("latch.languageExpansionUpdate.reviewRequested",
+                store: SharedStore.defaults)
+    private var languageExpansionReviewRequested = false
 
     /// During the tutorial, ignore manual tab taps (only programmatic
     /// step changes move tabs); otherwise pass through.
@@ -120,52 +130,81 @@ struct RootView: View {
     }
 
     var body: some View {
-        if model.state.isSetUp || model.tutorial != nil {
-            Group {
-                if model.tutorial != nil
-                    && UIDevice.current.userInterfaceIdiom == .pad {
-                    // No switchable tab bar during the tutorial on iPad — render
-                    // only the active screen so the user can't tap to switch
-                    // (iPadOS's top tab bar ignores the selection lock). The
-                    // tutorial auto-navigates between screens itself.
-                    tutorialScreen
-                } else {
-                    mainTabView
+        Group {
+            if model.state.isSetUp || model.tutorial != nil {
+                Group {
+                    if model.tutorial != nil
+                        && UIDevice.current.userInterfaceIdiom == .pad {
+                        // No switchable tab bar during the tutorial on iPad — render
+                        // only the active screen so the user can't tap to switch
+                        // (iPadOS's top tab bar ignores the selection lock). The
+                        // tutorial auto-navigates between screens itself.
+                        tutorialScreen
+                    } else {
+                        mainTabView
+                    }
                 }
-            }
-            .id(model.language)   // re-render everything on language change
-            .onPreferenceChange(TutorialHoleKey.self) { tutorialHoles = $0 }
-            .overlay {
-                if let t = model.tutorial, t != .configure {
-                    TutorialBlocker(holes: tutorialHoles)
+                .id(model.language)   // re-render everything on language change
+                .onPreferenceChange(TutorialHoleKey.self) { tutorialHoles = $0 }
+                .overlay {
+                    if let t = model.tutorial, t != .configure {
+                        TutorialBlocker(holes: tutorialHoles)
+                    }
                 }
-            }
-            .overlay(alignment: .bottom) { TutorialCallout() }
-            .overlay(alignment: .top) {
-                if let t = model.tutorial, t != .configure {
-                    TutorialDemoBanner()
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                .overlay(alignment: .bottom) { TutorialCallout() }
+                .overlay(alignment: .top) {
+                    if let t = model.tutorial, t != .configure {
+                        TutorialDemoBanner()
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                 }
+                .fullScreenCover(isPresented: Binding(
+                    get: { model.tutorial == .configure },
+                    set: { _ in })) {
+                    TutorialFinishView()
+                }
+                .alert(
+                    model.queueNotice != nil ? tr("Already pending")
+                                             : tr("Trusted contact removed"),
+                    isPresented: Binding(
+                        get: { model.queueNotice != nil || model.contactNotice != nil },
+                        set: { if !$0 { model.queueNotice = nil; model.contactNotice = nil } }
+                    )
+                ) {
+                    Button(tr("OK"), role: .cancel) {}
+                } message: {
+                    Text(model.queueNotice ?? model.contactNotice ?? "")
+                }
+            } else {
+                OnboardingView()
             }
-            .fullScreenCover(isPresented: Binding(
-                get: { model.tutorial == .configure },
-                set: { _ in })) {
-                TutorialFinishView()
+        }
+        .onAppear { presentLanguageExpansionIfNeeded() }
+        .fullScreenCover(
+            isPresented: $showLanguageExpansionUpdate,
+            onDismiss: requestLanguageExpansionReviewIfNeeded
+        ) {
+            LanguageExpansionUpdateView {
+                languageExpansionUpdateShown = true
             }
-            .alert(
-                model.queueNotice != nil ? tr("Already pending")
-                                         : tr("Trusted contact removed"),
-                isPresented: Binding(
-                    get: { model.queueNotice != nil || model.contactNotice != nil },
-                    set: { if !$0 { model.queueNotice = nil; model.contactNotice = nil } }
-                )
-            ) {
-                Button(tr("OK"), role: .cancel) {}
-            } message: {
-                Text(model.queueNotice ?? model.contactNotice ?? "")
-            }
-        } else {
-            OnboardingView()
+        }
+    }
+
+    private func presentLanguageExpansionIfNeeded() {
+        guard wasSetUpAtLaunch,
+              model.tutorial == nil,
+              !languageExpansionUpdateShown,
+              !showLanguageExpansionUpdate else { return }
+        showLanguageExpansionUpdate = true
+    }
+
+    private func requestLanguageExpansionReviewIfNeeded() {
+        guard !languageExpansionReviewRequested else { return }
+        languageExpansionReviewRequested = true
+        // Let the update cover finish dismissing before asking StoreKit. Apple
+        // retains final control over whether its native rating prompt appears.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            requestReview()
         }
     }
 }

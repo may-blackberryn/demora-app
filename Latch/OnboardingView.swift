@@ -16,6 +16,7 @@ struct OnboardingView: View {
     @AppStorage("textCasing") private var textCasingRaw = TextCasing.lower.rawValue
     @State private var step = 0
     @State private var showPreventSteps = false
+    @State private var showLanguageBetaNotice = false
 
     var body: some View {
         NavigationStack {
@@ -40,6 +41,12 @@ struct OnboardingView: View {
                     }
                 }
             }
+        }
+        .alert(tr("Translation in beta"),
+               isPresented: $showLanguageBetaNotice) {
+            Button(tr("OK"), role: .cancel) { }
+        } message: {
+            Text(tr("This language is in beta. Please report any mistranslations or unclear phrasing to hello@getdemora.app."))
         }
     }
 
@@ -96,7 +103,12 @@ struct OnboardingView: View {
             .padding(.top, 32)
             Spacer()
             Spacer()
-            Button(tr("Continue")) { step = 1 }
+            Button(tr("Continue")) {
+                step = 1
+                if model.language.isBetaTranslation {
+                    showLanguageBetaNotice = true
+                }
+            }
                 .buttonStyle(.borderedProminent)
                 .frame(maxWidth: .infinity)
         }
