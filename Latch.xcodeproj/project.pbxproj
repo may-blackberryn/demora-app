@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		362AD7372FE25DCA00E9E08C /* LatchReport.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = 362AD72B2FE25DCA00E9E08C /* LatchReport.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AC0000000000000000000001 /* LatchWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000002 /* LatchWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AC0000000000000000000003 /* Shared/DemoraWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000004 /* Shared/DemoraWidgetSnapshot.swift */; };
 		EE0000000000000000000002 /* LatchMonitor.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000002 /* LatchMonitor.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		EE0000000000000000000003 /* LatchShieldUI.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000003 /* LatchShieldUI.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -19,6 +21,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 362AD72A2FE25DCA00E9E08C;
 			remoteInfo = LatchReport;
+		};
+		AC0000000000000000000005 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 440000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AC0000000000000000000006;
+			remoteInfo = LatchWidgets;
 		};
 		FF0000000000000000000002 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -56,6 +65,7 @@
 			files = (
 				EE0000000000000000000002 /* LatchMonitor.appex in Embed Foundation Extensions */,
 				EE0000000000000000000003 /* LatchShieldUI.appex in Embed Foundation Extensions */,
+				AC0000000000000000000001 /* LatchWidgets.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -64,6 +74,8 @@
 
 /* Begin PBXFileReference section */
 		362AD72B2FE25DCA00E9E08C /* LatchReport.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.extensionkit-extension"; includeInIndex = 0; path = LatchReport.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AC0000000000000000000002 /* LatchWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LatchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AC0000000000000000000004 /* Shared/DemoraWidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/DemoraWidgetSnapshot.swift; sourceTree = SOURCE_ROOT; };
 		CC0000000000000000000001 /* Latch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Latch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CC0000000000000000000002 /* LatchMonitor.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LatchMonitor.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		CC0000000000000000000003 /* LatchShieldUI.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LatchShieldUI.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -97,6 +109,13 @@
 				Info.plist,
 			);
 			target = BB0000000000000000000003 /* LatchShieldUI */;
+		};
+		AC0000000000000000000007 /* Exceptions for "LatchWidgets" folder in "LatchWidgets" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = AC0000000000000000000006 /* LatchWidgets */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -138,10 +157,25 @@
 			path = Shared;
 			sourceTree = "<group>";
 		};
+		AC0000000000000000000008 /* LatchWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AC0000000000000000000007 /* Exceptions for "LatchWidgets" folder in "LatchWidgets" target */,
+			);
+			path = LatchWidgets;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		362AD7282FE25DCA00E9E08C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AC0000000000000000000009 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -179,8 +213,10 @@
 				AA0000000000000000000002 /* LatchMonitor */,
 				AA0000000000000000000003 /* LatchShieldUI */,
 				AA0000000000000000000004 /* Shared */,
+				AC0000000000000000000008 /* LatchWidgets */,
 				362AD72C2FE25DCA00E9E08C /* LatchReport */,
 				330000000000000000000002 /* Products */,
+				367484CB306577EF0012EE0B /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -191,8 +227,17 @@
 				CC0000000000000000000002 /* LatchMonitor.appex */,
 				CC0000000000000000000003 /* LatchShieldUI.appex */,
 				362AD72B2FE25DCA00E9E08C /* LatchReport.appex */,
+				AC0000000000000000000002 /* LatchWidgets.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		367484CB306577EF0012EE0B /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				AC0000000000000000000004 /* Shared/DemoraWidgetSnapshot.swift */,
+			);
+			name = "Recovered References";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -220,6 +265,26 @@
 			productReference = 362AD72B2FE25DCA00E9E08C /* LatchReport.appex */;
 			productType = "com.apple.product-type.extensionkit-extension";
 		};
+		AC0000000000000000000006 /* LatchWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AC000000000000000000000C /* Build configuration list for PBXNativeTarget "LatchWidgets" */;
+			buildPhases = (
+				AC000000000000000000000A /* Sources */,
+				AC0000000000000000000009 /* Frameworks */,
+				AC000000000000000000000B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AC0000000000000000000008 /* LatchWidgets */,
+			);
+			name = LatchWidgets;
+			productName = LatchWidgets;
+			productReference = AC0000000000000000000002 /* LatchWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		BB0000000000000000000001 /* Latch */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 21000000000000000000000F /* Build configuration list for PBXNativeTarget "Latch" */;
@@ -236,6 +301,7 @@
 				FF0000000000000000000012 /* PBXTargetDependency */,
 				FF0000000000000000000013 /* PBXTargetDependency */,
 				362AD7362FE25DCA00E9E08C /* PBXTargetDependency */,
+				AC000000000000000000000D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				AA0000000000000000000001 /* Latch */,
@@ -307,6 +373,9 @@
 					362AD72A2FE25DCA00E9E08C = {
 						CreatedOnToolsVersion = 27.0;
 					};
+					AC0000000000000000000006 = {
+						CreatedOnToolsVersion = 27.0;
+					};
 					BB0000000000000000000001 = {
 						CreatedOnToolsVersion = 16.0;
 					};
@@ -343,12 +412,20 @@
 				BB0000000000000000000002 /* LatchMonitor */,
 				BB0000000000000000000003 /* LatchShieldUI */,
 				362AD72A2FE25DCA00E9E08C /* LatchReport */,
+				AC0000000000000000000006 /* LatchWidgets */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		362AD7292FE25DCA00E9E08C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AC000000000000000000000B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -386,6 +463,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AC000000000000000000000A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC0000000000000000000003 /* Shared/DemoraWidgetSnapshot.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DD0000000000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -414,6 +499,11 @@
 			isa = PBXTargetDependency;
 			target = 362AD72A2FE25DCA00E9E08C /* LatchReport */;
 			targetProxy = 362AD7352FE25DCA00E9E08C /* PBXContainerItemProxy */;
+		};
+		AC000000000000000000000D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AC0000000000000000000006 /* LatchWidgets */;
+			targetProxy = AC0000000000000000000005 /* PBXContainerItemProxy */;
 		};
 		FF0000000000000000000012 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -575,7 +665,7 @@
 				DEVELOPMENT_TEAM = U2WQ5695SA;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Latch/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = demora;
+				INFOPLIST_KEY_CFBundleDisplayName = "dev demora";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take a photo to use as a trusted contact's picture.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -773,6 +863,60 @@
 			};
 			name = Release;
 		};
+		AC000000000000000000000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = LatchWidgets/LatchWidgetsDebug.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = U2WQ5695SA;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LatchWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Demora Widgets";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1.7;
+				PRODUCT_BUNDLE_IDENTIFIER = may.latch.dev.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG WIDGET_EXTENSION $(inherited)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AC000000000000000000000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = LatchWidgets/LatchWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = U2WQ5695SA;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LatchWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Demora Widgets";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1.7;
+				PRODUCT_BUNDLE_IDENTIFIER = may.latch.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "WIDGET_EXTENSION $(inherited)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -817,6 +961,15 @@
 			buildConfigurations = (
 				362AD73A2FE25DCA00E9E08C /* Debug */,
 				362AD73B2FE25DCA00E9E08C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AC000000000000000000000C /* Build configuration list for PBXNativeTarget "LatchWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AC000000000000000000000E /* Debug */,
+				AC000000000000000000000F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

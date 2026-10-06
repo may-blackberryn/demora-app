@@ -43,12 +43,9 @@ struct ScreenTimeReauthBanner: View {
 }
 
 struct HomeView: View {
+    @AppAccent private var accent
     @EnvironmentObject var model: AppModel
-    // Home section visibility & collapse state (collapse persisted per device).
-    @AppStorage("home.showDelays") private var showDelays = true
-    @AppStorage("home.showOverrides") private var showOverrides = true
-    @AppStorage("home.delaysCollapsed") private var delaysCollapsed = false
-    @AppStorage("home.overridesCollapsed") private var overridesCollapsed = false
+    @ScaledMetric(relativeTo: .largeTitle) private var dateSize: CGFloat = 43
     @State private var overrideTarget: PendingChange?
     @State private var inbox: [IncomingRequest] = []
     @State private var selecting = false
@@ -58,6 +55,14 @@ struct HomeView: View {
     @State private var outgoing: [ContactsRelay.OutgoingRequest] = []
     @State private var resumeTarget: ResumeTarget?
     @State private var homeNotice: String?
+    @State private var startingWake = false
+    @State private var wakeSaveFailed = false
+
+    private var needsWakeTap: Bool {
+        GlobalWake.status(state: model.state) == .needsTap
+            || model.state.dayNightGroups.contains { DayNightWake.status(group: $0) == .needsTap }
+            || model.state.limits.contains { ChangeEngine.wakeState(for: $0) == .needsTap }
+    }
 
     /// A sent contact request the user wants to reopen (e.g. to enter the code).
     struct ResumeTarget: Identifiable {
@@ -67,78 +72,212 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 26) {
+                    HStack {
+                        Wordmark(size: 22)
+                            .foregroundStyle(Ink.ink)
+                        Spacer()
+                        if !model.inTutorial {
+                            NavigationLink {
+                                HelpHubView().toolbar(.visible, for: .navigationBar)
+                            } label: {
+                                Image(systemName: "questionmark.circle")
+                                    .font(.title3)
+                            }
+                            .accessibilityLabel(tr("Help"))
+                        }
+                        if !model.state.pending.isEmpty {
+                            Button(selecting ? tr("Done") : tr("Select")) {
+                                selecting.toggle()
+                                if !selecting { selection.removeAll() }
+                            }
+                            .tutorialHighlight(!selecting
+                                && (model.tutorial == .applyBoth
+                                    || model.tutorial == .applyViaContact)
+                                && model.tutorialScreen == "home")
+                        }
+                    }
+                    .foregroundStyle(accent)
+                    VStack(alignment: .leading, spacing: 24) {
+                        Text(Date.now, format: .dateTime.weekday(.wide).month(.abbreviated).day())
+                            .font(.system(size: dateSize, weight: .regular, design: .serif))
+                            .tracking(-1.5)
+                            .foregroundStyle(Ink.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                        TimelineView(.periodic(from: .now, by: 60)) { context in
+                            DemoraDayLine(date: context.date)
+                        }
+                    }
+                }
+                .padding(.top, 8)
+                .padding(.bottom, 18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if !model.inTutorial {
+                    if needsWakeTap {
+                        Button {
+                            startingWake = true
+                            wakeSaveFailed = false
+                            Task { @MainActor in
+                                _ = await ChangeEngine.wakeUpAllOffMain()
+                                startingWake = false
+                                model.tick()
+                                wakeSaveFailed = needsWakeTap
+                            }
+                        } label: {
+                            Label(tr("Wake up"), systemImage: "sunrise")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .demoraSurface()
+                        }
+                        .buttonStyle(.plain).disabled(startingWake)
+                        if wakeSaveFailed {
+                            Text(tr("Wake-up could not be saved. Try again."))
+                                .font(.footnote).foregroundStyle(Ink.danger)
+                        }
+                    }
+                    ForEach(model.state.dayNightGroups) { group in
+                        if case .waiting(let until) = DayNightWake.status(group: group) {
+                            HStack {
+                                Label(group.name, systemImage: "sunrise")
+                                Spacer()
+                                let seconds = max(1, until.timeIntervalSince(TimeGuard.now()))
+                                Text(timerInterval: Date.now...Date.now.addingTimeInterval(seconds),
+                                     countsDown: true).monospacedDigit()
+                            }
+                            .font(.subheadline).demoraSurface()
+                        }
+                    }
+                    switch GlobalWake.status(state: model.state) {
+                    case .needsTap:
+                        EmptyView() // one shared action above, not duplicate taps
+                    case .waiting(let until):
+                        HStack {
+                            Label(tr("Wake-up wait"), systemImage: "sunrise")
+                            Spacer()
+                            let seconds = max(1, until.timeIntervalSince(TimeGuard.now()))
+                            Text(timerInterval: Date.now...Date.now.addingTimeInterval(seconds),
+                                 countsDown: true)
+                                .monospacedDigit()
+                        }
+                        .demoraSurface()
+                    case .inactive, .awake:
+                        EmptyView()
+                    }
+                    if model.state.limits.isEmpty {
+                        Button { model.selectedTab = 1 } label: {
+                            EmptyStateView(title: tr("No limits yet"),
+                                           systemImage: "apps.iphone",
+                                           description: tr("Add a daily time limit."))
+                                .demoraSurface()
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        HomeUsageCard(limitCount: model.state.limits.count)
+                    }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Button { model.selectedTab = 2 } label: {
+                              HStack {
+                                DemoraSectionTitle(title: tr("Today's sessions"),
+                                                   symbol: "calendar")
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption).foregroundStyle(accent)
+                            }
+                            }
+                            .buttonStyle(.plain)
+                            let active = model.state.sessions.filter(\.isActive)
+                            let plannedToday = model.state.planned.filter {
+                                Calendar.current.isDateInToday($0.startsAt)
+                                    && $0.endsAt > Date.now
+                            }
+                            if active.isEmpty && plannedToday.isEmpty {
+                                Text(tr("No sessions today"))
+                                    .font(.subheadline).foregroundStyle(Ink.faint)
+                            } else {
+                                ForEach(active.prefix(3)) { session in
+                                    NavigationLink {
+                                        ScheduledItemDetailView(
+                                            title: session.name, summary: session.kind.label,
+                                            timing: String(format: tr("until %@"), session.endsAt.formatted(
+                                                date: .omitted, time: .shortened)),
+                                            appsTitle: session.kind == .free ? nil
+                                                : (session.kind == .block ? tr("Apps blocked") : tr("Apps unblocked")),
+                                            selection: session.kind == .free ? nil : session.selection)
+                                        .toolbar(.visible, for: .navigationBar)
+                                    } label: {
+                                    HStack {
+                                        Text(session.name)
+                                            .font(.system(.title3, design: .serif))
+                                            .foregroundStyle(Ink.ink)
+                                        Spacer()
+                                        Text(String(format: tr("until %@"), session.endsAt.formatted(
+                                            date: .omitted, time: .shortened)))
+                                            .font(.system(.caption, design: .monospaced))
+                                            .foregroundStyle(Ink.faint)
+                                    }
+                                    .padding(.vertical, 12).padding(.leading, 28)
+                                    .overlay(alignment: .leading) { DemoraTimelineMark() }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                ForEach(plannedToday.prefix(max(0, 3 - active.count))) { window in
+                                    NavigationLink {
+                                        ScheduledItemDetailView(
+                                            title: window.name, summary: window.kind.label,
+                                            timing: window.startsAt.formatted(date: .abbreviated, time: .shortened),
+                                            appsTitle: window.kind == .free ? nil
+                                                : (window.kind == .blockAllExcept
+                                                   ? tr("Apps that stay usable") : tr("Apps to block")),
+                                            selection: window.kind == .free ? nil : window.selection)
+                                        .toolbar(.visible, for: .navigationBar)
+                                    } label: {
+                                    HStack {
+                                        Text(window.name)
+                                            .font(.system(.title3, design: .serif))
+                                            .foregroundStyle(Ink.ink)
+                                        Spacer()
+                                        Text(window.startsAt.formatted(
+                                            date: .omitted, time: .shortened))
+                                            .font(.system(.caption, design: .monospaced))
+                                            .foregroundStyle(Ink.faint)
+                                    }
+                                    .padding(.vertical, 12).padding(.leading, 28)
+                                    .overlay(alignment: .leading) { DemoraTimelineMark(color: Ink.faint) }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        .demoraSurface()
+                }
                 if model.state.isSetUp && !model.authorized {
-                    Section { ScreenTimeReauthBanner() }
+                    ScreenTimeReauthBanner().demoraSurface()
                 }
                 if model.enforcementDegraded {
-                    Section { EnforcementBanner() }
+                    EnforcementBanner().demoraSurface()
                 }
-                if showDelays {
-                    Section {
-                        if !delaysCollapsed {
-                            HStack {
-                                Label(tr("Stricter changes"),
-                                      systemImage: strictLockSymbol)
-                                Spacer()
-                                Text(model.state.strictDelay.shortDelayLabel)
-                                    .foregroundStyle(.secondary)
-                            }
-                            HStack {
-                                Label(tr("Looser changes"), systemImage: "lock.open")
-                                Spacer()
-                                Text(model.state.lenientDelay.shortDelayLabel)
-                                    .foregroundStyle(.secondary)
+                if !inbox.isEmpty {
+                    ApprovalInboxSection(requests: inbox) { request, approve in
+                        Task {
+                            do {
+                                try await ContactsRelay.respond(to: request,
+                                                                approve: approve)
+                                inbox.removeAll { $0.id == request.id }
+                            } catch {
+                                // Keep the row — the response didn't go through.
+                                homeNotice = tr("Couldn't send your response — check your connection and try again.")
                             }
                         }
-                    } header: {
-                        collapsibleHeader(tr("Current delays"),
-                                          collapsed: $delaysCollapsed,
-                                          changeTarget: .delays)
                     }
-                }
-
-                if showOverrides && !model.inTutorial {
-                    Section {
-                        if !overridesCollapsed {
-                            if !model.state.overrides.anyEnabled {
-                                Text(tr("No overrides on")).foregroundStyle(.secondary)
-                            } else {
-                                if model.state.overrides.mathEnabled {
-                                    overrideRow(tr("Math problems"), "function",
-                                                model.state.overrides.mathDifficulty?.label ?? tr("On"))
-                                }
-                                if model.state.overrides.passwordEnabled {
-                                    overrideRow(tr("Password"), "key", tr("On"))
-                                }
-                                if model.state.overrides.contactsEnabled {
-                                    overrideRow(tr("Trusted contacts"), "person.2",
-                                                String(model.state.overrides.contacts.count))
-                                }
-                            }
-                        }
-                    } header: {
-                        collapsibleHeader(tr("Current overrides"),
-                                          collapsed: $overridesCollapsed,
-                                          changeTarget: .overrides)
-                    }
-                }
-
-                ApprovalInboxSection(requests: inbox) { request, approve in
-                    Task {
-                        do {
-                            try await ContactsRelay.respond(to: request,
-                                                            approve: approve)
-                            inbox.removeAll { $0.id == request.id }
-                        } catch {
-                            // Keep the row — the response didn't go through.
-                            homeNotice = tr("Couldn't send your response — check your connection and try again.")
-                        }
-                    }
+                    .demoraSurface()
                 }
 
                 if !activeOutgoing.isEmpty {
-                    Section {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(tr("Awaiting approval")).font(.headline)
                         ForEach(activeOutgoing) { req in
                             let reqChanges = pendingChanges(for: req)
                             Button {
@@ -168,12 +307,13 @@ struct HomeView: View {
                             }
                             .tint(.primary)
                         }
-                    } header: {
-                        Text(tr("Awaiting approval"))
                     }
+                    .demoraSurface()
                 }
 
-                Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    DemoraSectionTitle(title: tr("Pending changes"),
+                                       symbol: "hourglass")
                     if model.state.pending.isEmpty {
                         EmptyStateView(
                             title: tr("No pending changes"),
@@ -212,7 +352,8 @@ struct HomeView: View {
                             } else {
                                 PendingChangeRow(
                                     change: change,
-                                    canOverride: model.state.overrides.anyEnabled,
+                                    canOverride: ChangeEngine.hasOverride(
+                                        for: [change], state: model.state),
                                     frozenRemaining: model.inTutorial
                                         ? { model.tutorialRemaining(for: change) ?? 0 } : nil,
                                     reportHole: (model.tutorial == .applyBoth
@@ -225,36 +366,16 @@ struct HomeView: View {
                             }
                         }
                     }
-                } header: {
-                    Text(tr("Pending changes"))
                 }
+                .demoraSurface()
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 24)
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity)
             }
-            .paper()
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if !model.inTutorial {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        NavigationLink { HelpHubView() } label: {
-                            Image(systemName: "questionmark.circle")
-                        }
-                    }
-                }
-                ToolbarItem(placement: .principal) {
-                    Wordmark(size: 22, weight: .semibold)
-                }
-                if !model.state.pending.isEmpty {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button(selecting ? tr("Done") : tr("Select")) {
-                            selecting.toggle()
-                            if !selecting { selection.removeAll() }
-                        }
-                        .tutorialHighlight(!selecting
-                            && (model.tutorial == .applyBoth
-                                || model.tutorial == .applyViaContact)
-                            && model.tutorialScreen == "home")
-                    }
-                }
-            }
+            .background(Ink.paper.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
             .safeAreaInset(edge: .bottom) {
                 if selecting && !selection.isEmpty {
                     HStack {
@@ -298,9 +419,9 @@ struct HomeView: View {
                 ContactGateView(changes: target.changes, showChangeList: true,
                                 onSuccess: {
                                     #if DEBUG
-                                    print("✅ approval applying \(target.changes.count) change(s)")
+                                    print("✅ approval resolved \(target.changes.count) change(s)")
                                     #endif
-                                    await model.applyNowAndWait(target.changes)
+                                    model.refreshAfterExternalApply()
                                 })
             }
             .alert(tr("Heads up"), isPresented: Binding(
@@ -318,40 +439,6 @@ struct HomeView: View {
         outgoing.filter { !pendingChanges(for: $0).isEmpty }
     }
 
-    private func overrideRow(_ title: String, _ symbol: String, _ value: String) -> some View {
-        HStack {
-            Label(title, systemImage: symbol)
-            Spacer()
-            Text(value).foregroundStyle(.secondary)
-        }
-    }
-
-    private func collapsibleHeader(_ title: String,
-                                   collapsed: Binding<Bool>,
-                                   changeTarget: SettingsRoute) -> some View {
-        HStack {
-            Button {
-                withAnimation { collapsed.wrappedValue.toggle() }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: collapsed.wrappedValue
-                          ? "chevron.right" : "chevron.down")
-                        .font(.caption2)
-                    Text(title)
-                }
-            }
-            .buttonStyle(.plain)
-            Spacer()
-            if !model.inTutorial {
-                Button(tr("change")) {
-                    model.openSettings(to: changeTarget)
-                }
-                .font(.footnote)
-                .italic()
-            }
-        }
-    }
-
     /// Pending changes still covered by a sent request.
     private func pendingChanges(for req: ContactsRelay.OutgoingRequest) -> [PendingChange] {
         model.state.pending.filter { req.changeIds.contains($0.id) }
@@ -361,7 +448,7 @@ struct HomeView: View {
     /// (applied or cancelled), so the list self-cleans.
     private func loadOutgoing() {
         for req in ContactsRelay.outgoingRequests()
-        where pendingChanges(for: req).isEmpty {
+        where req.extraContext == nil && pendingChanges(for: req).isEmpty {
             ContactsRelay.clearOutgoing(req.requestId)
         }
         outgoing = ContactsRelay.outgoingRequests()
@@ -383,12 +470,12 @@ struct HomeView: View {
         model.applyNow(chosen.filter(\.isDue))
         let needGate = chosen.filter { !$0.isDue }
         if !needGate.isEmpty {
-            if model.state.overrides.anyEnabled {
+            if ChangeEngine.hasOverride(for: needGate, state: model.state) {
                 bulkChanges = needGate
                 showBulkOverride = true
             } else {
                 // No override to skip the wait — say so instead of doing nothing.
-                homeNotice = tr("Those changes are still counting down. Wait them out, or turn on an override in Settings → Rules → Overrides to skip the wait.")
+                homeNotice = tr("Those changes are still counting down. Wait them out or use an available override.")
             }
         }
         selection.removeAll()
@@ -408,27 +495,30 @@ struct HomeView: View {
 
 /// iOS 16-compatible stand-in for ContentUnavailableView (iOS 17+).
 struct EmptyStateView: View {
+    @AppAccent private var accent
     let title: String
     let systemImage: String
     let description: String
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Image(systemName: systemImage)
-                .font(.system(size: 40))
-                .foregroundStyle(.secondary)
-            Text(title).font(.headline)
+                .font(.system(size: 24, weight: .ultraLight))
+                .foregroundStyle(accent)
+            Text(title).font(.system(.title3, design: .serif))
             Text(description)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                .multilineTextAlignment(.leading)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 16)
+        .accessibilityElement(children: .combine)
     }
 }
 
 struct PendingChangeRow: View {
+    @AppAccent private var accent
     let change: PendingChange
     let canOverride: Bool
     /// When set (tutorial), the countdown ticks toward a floor and can't be
@@ -443,16 +533,13 @@ struct PendingChangeRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Image(systemName: change.direction == .stricter
-                      ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
-                    .foregroundStyle(change.direction == .stricter ? .green : .orange)
                 Text(change.direction.label)
-                    .font(.caption.bold())
-                    .foregroundStyle(change.direction == .stricter ? .green : .orange)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(change.direction == .stricter ? accent : Ink.danger)
                 Spacer()
                 if let frozenRemaining {
                     TutorialCountdownText(remaining: frozenRemaining)
-                        .font(.headline)
+                        .font(.system(.title2, design: .serif))
                 } else if change.isDue {
                     Text(tr("Applying…")).font(.caption)
                         .foregroundStyle(.secondary)
@@ -465,7 +552,7 @@ struct PendingChangeRow: View {
                     let remaining = max(1, change.appliesAt.timeIntervalSince(TimeGuard.now()))
                     Text(timerInterval: Date.now...Date.now.addingTimeInterval(remaining),
                          countsDown: true)
-                        .font(.headline.monospacedDigit())
+                        .font(.system(.title2, design: .serif).monospacedDigit())
                 }
             }
             Text(change.summary).font(.subheadline)
@@ -474,10 +561,13 @@ struct PendingChangeRow: View {
             if frozenRemaining == nil {
                 HStack {
                     Button(tr("Cancel"), role: .destructive, action: onCancel)
-                        .buttonStyle(.bordered).controlSize(.small)
+                        .buttonStyle(.plain).font(.subheadline)
+                        .frame(minHeight: 44)
                     if canOverride && !change.isDue {
                         Button(tr("Apply now…"), action: onOverride)
-                            .buttonStyle(.bordered).controlSize(.small)
+                            .buttonStyle(.plain).font(.subheadline)
+                            .foregroundStyle(accent)
+                            .frame(minHeight: 44)
                     }
 #if DEBUG
                     if !change.isDue {
@@ -489,7 +579,11 @@ struct PendingChangeRow: View {
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 16)
+        .padding(.leading, 28)
+        .overlay(alignment: .leading) {
+            DemoraTimelineMark(color: change.direction == .stricter ? accent : Ink.danger)
+        }
         .tutorialHighlight(reportHole, ring: false)
     }
 }

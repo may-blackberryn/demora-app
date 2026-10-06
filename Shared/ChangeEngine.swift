@@ -9,15 +9,94 @@ import Foundation
 import DeviceActivity
 import FamilyControls
 import UserNotifications
+import CryptoKit
 
 enum LimitRecheckResult: Equatable {
     case completed(released: Int, confirmed: Int)
     case noBlockedLimits
+    case splitBlocksNotRecheckable
     case freeWindowActive
     case cooldown(remaining: TimeInterval)
     case unsupportedVersion
     case monitorUnavailable
     case cancelled
+}
+
+enum GlobalWakeStatus: Equatable {
+    case inactive, needsTap, waiting(Date), awake
+}
+
+/// A single daily tap gate shared by the selected apps/groups. The schedule is
+/// wall-clock based; only the elapsed wait uses TimeGuard. Extension callbacks
+/// read the same App Group state and never depend on Demora's window staying open.
+enum GlobalWake {
+    private static let dayKey = "latch.globalWake.day.v1"
+    private static let releaseKey = "latch.globalWake.release.v1"
+    private static let activity = DeviceActivityName("global-wake-release")
+
+    static func status(state: LatchState, at date: Date = Date()) -> GlobalWakeStatus {
+        let rule = state.wakeRule
+        let clock = Calendar.current.dateComponents([.hour, .minute], from: date)
+        let minute = (clock.hour ?? 0) * 60 + (clock.minute ?? 0)
+        guard rule.enabled, rule.weekdays.contains(Calendar.current.component(.weekday, from: date)),
+              minute >= rule.startHour * 60 else { return .inactive }
+        guard SharedStore.defaults.string(forKey: dayKey)
+                == SharedStore.dayKey(for: date),
+              let release = SharedStore.defaults.object(forKey: releaseKey) as? Date
+        else { return .needsTap }
+        return TimeGuard.now() < release ? .waiting(release) : .awake
+    }
+
+    @discardableResult
+    static func tap() -> Bool {
+        guard !SharedStore.simulating else { return false }
+        let state = SharedStore.loadState()
+        guard status(state: state) == .needsTap else { return false }
+        let release = TimeGuard.now().addingTimeInterval(
+            TimeInterval(state.wakeRule.waitMinutes) * 60)
+        SharedStore.defaults.set(release, forKey: releaseKey)
+        SharedStore.defaults.set(SharedStore.dayKey(for: Date()), forKey: dayKey)
+        if state.wakeRule.waitMinutes > 0 { scheduleRelease(at: release) }
+        ShieldController.refresh()
+        return true
+    }
+
+    static func clearTap() {
+        SharedStore.defaults.removeObject(forKey: dayKey)
+        SharedStore.defaults.removeObject(forKey: releaseKey)
+        DeviceActivityCenter().stopMonitoring([activity])
+    }
+
+    static func reconcile(state: LatchState, running: Set<String>? = nil) {
+        let activities = running ?? Set(DeviceActivityCenter().activities.map(\.rawValue))
+        if case .waiting(let release) = status(state: state) {
+            if !activities.contains(activity.rawValue) { scheduleRelease(at: release) }
+        } else if activities.contains(activity.rawValue) {
+            DeviceActivityCenter().stopMonitoring([activity])
+        }
+    }
+
+    private static func scheduleRelease(at release: Date) {
+        let calendar = Calendar.current
+        let wallRelease = Date().addingTimeInterval(max(0, release.timeIntervalSince(TimeGuard.now())))
+        let future = max(wallRelease, Date().addingTimeInterval(60))
+        let floor = calendar.date(from: calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute], from: future)) ?? future
+        let start = floor >= future ? floor : floor.addingTimeInterval(60)
+        let end = start.addingTimeInterval(16 * 60)
+        let schedule = DeviceActivitySchedule(
+            intervalStart: calendar.dateComponents(
+                [.year, .month, .day, .hour, .minute], from: start),
+            intervalEnd: calendar.dateComponents(
+                [.year, .month, .day, .hour, .minute], from: end),
+            repeats: false)
+        do {
+            try MonitorRegistration.start(activity, during: schedule)
+        } catch {
+            NSLog("Demora: global wake release monitor failed: %@", String(describing: error))
+            SharedStore.enforcementDegraded = true
+        }
+    }
 }
 
 /// Combined "how hard is this math gate" score, so a config change can be
@@ -30,6 +109,87 @@ func mathStrictnessScore(_ difficulty: MathDifficulty, _ count: Int,
 
 enum ChangeEngine {
 
+    static func wakeState(for limit: AppLimit) -> WakeState {
+        LimitFeatures.wakeState(for: limit)
+    }
+
+    @discardableResult
+    static func wakeUp(limitID: UUID) -> Bool {
+        LimitFeatures.wakeUp(limitID: limitID)
+    }
+
+    static func wakeUpOffMain(limitID: UUID) async -> Bool {
+        await withCheckedContinuation { continuation in
+            deviceActivityWorkQueue.async {
+                applyDueChanges()
+                continuation.resume(returning: LimitFeatures.wakeUp(limitID: limitID))
+            }
+        }
+    }
+
+    static func wakeUpGlobalOffMain() async -> Bool {
+        await withCheckedContinuation { continuation in
+            deviceActivityWorkQueue.async {
+                continuation.resume(returning: GlobalWake.tap())
+            }
+        }
+    }
+
+    /// One tap also starts eligible legacy gates; existing waits are never reset.
+    static func wakeUpAllOffMain() async -> Bool {
+        await withCheckedContinuation { continuation in
+            deviceActivityWorkQueue.async {
+                applyDueChanges()
+                var changed = DayNightWake.tapAll()
+                if GlobalWake.status(state: SharedStore.loadState()) == .needsTap {
+                    changed = GlobalWake.tap() || changed
+                }
+                for limit in SharedStore.loadState().limits {
+                    if LimitFeatures.wakeState(for: limit) == .needsTap {
+                        changed = LimitFeatures.wakeUp(limitID: limit.id) || changed
+                    }
+                }
+                ShieldController.refresh()
+                continuation.resume(returning: changed)
+            }
+        }
+    }
+
+    static func setUpInitialDayNightOffMain(_ groups: [DayNightGroup]) async -> Bool {
+        await withCheckedContinuation { continuation in
+            deviceActivityWorkQueue.async {
+                MonitorRegistration.clearRejection()
+                let running = Set(DeviceActivityCenter().activities.map(\.rawValue))
+                let saved = SharedStore.coordinateStateMutation {
+                    guard !SharedStore.stateRecoveryNeeded, !SharedStore.isReplaying else { return false }
+                    let state = SharedStore.loadState()
+                    guard let updated = SharedStore.initialDayNightState(groups, state: state,
+                                                                          in: SharedStore.defaults)
+                    else { return false }
+                    guard MonitorRegistration.admit(state: updated, running: running) else { return false }
+                    return SharedStore.save(updated)
+                } ?? false
+                if saved { ensureMonitoring(state: SharedStore.loadState()) }
+                continuation.resume(returning: saved)
+            }
+        }
+    }
+
+    static func requestExtraTimeOffMain(limitID: UUID,
+                                        candidateHash: String? = nil,
+                                        phraseProofID: UUID? = nil) async -> Bool {
+        await withCheckedContinuation { continuation in
+            deviceActivityWorkQueue.async {
+                // Commit overdue policy/limit edits before the grant checks
+                // read their state, on the same serialized enforcement queue.
+                applyDueChanges()
+                continuation.resume(returning: LimitFeatures.requestExtraTime(
+                    limitID: limitID, candidateHash: candidateHash,
+                    phraseProofID: phraseProofID))
+            }
+        }
+    }
+
     /// DeviceActivity talks to Screen Time through synchronous XPC. If its
     /// daemon is slow, making those calls on the main actor can trigger an iOS
     /// watchdog kill. App-driven maintenance and override application are
@@ -38,10 +198,238 @@ enum ChangeEngine {
     private static let deviceActivityWorkQueue = DispatchQueue(
         label: "app.demora.device-activity-work", qos: .userInitiated)
 
+    static func replaceLegacyMathOffMain(with policies: [PhrasePolicy]) async -> Bool {
+        await withCheckedContinuation { continuation in
+            deviceActivityWorkQueue.async {
+                let saved = SharedStore.coordinateStateMutation {
+                    guard !SharedStore.stateRecoveryNeeded else { return false }
+                    let state = SharedStore.loadState()
+                    guard let replacement = SharedStore.mathReplacementState(
+                        policies, state: state, in: SharedStore.defaults),
+                          SharedStore.save(replacement) else { return false }
+                    SharedStore.defaults.set(true, forKey: SharedStore.mathReplacementConsumedKey)
+                    // The verified blob already consumes the offer. A failure
+                    // of the redundant marker must not report a failed install.
+                    return true
+                } ?? false
+                continuation.resume(returning: saved)
+            }
+        }
+    }
+
     static func applyNowOffMain(changeIDs: [UUID]) async -> Int {
         await withCheckedContinuation { continuation in
             deviceActivityWorkQueue.async {
                 continuation.resume(returning: applyNow(changeIDs: changeIDs))
+            }
+        }
+    }
+
+    /// Re-read the policy and every requested change on the serialized
+    /// enforcement queue. A stale UI cannot use a removed policy or apply a
+    /// change outside its permitted area.
+    static func applyNowWithPasswordOffMain(changeIDs: [UUID], policyID: UUID,
+                                            candidateHash: String) async -> Int {
+        await withCheckedContinuation { continuation in
+            deviceActivityWorkQueue.async {
+                applyDueChanges()
+                let state = SharedStore.loadState()
+                let requested = Set(changeIDs)
+                let matching = state.pending.filter { requested.contains($0.id) }
+                guard !hasUnappliedDueChanges(state),
+                      !matching.isEmpty, matching.count == requested.count,
+                      let policy = state.overrides.passwordPolicies.first(where: {
+                          $0.id == policyID && $0.hash == candidateHash
+                      }),
+                      matching.allSatisfy({ change in
+                          guard let area = overrideCapability(for: change.action) else {
+                              return false
+                          }
+                          return policy.allowed.contains(area)
+                      }) else {
+                    continuation.resume(returning: 0)
+                    return
+                }
+                continuation.resume(returning: applyNow(changeIDs: changeIDs) { fresh, changes in
+                    changes == matching
+                        && fresh.overrides.passwordPolicies.contains(policy)
+                })
+            }
+        }
+    }
+
+    static func applyNowWithPhraseOffMain(changeIDs: [UUID], policyID: UUID,
+                                          proofID: UUID) async -> Int {
+        await withCheckedContinuation { continuation in
+            deviceActivityWorkQueue.async {
+                applyDueChanges()
+                let state = SharedStore.loadState()
+                let requested = Set(changeIDs)
+                let matching = state.pending.filter { requested.contains($0.id) }
+                guard !hasUnappliedDueChanges(state),
+                      !matching.isEmpty, matching.count == requested.count,
+                      let policy = state.overrides.phrasePolicies.first(where: {
+                          $0.id == policyID
+                      }),
+                      matching.allSatisfy({ change in
+                          guard let area = overrideCapability(for: change.action) else {
+                              return false
+                          }
+                          return policy.allowed.contains(area)
+                      }),
+                      PhraseChallenges.consume(proofID, policy: policy,
+                                               scope: .changes(changeIDs.sorted {
+                                                   $0.uuidString < $1.uuidString
+                                               })) else {
+                    continuation.resume(returning: 0)
+                    return
+                }
+                continuation.resume(returning: applyNow(changeIDs: changeIDs) { fresh, changes in
+                    changes == matching
+                        && fresh.overrides.phrasePolicies.contains(policy)
+                })
+            }
+        }
+    }
+
+    enum ContactApprovalSource {
+        case relay(contactIDs: [UUID], approvedCodes: Set<String>)
+        case email(contactIDs: [UUID])
+    }
+
+    /// Contact permissions are checked on the same serialized queue that
+    /// applies the changes. A permission edit taking effect while a request is
+    /// outstanding cannot leave a stale approval capable of skipping a wait.
+    static func applyNowWithContactOffMain(changeIDs: [UUID],
+                                           source: ContactApprovalSource) async -> Int {
+        await withCheckedContinuation { continuation in
+            deviceActivityWorkQueue.async {
+                applyDueChanges()
+                let state = SharedStore.loadState()
+                let ids = Set(changeIDs)
+                let matching = state.pending.filter { ids.contains($0.id) }
+                let areas = matching.compactMap { overrideCapability(for: $0.action) }
+                guard !hasUnappliedDueChanges(state),
+                      state.overrides.contactsEnabled,
+                      !matching.isEmpty, matching.count == ids.count,
+                      areas.count == matching.count else {
+                    continuation.resume(returning: 0)
+                    return
+                }
+                let required = Set(areas)
+                let permitted = contactPermitted(source, state: state,
+                                                 required: required)
+                continuation.resume(returning: permitted
+                    ? applyNow(changeIDs: changeIDs) { fresh, changes in
+                        changes == matching
+                            && contactPermitted(source, state: fresh, required: required)
+                    } : 0)
+            }
+        }
+    }
+
+    private static func contactPermitted(_ source: ContactApprovalSource,
+                                         state: LatchState,
+                                         required: Set<OverrideCapability>) -> Bool {
+        guard state.overrides.contactsEnabled else { return false }
+        switch source {
+        case .relay(let contactIDs, let approvedCodes):
+            return !contactIDs.isEmpty && state.overrides.contacts.contains { contact in
+                contactIDs.contains(contact.id) && contact.isUsable
+                    && required.isSubset(of: contact.allowed)
+                    && contact.latchUserCode.map(approvedCodes.contains) == true
+            }
+        case .email(let contactIDs):
+            // The Worker uses one code for all recipients. Every recipient
+            // must remain permitted because the code cannot identify which
+            // person supplied it.
+            return !contactIDs.isEmpty && contactIDs.allSatisfy { id in
+                state.overrides.contacts.contains { contact in
+                    contact.id == id && contact.isEmail && contact.isUsable
+                        && required.isSubset(of: contact.allowed)
+                }
+            }
+        }
+    }
+
+    static func grantContactExtraTimeOffMain(context: ExtraContactContext,
+                                             source: ContactApprovalSource) async -> Bool {
+        await withCheckedContinuation { continuation in
+            deviceActivityWorkQueue.async {
+                applyDueChanges()
+                let state = SharedStore.loadState()
+                guard !hasUnappliedDueChanges(state),
+                      contactPermitted(source, state: state, required: [.extraTime]),
+                      context.day == SharedStore.dayKey(for: TimeGuard.now()),
+                      let limit = state.limits.first(where: { $0.id == context.limitID }),
+                      let steps = limit.extraTime?.effectiveSteps,
+                      steps.indices.contains(context.stepIndex),
+                      steps[context.stepIndex] == context.step,
+                      context.step.contactRequired,
+                      case .ready(let remaining) = LimitFeatures.extraTimeState(for: limit),
+                      context.stepIndex == steps.count - remaining else {
+                    continuation.resume(returning: false)
+                    return
+                }
+                continuation.resume(returning: LimitFeatures.requestExtraTime(
+                    limitID: context.limitID, contactValidator: { fresh, index, step in
+                        context.day == SharedStore.dayKey(for: TimeGuard.now())
+                            && context.stepIndex == index && context.step == step
+                            && contactPermitted(source, state: fresh, required: [.extraTime])
+                    }))
+            }
+        }
+    }
+
+    static func overrideCapability(for action: ChangeAction) -> OverrideCapability? {
+        switch action {
+        case .addLimit, .updateLimitMinutes, .updateLimit, .configureLimit,
+             .removeLimit, .setGroupWakeDelay, .setGroupWakeSchedule, .setWakeRule, .setSleepRule:
+            return .limitChanges
+        case .addSchedule, .updateScheduleSelection, .removeSchedule,
+             .upsertDayNightGroup, .removeDayNightGroup,
+             .addExemption, .removeExemption,
+             .addPlanned, .removePlanned:
+            return .scheduleChanges
+        case .startSession, .endSessionEarly: return .sessionChanges
+        case .setDelayPolicy, .setStrictDelay, .setLenientDelay: return .delayChanges
+        case .setBlockAppRemoval, .setBlockAdultWebsites,
+             .addBlockedDomain, .removeBlockedDomain,
+             .unlockPreventGuide, .unlockPasswordView:
+            return .protectionChanges
+        case .setContactsOverride, .addContact, .removeContact:
+            return .contactChanges
+        case .setMathOverride, .setPasswordOverride, .upsertPasswordPolicy,
+             .removePasswordPolicy, .upsertPhrasePolicy, .removePhrasePolicy,
+             .setContactPermissions:
+            return nil // self-override policies never edit themselves instantly
+        }
+    }
+
+    static func hasOverride(for changes: [PendingChange], state: LatchState) -> Bool {
+        guard !changes.isEmpty else { return false }
+        if state.overrides.contactsEnabled,
+           state.overrides.contacts.contains(where: { contact in
+               contact.isUsable && changes.allSatisfy { change in
+                   guard let area = overrideCapability(for: change.action) else {
+                       return false
+                   }
+                   return contact.allowed.contains(area)
+               }
+           }) { return true }
+        return state.overrides.passwordPolicies.contains { policy in
+            changes.allSatisfy { change in
+                guard let area = overrideCapability(for: change.action) else {
+                    return false
+                }
+                return policy.allowed.contains(area)
+            }
+        } || state.overrides.phrasePolicies.contains { policy in
+            changes.allSatisfy { change in
+                guard let area = overrideCapability(for: change.action) else {
+                    return false
+                }
+                return policy.allowed.contains(area)
             }
         }
     }
@@ -76,6 +464,14 @@ enum ChangeEngine {
     ///  • disable an override / make it harder → stricter
     static func classify(_ action: ChangeAction, state: LatchState) -> ChangeDirection {
         switch action {
+        case .setGroupWakeSchedule(let id, let minutes, let schedule):
+            guard let minutes else { return .lenient }
+            guard let old = state.limits.first(where: { $0.id == id }), let oldWait = old.wakeDelayMinutes else { return .stricter }
+            return schedule.noLooser(than: old.wakeSchedule ?? LimitWakeSchedule(), wait: minutes, oldWait: oldWait) ? .stricter : .lenient
+        case .setGroupWakeDelay(let id, let minutes):
+            let old = state.limits.first { $0.id == id }?.wakeDelayMinutes
+            guard let minutes else { return .lenient }
+            return old.map { minutes >= $0 ? .stricter : .lenient } ?? .stricter
         case .addLimit:
             return .stricter
         case .removeLimit:
@@ -88,10 +484,42 @@ enum ChangeEngine {
             if minutes < current { return .stricter }   // lowering = stricter
             if minutes > current { return .lenient }     // raising = lenient
             return .stricter                             // unchanged: safe default
+        case .updateLimit(let id, let selection, let minutes):
+            guard let current = state.limits.first(where: { $0.id == id })
+            else { return .stricter }
+            // Adding, removing, or changing selected apps/categories/websites
+            // always waits through the less-strict delay, per product policy.
+            if selection != current.selection { return .lenient }
+            if minutes < current.minutesPerDay { return .stricter }
+            if minutes > current.minutesPerDay { return .lenient }
+            return .stricter
+        case .configureLimit(let updated):
+            guard let old = state.limits.first(where: { $0.id == updated.id })
+            else { return .stricter }
+            if updated.selection != old.selection { return .lenient }
+            // An edit combining tightening and loosening must take the slower
+            // less-strict path. New advanced rules default there unless their
+            // only change is enabling/lengthening a wake gate.
+            if updated.split != old.split || updated.extraTime != old.extraTime {
+                return .lenient
+            }
+            if let oldWait = old.wakeDelayMinutes,
+               (updated.wakeDelayMinutes == nil || !(updated.wakeSchedule ?? LimitWakeSchedule())
+                .noLooser(than: old.wakeSchedule ?? LimitWakeSchedule(), wait: updated.wakeDelayMinutes ?? 0, oldWait: oldWait)) {
+                return .lenient
+            }
+            for day in 1...7 {
+                let before = old.weekdayMinutes[day] ?? old.minutesPerDay
+                let after = updated.weekdayMinutes[day] ?? updated.minutesPerDay
+                if after > before { return .lenient }
+            }
+            return .stricter
         case .setStrictDelay(let new):
-            return new > state.strictDelay ? .stricter : .lenient
+            return state.delayPolicy.replacing(.stricter, with: new).direction(comparedTo: state.delayPolicy)
         case .setLenientDelay(let new):
-            return new > state.lenientDelay ? .stricter : .lenient
+            return state.delayPolicy.replacing(.lenient, with: new).direction(comparedTo: state.delayPolicy)
+        case .setDelayPolicy(let policy):
+            return policy.direction(comparedTo: state.delayPolicy)
         case .setMathOverride(let enabled, let difficulty, let count, let wrong):
             if enabled != state.overrides.mathEnabled {
                 return enabled ? .lenient : .stricter
@@ -107,14 +535,45 @@ enum ChangeEngine {
             }
             // Changing the password itself: treat as lenient (safe default).
             return .lenient
+        case .upsertPasswordPolicy:
+            return .lenient
+        case .removePasswordPolicy:
+            return .stricter
+        case .upsertPhrasePolicy:
+            return .lenient
+        case .removePhrasePolicy:
+            return .stricter
         case .setContactsOverride(let enabled):
             return enabled ? .lenient : .stricter
+        case .setWakeRule(let rule):
+            return rule.enabled && !state.wakeRule.enabled ? .stricter : .lenient
+        case .setSleepRule(let rule):
+            return rule.enabled && !state.sleepRule.enabled ? .stricter : .lenient
+        case .upsertDayNightGroup(let group):
+            guard let old = state.dayNightGroups.first(where: { $0.id == group.id }) else {
+                return state.dayNightGroups.contains(where: { $0.scope.mode == .allOtherApps })
+                    ? .lenient : .stricter
+            }
+            return group.scope == old.scope && group.weekdays == old.weekdays
+                && group.timingNoLooser(than: old) && group.sleepStartMinutes == old.sleepStartMinutes
+                && (!old.wakeEnabled || group.wakeEnabled) && (!old.sleepEnabled || group.sleepEnabled)
+                ? .stricter : .lenient
+        case .removeDayNightGroup:
+            return .lenient
         case .addContact:
             return .lenient    // another way to bypass = less strict
         case .removeContact:
             return .stricter   // fewer ways to bypass = stricter
+        case .setContactPermissions(let id, let allowed):
+            guard let old = state.overrides.contacts.first(where: { $0.id == id })?.allowed
+            else { return .lenient }
+            return allowed.isSubset(of: old) ? .stricter : .lenient
         case .addSchedule:
             return .stricter
+        case .updateScheduleSelection:
+            // Same policy as limit-group selection edits, in either mode:
+            // additions, removals and replacements are always less strict.
+            return .lenient
         case .removeSchedule:
             return .lenient
         case .addExemption:
@@ -150,12 +609,33 @@ enum ChangeEngine {
 
     static func summary(for action: ChangeAction, state: LatchState) -> String {
         switch action {
+        case .setGroupWakeSchedule(let id, _, _):
+            let name = state.limits.first { $0.id == id }?.name ?? tr("group")
+            return String(format: tr("Change wake-up schedule for %@"), name)
+        case .setGroupWakeDelay(let id, let minutes):
+            let name = state.limits.first { $0.id == id }?.name ?? tr("group")
+            return minutes.map { String(format: tr("Wake-up for %@: %d minutes"), name, $0) }
+                ?? String(format: tr("Turn off wake-up for %@"), name)
         case .addLimit(let l):
             return String(format: tr("Add limit: %@ — %d min/day"),
                           l.name, l.minutesPerDay)
         case .updateLimitMinutes(let id, let m):
             let name = state.limits.first { $0.id == id }?.name ?? tr("limit")
             return String(format: tr("Change %@ to %d min/day"), name, m)
+        case .updateLimit(let id, let selection, let minutes):
+            guard let current = state.limits.first(where: { $0.id == id })
+            else { return tr("Change limit") }
+            if selection != current.selection {
+                if minutes != current.minutesPerDay {
+                    return String(format: tr("Change apps and daily limit for %@ to %d min/day"),
+                                  current.name, minutes)
+                }
+                return String(format: tr("Change apps in %@"), current.name)
+            }
+            return String(format: tr("Change %@ to %d min/day"),
+                          current.name, minutes)
+        case .configureLimit(let limit):
+            return String(format: tr("Change limit: %@"), limit.name)
         case .removeLimit(let id):
             let name = state.limits.first { $0.id == id }?.name ?? tr("limit")
             return String(format: tr("Remove limit: %@"), name)
@@ -165,6 +645,8 @@ enum ChangeEngine {
         case .setLenientDelay(let t):
             return String(format: tr("Set 'less strict' delay to %@"),
                           t.shortDelayLabel)
+        case .setDelayPolicy(let policy):
+            return String(format: tr("Change delays: %@"), policy.mode.label)
         case .setMathOverride(let on, let d, let count, _):
             return on ? String(format: tr("Enable math override (%@, %d problems)"),
                                d?.label ?? "—", count)
@@ -172,18 +654,46 @@ enum ChangeEngine {
         case .setPasswordOverride(let on, _):
             return on ? tr("Enable/update password override")
                       : tr("Disable password override")
+        case .upsertPasswordPolicy(let policy):
+            return String(format: tr("Add or change password: %@"), policy.name)
+        case .removePasswordPolicy(let id):
+            let name = state.overrides.passwordPolicies.first { $0.id == id }?.name
+                ?? tr("password")
+            return String(format: tr("Remove password: %@"), name)
+        case .upsertPhrasePolicy(let policy):
+            return String(format: tr("Add or change phrase: %@"), policy.name)
+        case .removePhrasePolicy(let id):
+            let name = state.overrides.phrasePolicies.first { $0.id == id }?.name
+                ?? tr("phrase")
+            return String(format: tr("Remove phrase: %@"), name)
         case .setContactsOverride(let on):
             return on ? tr("Enable trusted-contact override")
                       : tr("Disable trusted-contact override")
+        case .setWakeRule:
+            return tr("Change wake-up blocking")
+        case .setSleepRule:
+            return tr("Change sleep blocking")
+        case .upsertDayNightGroup(let group):
+            return String(format: tr("Add or change day/night group: %@"), group.name)
+        case .removeDayNightGroup(let id):
+            return String(format: tr("Remove day/night group: %@"),
+                          state.dayNightGroups.first(where: { $0.id == id })?.name ?? tr("Group"))
         case .addContact(let contact):
             return String(format: tr("Add trusted contact: %@"), contact.name)
         case .removeContact(let id):
             let name = state.overrides.contacts
                 .first { $0.id == id }?.name ?? tr("contact")
             return String(format: tr("Remove trusted contact: %@"), name)
+        case .setContactPermissions(let id, _):
+            let name = state.overrides.contacts
+                .first { $0.id == id }?.name ?? tr("contact")
+            return String(format: tr("Change trusted-contact permissions: %@"), name)
         case .addSchedule(let s):
             return String(format: tr("Add schedule: %@ (%@ %@)"),
                           s.name, s.mode.label, s.windowLabel)
+        case .updateScheduleSelection(let id, _):
+            let name = state.schedules.first { $0.id == id }?.name ?? tr("schedule")
+            return String(format: tr("Change apps in %@"), name)
         case .removeSchedule(let id):
             let name = state.schedules.first { $0.id == id }?.name ?? tr("schedule")
             return String(format: tr("Remove schedule: %@"), name)
@@ -236,25 +746,43 @@ enum ChangeEngine {
         switch action {
         case .addLimit(let l):
             return "addLimit-\(l.name.lowercased())"
-        case .updateLimitMinutes(let id, _), .removeLimit(let id):
+        case .updateLimitMinutes(let id, _), .updateLimit(let id, _, _),
+             .removeLimit(let id), .setGroupWakeDelay(let id, _), .setGroupWakeSchedule(let id, _, _):
             return "limit-\(id.uuidString)"
-        case .setStrictDelay:
-            return "strictDelay"
-        case .setLenientDelay:
-            return "lenientDelay"
+        case .configureLimit(let limit):
+            return "limit-\(limit.id.uuidString)"
+        case .setDelayPolicy, .setStrictDelay, .setLenientDelay:
+            return "delayPolicy"
         case .setMathOverride:
             return "mathOverride"
         case .setPasswordOverride:
             return "passwordOverride"
+        case .upsertPasswordPolicy(let policy):
+            return "passwordPolicy-\(policy.id.uuidString)"
+        case .removePasswordPolicy(let id):
+            return "passwordPolicy-\(id.uuidString)"
+        case .upsertPhrasePolicy(let policy):
+            return "phrasePolicy-\(policy.id.uuidString)"
+        case .removePhrasePolicy(let id):
+            return "phrasePolicy-\(id.uuidString)"
         case .setContactsOverride:
             return "contactsOverride"
+        case .setWakeRule:
+            return "wakeRule"
+        case .setSleepRule:
+            return "sleepRule"
+        case .upsertDayNightGroup, .removeDayNightGroup:
+            // Scope/fallback validation spans groups; serialize collection edits.
+            return "dayNightGroups"
         case .addContact(let c):
             return "addContact-\(c.detail.lowercased())"
         case .removeContact(let id):
             return "contact-\(id.uuidString)"
+        case .setContactPermissions(let id, _):
+            return "contact-\(id.uuidString)"
         case .addSchedule(let s):
             return "addSchedule-\(s.name.lowercased())"
-        case .removeSchedule(let id):
+        case .updateScheduleSelection(let id, _), .removeSchedule(let id):
             return "schedule-\(id.uuidString)"
         case .addExemption(let e):
             return "addExemption-\(e.name.lowercased())"
@@ -285,12 +813,124 @@ enum ChangeEngine {
     /// or nil if an equivalent change is already pending.
     @discardableResult
     static func queue(_ action: ChangeAction) -> PendingChange? {
+        MonitorRegistration.clearRejection()
+        // Old UI types remain Codable for state compatibility, but these
+        // retired overrides must never enter the queue again.
+        switch action {
+        case .setMathOverride, .setPasswordOverride: return nil
+        default: break
+        }
+        let running = Set(DeviceActivityCenter().activities.map(\.rawValue))
+        let queued: PendingChange? = SharedStore.coordinateStateMutation {
+            queueCoordinated(action, running: running)
+        } ?? nil
+        guard let change = queued else { return nil }
+        if change.appliesAt > TimeGuard.now() {
+            scheduleApplyActivity(for: change)
+            scheduleNotification(for: change)
+        }
+        applyDueChanges() // immediate tightening still applies without waiting
+        return change
+    }
+
+    /// Pure validation/admission plus persistence under state coordination.
+    /// No DeviceActivity or notification calls may run while the lock is held.
+    private static func queueCoordinated(_ action: ChangeAction, running: Set<String>) -> PendingChange? {
         var state = SharedStore.loadState()
+        guard !SharedStore.stateRecoveryNeeded else { return nil }
+        if case .setGroupWakeSchedule(let id, let minutes, let schedule) = action {
+            guard let limit = state.limits.first(where: { $0.id == id }), schedule.isValid,
+                  minutes.map({ (0...1440).contains($0) }) ?? true,
+                  limit.wakeDelayMinutes != minutes || (limit.wakeSchedule ?? LimitWakeSchedule()) != schedule else { return nil }
+        }
+        if case .setGroupWakeDelay(let id, let minutes) = action {
+            guard let limit = state.limits.first(where: { $0.id == id }),
+                  limit.wakeDelayMinutes != minutes,
+                  minutes.map({ (0...1440).contains($0) }) ?? true else { return nil }
+        }
+        if case .upsertPasswordPolicy(let policy) = action {
+            guard !policy.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  policy.hash.count == 64,
+                  policy.hash.allSatisfy({ $0.isHexDigit }),
+                  !policy.allowed.isEmpty else { return nil }
+        }
+        if case .removePasswordPolicy(let id) = action {
+            guard state.overrides.passwordPolicies.contains(where: { $0.id == id })
+            else { return nil }
+        }
+        if case .upsertPhrasePolicy(let policy) = action {
+            guard PhraseWords.isValid(policy) else { return nil }
+        }
+        if case .removePhrasePolicy(let id) = action {
+            guard state.overrides.phrasePolicies.contains(where: { $0.id == id })
+            else { return nil }
+        }
+        if case .setContactPermissions(let id, let allowed) = action {
+            guard let contact = state.overrides.contacts.first(where: { $0.id == id }),
+                  contact.allowed != allowed else { return nil }
+        }
+        if case .configureLimit(let limit) = action {
+            guard state.limits.contains(where: { $0.id == limit.id }),
+                  isValidLimit(limit) else { return nil }
+            let limits = state.limits.map { $0.id == limit.id ? limit : $0 }
+            guard DayNightGroup.supportsLimitSelections(state.dayNightGroups, limits: limits) else { return nil }
+        }
+        if case .addLimit(let limit) = action {
+            guard isValidLimit(limit) else { return nil }
+        }
+        if case .setWakeRule(let rule) = action {
+            guard rule.isValid(in: state),
+                  !state.pending.contains(where: {
+                      if case .setSleepRule = $0.action { return true }
+                      return false
+                  }),
+                  !state.sleepRule.enabled
+                    || state.sleepRule.startMinutes != rule.startHour * 60
+            else { return nil }
+        }
+        if case .upsertDayNightGroup(let group) = action {
+            var proposed = state.dayNightGroups.filter { $0.id != group.id }
+            proposed.append(group)
+            guard DayNightGroup.isValidCollection(proposed, limits: state.limits),
+                  state.dayNightGroups.first(where: { $0.id == group.id }) != group else { return nil }
+        }
+        if case .removeDayNightGroup(let id) = action {
+            guard state.dayNightGroups.contains(where: { $0.id == id }) else { return nil }
+        }
+        if case .setSleepRule(let rule) = action {
+            guard !state.pending.contains(where: {
+                      if case .setWakeRule = $0.action { return true }
+                      return false
+                  }),
+                  rule.isValid(in: state, wakeHour: state.wakeRule.startHour) else {
+                return nil
+            }
+        }
+        if case .updateLimit(let id, let selection, _) = action {
+            // An empty DeviceActivity selection means "all device activity".
+            // Reject it even if a caller bypasses the editor's validation.
+            guard state.limits.contains(where: { $0.id == id }),
+                  !selection.applicationTokens.isEmpty
+                    || !selection.categoryTokens.isEmpty
+                    || !selection.webDomainTokens.isEmpty
+            else { return nil }
+            var limits = state.limits
+            if let index = limits.firstIndex(where: { $0.id == id }) { limits[index].selection = selection }
+            guard DayNightGroup.supportsLimitSelections(state.dayNightGroups, limits: limits) else { return nil }
+        }
+        if case .updateScheduleSelection(let id, let selection) = action {
+            guard let current = state.schedules.first(where: { $0.id == id }),
+                  current.selection != selection,
+                  current.acceptsSelection(selection) else { return nil }
+        }
+        if case .setDelayPolicy(let policy) = action {
+            guard policy.isValid, policy.normalized != state.delayPolicy.normalized else { return nil }
+        }
         let key = conflictKey(action)
         guard !state.pending.contains(where: { conflictKey($0.action) == key })
         else { return nil }
         let direction = classify(action, state: state)
-        let delay = direction == .stricter ? state.strictDelay : state.lenientDelay
+        let delay = state.delayPolicy.delay(for: direction)
         let now = TimeGuard.now()
         let change = PendingChange(
             createdAt: now,
@@ -299,15 +939,52 @@ enum ChangeEngine {
             summary: summary(for: action, state: state),
             action: action
         )
+        let repair = MonitoringBudget.isRepair(action, state: state)
         state.pending.append(change)
-        SharedStore.save(state)
-
-        if delay > 0 {
-            scheduleApplyActivity(for: change)
-            scheduleNotification(for: change)
-        }
-        applyDueChanges()   // delay == 0 (e.g. during setup) applies instantly
+        guard SharedStore.simulating || MonitorRegistration.admit(state: state, running: running, repair: repair),
+              SharedStore.save(state) else { return nil }
         return change
+    }
+
+    private static func isValidLimit(_ limit: AppLimit) -> Bool {
+        let selection = limit.selection
+        guard !selection.applicationTokens.isEmpty
+                || !selection.categoryTokens.isEmpty
+                || !selection.webDomainTokens.isEmpty,
+              (0...720).contains(limit.minutesPerDay),
+              limit.weekdayMinutes.allSatisfy({ (1...7).contains($0.key)
+                                              && (0...720).contains($0.value) })
+        else { return false }
+        if let wake = limit.wakeDelayMinutes,
+           !(0...1440).contains(wake) { return false }
+        if let schedule = limit.wakeSchedule, !schedule.isValid { return false }
+        if let split = limit.split,
+           (!(1...22).contains(split.cutoffMinutes / 60)
+            || split.cutoffMinutes % 60 != 0
+            || !(0...720).contains(split.beforeMinutes)
+            || split.beforeMinutes > split.cutoffMinutes) { return false }
+        if let split = limit.split,
+           let second = split.secondCutoffMinutes {
+            guard second % 60 == 0, second > split.cutoffMinutes,
+                  second <= 23 * 60,
+                  let middle = split.middleMinutes,
+                  (0...720).contains(middle),
+                  split.beforeMinutes + middle <= limit.minutesPerDay
+            else { return false }
+        }
+        if let extra = limit.extraTime {
+            let steps = extra.effectiveSteps
+            guard (1...5).contains(steps.count),
+                  steps.allSatisfy({ (1...120).contains($0.minutes)
+                      && [$0.passwordPolicyID != nil, $0.phrasePolicyID != nil,
+                          $0.contactRequired].filter({ $0 }).count <= 1
+                      && ($0.passwordPolicyID != nil || $0.phrasePolicyID != nil
+                          || $0.contactRequired
+                          || (1...1440).contains($0.waitMinutes)) }),
+                  limit.minutesPerDay + steps.reduce(0, { $0 + $1.minutes }) <= 1439
+            else { return false }
+        }
+        return true
     }
 
     static func cancel(_ change: PendingChange) {
@@ -329,13 +1006,16 @@ enum ChangeEngine {
     /// activities here: applyDueChanges performs one batched cleanup after the
     /// resulting state is safely persisted.
     @discardableResult
-    private static func applyNow(changeIDs: [UUID]) -> Int {
+    private static func applyNow(changeIDs: [UUID],
+                                 validate: ((LatchState, [PendingChange]) -> Bool)? = nil) -> Int {
         var state = SharedStore.loadState()
         let requested = Set(changeIDs)
         let matching = state.pending.filter { requested.contains($0.id) }
-        guard !matching.isEmpty else {
+        guard !matching.isEmpty,
+              validate?(state, matching) ?? true,
+              !hasUnappliedDueChanges(state, excluding: requested) else {
             #if DEBUG
-            print("⚠️ applyNow: requested changes are no longer pending")
+            print("⚠️ applyNow: pending authorization changed or maintenance is due")
             #endif
             return 0
         }
@@ -356,30 +1036,94 @@ enum ChangeEngine {
 
     // MARK: - Applying
 
+    /// A bounded fail-closed fence, not a maintenance retry loop. Cleanup XPC
+    /// can outlast a second policy's deadline after applyDueChanges snapshots
+    /// its due set. An override must not use that still-unapplied policy.
+    /// Exclusions are only for targets being marked due by applyNow; natural
+    /// zero-delay application through applyDueChanges is never gated here.
+    static func hasUnappliedDueChanges(_ state: LatchState,
+                                      excluding ids: Set<UUID> = []) -> Bool {
+        state.pending.contains { !ids.contains($0.id) && $0.isDue }
+    }
+
     /// Merge every due pending change into the active state, then
     /// reconfigure monitoring/shields. Safe to call from app or extensions.
     static func applyDueChanges() {
         var state = SharedStore.loadState()
         let due = state.pending.filter(\.isDue).sorted { $0.appliesAt < $1.appliesAt }
         guard !due.isEmpty else { return }
+        let stateBefore = state
+        let newWakeGates = Set(due.compactMap { change -> UUID? in
+            let id: UUID, minutes: Int?
+            switch change.action {
+            case .setGroupWakeDelay(let target, let wait): id = target; minutes = wait
+            case .setGroupWakeSchedule(let target, let wait, _): id = target; minutes = wait
+            default: return nil
+            }
+            guard minutes != nil,
+                  let limit = state.limits.first(where: { $0.id == id }),
+                  limit.wakeDelayMinutes == nil else { return nil }
+            return id
+        })
+        guard LimitFeatures.prepareNewWakeGates(newWakeGates) else { return }
 
         // Starting a session, changing an override, etc. does not alter daily
         // limit events. Restarting the daily monitor for every change exposed
         // us to spurious immediate threshold callbacks from Screen Time.
         let dailyLimitsChanged = due.contains { change in
             switch change.action {
-            case .addLimit, .updateLimitMinutes, .removeLimit:
+            case .addLimit, .updateLimitMinutes, .updateLimit,
+                 .configureLimit, .removeLimit:
                 return true
             default:
                 return false
             }
         }
+        let editedSelectionIDs = Set(due.compactMap { change -> UUID? in
+            switch change.action {
+            case .updateLimit(let id, let selection, _):
+                guard let old = state.limits.first(where: { $0.id == id }),
+                      old.selection != selection else { return nil }
+                return id
+            case .configureLimit(let updated):
+                guard let old = state.limits.first(where: { $0.id == updated.id }),
+                      old.selection != updated.selection else { return nil }
+                return updated.id
+            default: return nil
+            }
+        })
+        let editedFeatureIDs = Set(due.compactMap { change -> UUID? in
+            guard case .configureLimit(let updated) = change.action,
+                  let old = state.limits.first(where: { $0.id == updated.id }),
+                  old.selection != updated.selection
+                    || old.wakeDelayMinutes != updated.wakeDelayMinutes
+                    || old.split != updated.split
+                    || old.extraTime != updated.extraTime
+            else { return nil }
+            return updated.id
+        })
+        let editedSplitIDs = Set(due.compactMap { change -> UUID? in
+            guard case .configureLimit(let updated) = change.action,
+                  let old = state.limits.first(where: { $0.id == updated.id }),
+                  old.split != updated.split else { return nil }
+            return updated.id
+        })
 
         let windowMonitoringChanged = due.contains { change in
+            // Selection-only schedule edits leave every boundary unchanged.
+            // The normal shield refresh below applies the new tokens without
+            // restarting window or daily usage monitors.
             switch change.action {
+            case .setGroupWakeDelay, .setGroupWakeSchedule:
+                // Shared contributors can disappear together: comparing each
+                // removal alone would leave their last shared sentinel stale.
+                let projected = due.reduce(state) { MonitoringBudget.project($1.action, onto: $0) }
+                return MonitoringBudget.windowNames(state: projected)
+                    != MonitoringBudget.windowNames(state: state)
             case .addSchedule, .removeSchedule,
                  .addExemption, .removeExemption,
-                 .addPlanned, .removePlanned:
+                 .addPlanned, .removePlanned,
+                 .setWakeRule, .setSleepRule, .upsertDayNightGroup, .removeDayNightGroup:
                 return true
             default:
                 return false
@@ -411,15 +1155,52 @@ enum ChangeEngine {
             state.pending.removeAll { $0.id == change.id }
         }
 
+        // Opt only edited limits into token-aware monitor fingerprints BEFORE
+        // saving their new selections. Existing users keep their current
+        // healthy monitor on upgrade; a crash between these writes can at
+        // worst cause an extra rebuild, never bless a stale selection.
+        if !editedSelectionIDs.isEmpty {
+            var tracked = Set(SharedStore.defaults.stringArray(
+                forKey: trackedLimitSelectionsKey) ?? [])
+            tracked.formUnion(editedSelectionIDs.map(\.uuidString))
+            SharedStore.defaults.set(tracked.sorted(),
+                                     forKey: trackedLimitSelectionsKey)
+        }
+
+        // Invalidate credits BEFORE publishing the new selection. If the
+        // process is killed between writes, an old credit can never enlarge a
+        // newly edited group's budget. Rearm tracking only after state saves.
+        let rotatedFreeTracking = editedSelectionIDs.isEmpty ? false
+            : prepareUsageCreditForSelectionEdit(ids: editedSelectionIDs,
+                                                 state: state)
+        LimitFeatures.resetEditedLimits(editedFeatureIDs)
+        LimitFeatures.clearSplitMarkers(for: editedSplitIDs)
+
         // Persist the approved configuration before touching Apple's XPC
         // service. If Screen Time stalls or the process is interrupted, the
         // rule is still committed and the next maintenance pass can self-heal.
-        SharedStore.save(state)
+        guard SharedStore.save(state) else { return }
+
+        if !dailyLimitsChanged, due.contains(where: {
+            switch $0.action {
+            case .setGroupWakeDelay, .setGroupWakeSchedule: return true
+            default: return false
+            }
+        }) {
+            preserveDailyMonitoringForWakeEdit(from: stateBefore, to: state)
+        }
 
         if !SharedStore.simulating && !cleanupActivityNames.isEmpty {
             DeviceActivityCenter().stopMonitoring(cleanupActivityNames.map {
                 DeviceActivityName($0)
             })
+        }
+        // Release admitted pending slots only after persistence, but before
+        // replacement tracking starts, so a fitting plan also fits mid-apply.
+        if rotatedFreeTracking && isFreeWindowActive() {
+            DeviceActivityCenter().stopMonitoring(
+                [DeviceActivityName(freeWindowActivityName)])
+            startFreeWindowTracking()
         }
         for session in state.sessions where !sessionIDsBefore.contains(session.id) {
             startSessionCleanupActivity(session)
@@ -430,6 +1211,8 @@ enum ChangeEngine {
         reconcileFreeWindow()
         if dailyLimitsChanged {
             reconfigureDailyMonitoring(state: state)
+            LimitFeatures.reconfigureSplitMonitoring(state: state)
+            LimitFeatures.reconcile(state: state)
         }
         if windowMonitoringChanged {
             reconfigureWindowMonitoring(state: state)
@@ -444,8 +1227,11 @@ enum ChangeEngine {
         applyDueChanges()
         pruneExpiredSessions()
         prunePastPlanned()
-        ShieldController.refresh()
         reconcileFreeWindow()
+        LimitFeatures.reconcile(state: SharedStore.loadState())
+        GlobalWake.reconcile(state: SharedStore.loadState())
+        DayNightWake.reconcile(state: SharedStore.loadState())
+        ShieldController.refresh()
     }
 
     /// Foreground fallback for the midnight reset. iOS doesn't guarantee the
@@ -461,8 +1247,11 @@ enum ChangeEngine {
         let today = SharedStore.dayKey(for: TimeGuard.now())
         guard SharedStore.lastResetDay != today else { return }
         ShieldController.clearForNewDay()          // clears blocks + usage
+        LimitFeatures.resetForNewDay()
         SharedStore.lastResetDay = today
         reconfigureDailyMonitoring(state: SharedStore.loadState())
+        LimitFeatures.reconfigureSplitMonitoring(state: SharedStore.loadState())
+        LimitFeatures.reconcile(state: SharedStore.loadState())
     }
 
     /// Planned windows in the past expire on their own — no delay needed.
@@ -478,11 +1267,40 @@ enum ChangeEngine {
 
     private static func apply(_ action: ChangeAction, to state: inout LatchState) {
         switch action {
+        case .setGroupWakeSchedule(let id, let minutes, let schedule):
+            guard schedule.isValid, minutes.map({ (0...1440).contains($0) }) ?? true,
+                  let index = state.limits.firstIndex(where: { $0.id == id }) else { break }
+            state.limits[index].wakeDelayMinutes = minutes
+            state.limits[index].wakeSchedule = schedule
+        case .setGroupWakeDelay(let id, let minutes):
+            guard minutes.map({ (0...1440).contains($0) }) ?? true,
+                  let index = state.limits.firstIndex(where: { $0.id == id }) else { break }
+            state.limits[index].wakeDelayMinutes = minutes
         case .addLimit(let l):
             state.limits.append(l)
         case .updateLimitMinutes(let id, let m):
             if let i = state.limits.firstIndex(where: { $0.id == id }) {
                 state.limits[i].minutesPerDay = m
+            }
+        case .updateLimit(let id, let selection, let minutes):
+            guard !selection.applicationTokens.isEmpty
+                    || !selection.categoryTokens.isEmpty
+                    || !selection.webDomainTokens.isEmpty
+            else { break }
+            if let i = state.limits.firstIndex(where: { $0.id == id }) {
+                var limits = state.limits
+                limits[i].selection = selection
+                guard DayNightGroup.supportsLimitSelections(state.dayNightGroups, limits: limits) else { break }
+                state.limits[i].selection = selection
+                state.limits[i].minutesPerDay = minutes
+            }
+        case .configureLimit(let updated):
+            guard isValidLimit(updated) else { break }
+            if let index = state.limits.firstIndex(where: { $0.id == updated.id }) {
+                var limits = state.limits
+                limits[index] = updated
+                guard DayNightGroup.supportsLimitSelections(state.dayNightGroups, limits: limits) else { break }
+                state.limits[index] = updated
             }
         case .removeLimit(let id):
             state.limits.removeAll { $0.id == id }
@@ -490,27 +1308,77 @@ enum ChangeEngine {
                 blocked.remove(id)
             }
         case .setStrictDelay(let t):
-            state.strictDelay = t
+            state.delayPolicy = state.delayPolicy.replacing(.stricter, with: t)
         case .setLenientDelay(let t):
-            state.lenientDelay = t
-        case .setMathOverride(let on, let d, let count, let wrong):
-            state.overrides.mathEnabled = on
-            state.overrides.mathDifficulty = on ? d : nil
-            if on {
-                state.overrides.mathQuestionCount = count
-                state.overrides.mathWrongBehavior = wrong
+            state.delayPolicy = state.delayPolicy.replacing(.lenient, with: t)
+        case .setDelayPolicy(let policy):
+            if policy.isValid { state.delayPolicy = policy }
+        case .setMathOverride, .setPasswordOverride:
+            // A queued change from an older build must not re-enable a
+            // retired self-override after this update is installed.
+            break
+        case .upsertPasswordPolicy(let policy):
+            guard !policy.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  policy.hash.count == 64,
+                  !policy.allowed.isEmpty else { break }
+            if let index = state.overrides.passwordPolicies.firstIndex(where: {
+                $0.id == policy.id
+            }) {
+                state.overrides.passwordPolicies[index] = policy
+            } else {
+                state.overrides.passwordPolicies.append(policy)
             }
-        case .setPasswordOverride(let on, let hash):
-            state.overrides.passwordEnabled = on
-            state.overrides.passwordHash = on ? hash : nil
+        case .removePasswordPolicy(let id):
+            state.overrides.passwordPolicies.removeAll { $0.id == id }
+        case .upsertPhrasePolicy(let policy):
+            guard PhraseWords.isValid(policy) else { break }
+            if let index = state.overrides.phrasePolicies.firstIndex(where: {
+                $0.id == policy.id
+            }) {
+                state.overrides.phrasePolicies[index] = policy
+            } else {
+                state.overrides.phrasePolicies.append(policy)
+            }
+        case .removePhrasePolicy(let id):
+            state.overrides.phrasePolicies.removeAll { $0.id == id }
         case .setContactsOverride(let on):
             state.overrides.contactsEnabled = on
+        case .setWakeRule(let rule):
+            guard rule.isValid(in: state),
+                  !state.sleepRule.enabled
+                    || state.sleepRule.startMinutes != rule.startHour * 60
+            else { break }
+            state.wakeRule = rule
+            GlobalWake.clearTap()
+        case .setSleepRule(let rule):
+            guard rule.isValid(in: state, wakeHour: state.wakeRule.startHour) else { break }
+            state.sleepRule = rule
+        case .upsertDayNightGroup(var group):
+            if let old = state.dayNightGroups.first(where: { $0.id == group.id }) {
+                group.wakeEpoch = !old.wakeEnabled && group.wakeEnabled ? UUID() : old.wakeEpoch
+            }
+            var proposed = state.dayNightGroups.filter { $0.id != group.id }
+            proposed.append(group)
+            guard DayNightGroup.isValidCollection(proposed, limits: state.limits) else { break }
+            state.dayNightGroups = proposed
+        case .removeDayNightGroup(let id):
+            state.dayNightGroups.removeAll { $0.id == id }
         case .addContact(let contact):
             state.overrides.contacts.append(contact)
         case .removeContact(let id):
             state.overrides.contacts.removeAll { $0.id == id }
+        case .setContactPermissions(let id, let allowed):
+            if let index = state.overrides.contacts.firstIndex(where: { $0.id == id }) {
+                state.overrides.contacts[index].allowed = allowed
+            }
         case .addSchedule(let s):
             state.schedules.append(s)
+        case .updateScheduleSelection(let id, let selection):
+            // A removed schedule must not be resurrected by a stale edit.
+            if let index = state.schedules.firstIndex(where: { $0.id == id }),
+               state.schedules[index].acceptsSelection(selection) {
+                state.schedules[index].selection = selection
+            }
         case .removeSchedule(let id):
             state.schedules.removeAll { $0.id == id }
         case .addExemption(let e):
@@ -565,6 +1433,16 @@ enum ChangeEngine {
 
     private static let dailyMonitorFingerprintKey =
         "latch.dailyMonitorFingerprint.v2"
+
+    /// Wake-only changes don't alter usage events. Rebase only a verified
+    /// fingerprint of the pre-edit state; never bless a stale/dropped monitor.
+    private static func preserveDailyMonitoringForWakeEdit(from before: LatchState,
+                                                           to after: LatchState) {
+        guard SharedStore.defaults.string(forKey: dailyMonitorFingerprintKey)
+                == dailyMonitorFingerprint(state: before) else { return }
+        SharedStore.defaults.set(dailyMonitorFingerprint(state: after),
+                                 forKey: dailyMonitorFingerprintKey)
+    }
 #if DEBUG
     // Allow rapid abuse-testing in the separately installed dev build. The
     // verification delay and conservative anti-bypass checks still apply.
@@ -575,14 +1453,61 @@ enum ChangeEngine {
     private static let limitRecheckVerificationDelay: UInt64 =
         30 * 1_000_000_000
 
-    /// A compact description of everything that changes a daily event's
-    /// threshold. Limit selections are immutable after creation; a replacement
-    /// gets a new UUID, while minute edits retain the UUID and change the value.
+    private static let trackedLimitSelectionsKey =
+        "latch.limitSelectionFingerprintIDs.v1"
+
+    /// A stable digest of opaque selection tokens. Encoding each token on its
+    /// own and sorting avoids Swift Set's process-dependent iteration order,
+    /// which would otherwise restart the daily monitor on every app launch.
+    private static func limitSelectionDigest(_ selection: FamilyActivitySelection) -> String {
+        let encoder = JSONEncoder()
+        func sortedTokens<T: Encodable & Hashable>(_ tokens: Set<T>) -> String {
+            tokens.map {
+                (try? encoder.encode($0).base64EncodedString()) ?? "encode-failed"
+            }.sorted().joined(separator: ",")
+        }
+        let description = [
+            selection.includeEntireCategory ? "all" : "selected",
+            sortedTokens(selection.applicationTokens),
+            sortedTokens(selection.categoryTokens),
+            sortedTokens(selection.webDomainTokens)
+        ].joined(separator: "|")
+        return SHA256.hash(data: Data(description.utf8))
+            .map { String(format: "%02x", Int($0)) }.joined()
+    }
+
+    /// A compact description of everything that changes a daily event.
+    /// Only limits edited after this feature are token-aware: that avoids an
+    /// unnecessary monitor restart (and iOS's occasional spurious threshold
+    /// callbacks) for every existing user on the first launch after upgrade.
     private static func dailyMonitorFingerprint(state: LatchState) -> String {
         let credit = SharedStore.loadFreeCreditByLimit()
+        let tracked = Set(SharedStore.defaults.stringArray(
+            forKey: trackedLimitSelectionsKey) ?? [])
         let limits = state.limits.sorted { $0.id.uuidString < $1.id.uuidString }
-            .map {
-                "\($0.id.uuidString):\($0.minutesPerDay):\(credit[$0.id] ?? 0)"
+            .map { limit in
+                let base = "\(limit.id.uuidString):\(limit.minutes(on: Date())):\(credit[limit.id] ?? 0)"
+                let hasFeatures = !limit.weekdayMinutes.isEmpty
+                    || limit.wakeDelayMinutes != nil || limit.split != nil
+                    || limit.extraTime != nil
+                var result = tracked.contains(limit.id.uuidString) || hasFeatures
+                    ? base + ":" + limitSelectionDigest(limit.selection) : base
+                if hasFeatures {
+                    let weekdays = limit.weekdayMinutes.keys.sorted().map { day in
+                        "\(day)=\(limit.weekdayMinutes[day] ?? -1)"
+                    }.joined(separator: ",")
+                    let split = limit.split.map {
+                        "\($0.cutoffMinutes),\($0.beforeMinutes),\($0.carryUnused),\($0.secondCutoffMinutes ?? -1),\($0.middleMinutes ?? -1)"
+                    } ?? "off"
+                    let extra = limit.extraTime.map {
+                        $0.effectiveSteps.map {
+                            "\($0.minutes),\($0.waitMinutes),\($0.passwordPolicyID?.uuidString ?? "wait"),\($0.phrasePolicyID?.uuidString ?? "none"),\($0.contactRequired)"
+                        }
+                            .joined(separator: ";")
+                    } ?? "off"
+                    result += ":\(weekdays):\(limit.wakeDelayMinutes ?? -1):\(split):\(extra)"
+                }
+                return result
             }
             .joined(separator: "|")
         return "3;\(SharedStore.dayKey(for: Date()));\(limits)"
@@ -620,6 +1545,9 @@ enum ChangeEngine {
         let runningWindows = Set(running.filter {
             $0.hasPrefix("sched-") || $0.hasPrefix("exempt-")
                 || $0.hasPrefix("planned-")
+                || $0.hasPrefix("global-wake-boundary")
+                || $0.hasPrefix("global-sleep-boundary")
+                || $0.hasPrefix("day-night-boundary-")
         })
         if runningWindows != expectedWindows {
             reconfigureWindowMonitoring(state: state)
@@ -628,53 +1556,19 @@ enum ChangeEngine {
             // ones without tearing down healthy enforcement windows.
             startMissingEchoActivities(alreadyRunning: running)
         }
+        if LimitFeatures.splitActivitiesNeedRepair(state: state, running: running) {
+            LimitFeatures.reconfigureSplitMonitoring(state: state)
+        }
+        LimitFeatures.reconcile(state: state)
+        GlobalWake.reconcile(state: state, running: running)
+        DayNightWake.reconcile(state: state, running: running)
+        ShieldController.refresh()
     }
 
     private static func expectedWindowActivityNames(state: LatchState)
         -> Set<String> {
         guard !SharedStore.simulating else { return [] }
-        var names = Set<String>()
-
-        func add(prefix: String, start: Int, end: Int,
-                 recurrence: Recurrence) {
-            let wraps = start >= end
-            switch recurrence {
-            case .daily:
-                let segments: [(Int, Int)] = wraps
-                    ? [(start, 24 * 60 - 1), (0, end)]
-                    : [(start, end)]
-                for (index, segment) in segments.enumerated() {
-                    let paddedEnd = min(max(segment.1, segment.0 + 15),
-                                        24 * 60 - 1)
-                    if paddedEnd - segment.0 >= 15 {
-                        names.insert("\(prefix)-\(index)")
-                    }
-                }
-            case .weekly(let days):
-                for day in days {
-                    names.insert("\(prefix)-w\(day)")
-                }
-            case .monthlyDay:
-                names.insert("\(prefix)-m")
-            case .monthlyOrdinal:
-                names.insert("\(prefix)-o")
-            }
-        }
-
-        for schedule in state.schedules {
-            add(prefix: "sched-\(schedule.id.uuidString)",
-                start: schedule.startMinutes, end: schedule.endMinutes,
-                recurrence: schedule.recurrence)
-        }
-        for exemption in state.exemptions {
-            add(prefix: "exempt-\(exemption.id.uuidString)",
-                start: exemption.startMinutes, end: exemption.endMinutes,
-                recurrence: exemption.recurrence)
-        }
-        for planned in state.planned where !planned.isPast {
-            names.insert(planned.activityName)
-        }
-        return names
+        return MonitoringBudget.windowNames(state: state)
     }
 
     /// Conservatively verify existing daily-limit blocks. Current shields stay
@@ -693,11 +1587,18 @@ enum ChangeEngine {
         guard !isFreeWindowActive() else { return .freeWindowActive }
 
         let state = SharedStore.loadState()
-        let eligible = Set(state.limits.filter { $0.minutesPerDay > 0 }
+        let eligible = Set(state.limits.filter {
+            $0.minutes(on: Date()) > 0
+                && !LimitFeatures.splitCurrentlyBlocks($0)
+        }
             .map(\.id))
         let candidates = SharedStore.loadBlockedLimitIDs()
             .intersection(eligible)
-        guard !candidates.isEmpty else { return .noBlockedLimits }
+        guard !candidates.isEmpty else {
+            return state.limits.contains(where: {
+                LimitFeatures.splitCurrentlyBlocks($0)
+            }) ? .splitBlocksNotRecheckable : .noBlockedLimits
+        }
 
         let startedAt = Date()
         let controlID = UUID()
@@ -799,40 +1700,39 @@ enum ChangeEngine {
         var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
 
         for limit in state.limits {
-            // A 0-minute limit is always blocked (handled by the shield), and a
-            // limit already at its cap stays blocked — neither needs an event.
-            if limit.minutesPerDay == 0
-                || (!includeBlockedLimits && blocked.contains(limit.id)) {
-                continue
-            }
-
-            // includesPastActivity:true makes the OS count usage that already
-            // happened earlier today — including time spent before this limit
-            // was added mid-day — so the threshold fires at the real daily
-            // total instead of restarting the count from zero every time
-            // monitoring restarts. The report extension shows the live number;
-            // this drives the actual block.
             let apps = limit.selection.applicationTokens
             let cats = limit.selection.categoryTokens
             let webs = limit.selection.webDomainTokens
-            // Real limit + this limit's free-period credit. Split into
-            // hour/minute: a bare DateComponents(minute:) > 59 is unreliable
-            // across iOS.
-            let cap = thresholdComponents(minutes: limit.minutesPerDay
-                                          + (credit[limit.id] ?? 0))
-            let limitEvent: DeviceActivityEvent
-            if #available(iOS 17.4, *) {
-                limitEvent = DeviceActivityEvent(
-                    applications: apps, categories: cats, webDomains: webs,
-                    threshold: cap, includesPastActivity: true)
-            } else {
-                // iOS 16 / pre-17.4: no includesPastActivity, so the cap counts
-                // only from when monitoring (re)starts.
-                limitEvent = DeviceActivityEvent(
+            func usageEvent(at minutes: Int) -> DeviceActivityEvent {
+                let cap = thresholdComponents(minutes: minutes)
+                if #available(iOS 17.4, *) {
+                    return DeviceActivityEvent(
+                        applications: apps, categories: cats, webDomains: webs,
+                        threshold: cap, includesPastActivity: true)
+                }
+                return DeviceActivityEvent(
                     applications: apps, categories: cats, webDomains: webs,
                     threshold: cap)
             }
-            events[DeviceActivityEvent.Name("limit-\(limit.id.uuidString)")] = limitEvent
+            let base = limit.minutes(on: Date())
+            let freeCredit = credit[limit.id] ?? 0
+            // A spent base limit still needs its higher extra-time thresholds
+            // registered. Activating extra time never restarts this monitor.
+            if base > 0 && (includeBlockedLimits || !blocked.contains(limit.id)) {
+                events[.init("limit-\(limit.id.uuidString)")] =
+                    usageEvent(at: base + freeCredit)
+            }
+            if let extra = limit.extraTime, !extra.effectiveSteps.isEmpty {
+                let day = SharedStore.dayKey(for: Date())
+                var accumulated = 0
+                for (index, step) in extra.effectiveSteps.enumerated() {
+                    accumulated += step.minutes
+                    let total = base + accumulated + freeCredit
+                    let tier = index + 1
+                    events[.init("extra:\(day):\(tier):\(limit.id.uuidString)")] =
+                        usageEvent(at: total)
+                }
+            }
         }
 
         if let recheckControlID, #available(iOS 17.4, *) {
@@ -853,7 +1753,7 @@ enum ChangeEngine {
             warningTime: boundaryWarning
         )
         do {
-            try center.startMonitoring(daily, during: schedule, events: events)
+            try MonitorRegistration.start(daily, during: schedule, events: events)
             SharedStore.defaults.set(dailyMonitorFingerprint(state: state),
                                      forKey: dailyMonitorFingerprintKey)
             return true
@@ -868,7 +1768,7 @@ enum ChangeEngine {
     /// A DeviceActivity threshold as hour+minute. A bare `DateComponents(minute:)`
     /// above 59 behaves inconsistently across iOS versions, so always split it.
     private static func thresholdComponents(minutes: Int) -> DateComponents {
-        let m = max(1, minutes)
+        let m = min(24 * 60 - 1, max(1, minutes))
         return DateComponents(hour: m / 60, minute: m % 60)
     }
 
@@ -882,6 +1782,9 @@ enum ChangeEngine {
         let stale = center.activities.filter {
             $0.rawValue.hasPrefix("sched-") || $0.rawValue.hasPrefix("exempt-")
                 || $0.rawValue.hasPrefix("planned-")
+                || $0.rawValue.hasPrefix("global-wake-boundary")
+                || $0.rawValue.hasPrefix("global-sleep-boundary")
+                || $0.rawValue.hasPrefix("day-night-boundary-")
                 || $0.rawValue.hasPrefix("echo-")
         }
         if !stale.isEmpty { center.stopMonitoring(stale) }
@@ -897,6 +1800,22 @@ enum ChangeEngine {
             startWindowActivities(prefix: "exempt-\(e.id.uuidString)",
                                   start: e.startMinutes, end: e.endMinutes,
                                   recurrence: e.recurrence)
+        }
+        if state.wakeRule.enabled || state.sleepRule.enabled {
+            startWindowActivities(prefix: "global-wake-boundary",
+                                  start: state.wakeRule.startHour * 60,
+                                  end: min(state.wakeRule.startHour * 60 + 15, 1439),
+                                  recurrence: .daily)
+        }
+        if state.sleepRule.enabled {
+            startWindowActivities(prefix: "global-sleep-boundary",
+                                  start: state.sleepRule.startMinutes,
+                                  end: state.wakeRule.startHour * 60,
+                                  recurrence: .daily)
+        }
+        for minute in DayNightWake.boundaryMinutes(state: state).sorted() {
+            startWindowActivities(prefix: "day-night-boundary-\(minute)",
+                                  start: minute, end: minute + 15, recurrence: .daily)
         }
         let cal = Calendar.current
         for w in state.planned where !w.isPast {
@@ -917,7 +1836,7 @@ enum ChangeEngine {
                 warningTime: boundaryWarning
             )
             do {
-                try center.startMonitoring(
+                try MonitorRegistration.start(
                     DeviceActivityName(w.activityName), during: schedule)
             } catch {
                 print("Demora: failed to schedule planned window: \(error)")
@@ -930,7 +1849,7 @@ enum ChangeEngine {
         // midnight rollover gets retried — the 06:00 sweep lands before most
         // people pick up their phone. The rollover is day-key-gated, so these
         // are no-ops whenever the midnight reset already ran. Registered LAST so
-        // real enforcement activities claim the ~20-activity budget first: a
+        // real enforcement activities claim the 20-activity budget first: a
         // dropped echo is tolerated redundancy (no enforcementDegraded), whereas
         // a dropped schedule/window is real lost enforcement.
         startMissingEchoActivities(alreadyRunning: [])
@@ -942,7 +1861,6 @@ enum ChangeEngine {
     private static func startMissingEchoActivities(
         alreadyRunning: Set<String>
     ) {
-        let center = DeviceActivityCenter()
         for (i, w) in [(5, 35), (60, 90), (360, 390)].enumerated() {
             let name = "echo-\(i)"
             if alreadyRunning.contains(name) { continue }
@@ -952,8 +1870,7 @@ enum ChangeEngine {
                 repeats: true,
                 warningTime: boundaryWarning)
             do {
-                try center.startMonitoring(DeviceActivityName(name),
-                                           during: schedule)
+                try MonitorRegistration.start(DeviceActivityName(name), during: schedule)
             } catch {
                 print("Demora: failed to start echo activity \(i): \(error)")
             }
@@ -962,60 +1879,17 @@ enum ChangeEngine {
 
     private static func startWindowActivities(prefix: String, start: Int,
                                               end: Int, recurrence: Recurrence) {
-        let center = DeviceActivityCenter()
-        func register(_ name: String, _ s: DateComponents, _ e: DateComponents) {
-            let schedule = DeviceActivitySchedule(intervalStart: s,
-                                                  intervalEnd: e, repeats: true,
+        for window in MonitoringBudget.windows(prefix: prefix, start: start, end: end,
+                                                recurrence: recurrence) {
+            let schedule = DeviceActivitySchedule(intervalStart: window.start,
+                                                  intervalEnd: window.end, repeats: true,
                                                   warningTime: boundaryWarning)
             do {
-                try center.startMonitoring(DeviceActivityName(name),
-                                           during: schedule)
+                try MonitorRegistration.start(DeviceActivityName(window.name), during: schedule)
             } catch {
-                print("Demora: failed to start window activity \(name): \(error)")
+                print("Demora: failed to start window activity \(window.name): \(error)")
                 SharedStore.enforcementDegraded = true
             }
-        }
-        let sh = start / 60, sm = start % 60
-        let eh = end / 60, em = end % 60
-        let wraps = start >= end
-
-        switch recurrence {
-        case .daily:
-            let segments: [(Int, Int)] = wraps
-                ? [(start, 24 * 60 - 1), (0, end)]
-                : [(start, end)]
-            for (i, seg) in segments.enumerated() {
-                // DeviceActivity requires intervals ≥15 min. Rather than
-                // silently drop a short (or midnight-wrapping) segment — leaving
-                // no background wake at its boundary — pad the end to the floor,
-                // clamped to the day. Shield state is recomputed from the wall
-                // clock on every wake, so the padded end doesn't distort
-                // enforcement; it just guarantees a wake near the boundary.
-                let paddedEnd = min(max(seg.1, seg.0 + 15), 24 * 60 - 1)
-                guard paddedEnd - seg.0 >= 15 else { continue }
-                register("\(prefix)-\(i)",
-                         DateComponents(hour: seg.0 / 60, minute: seg.0 % 60),
-                         DateComponents(hour: paddedEnd / 60, minute: paddedEnd % 60))
-            }
-        case .weekly(let days):
-            for d in days.sorted() {
-                register("\(prefix)-w\(d)",
-                         DateComponents(hour: sh, minute: sm, weekday: d),
-                         DateComponents(hour: eh, minute: em,
-                                        weekday: wraps ? (d % 7) + 1 : d))
-            }
-        case .monthlyDay(let day):
-            // Midnight-wrapping windows are rejected by the editor for
-            // monthly rules, so start < end here.
-            register("\(prefix)-m",
-                     DateComponents(day: day, hour: sh, minute: sm),
-                     DateComponents(day: day, hour: eh, minute: em))
-        case .monthlyOrdinal(let weekday, let ordinal):
-            register("\(prefix)-o",
-                     DateComponents(hour: sh, minute: sm, weekday: weekday,
-                                    weekdayOrdinal: ordinal),
-                     DateComponents(hour: eh, minute: em, weekday: weekday,
-                                    weekdayOrdinal: ordinal))
         }
     }
 
@@ -1040,7 +1914,7 @@ enum ChangeEngine {
             repeats: false,
             warningTime: boundaryWarning
         )
-        try? DeviceActivityCenter().startMonitoring(
+        try? MonitorRegistration.start(
             DeviceActivityName(session.activityName), during: schedule)
     }
 
@@ -1094,11 +1968,45 @@ enum ChangeEngine {
             || state.sessions.contains { $0.kind == .free && $0.isActive }
     }
 
+    /// Credits earned with the old selection cannot be applied to a different
+    /// group of apps. Preserve the existing spent-limit marker (no bypass),
+    /// discard only edited limits' old credits, and rotate an active free-window
+    /// monitor so future checkpoints refer to the new selection. Other limits'
+    /// checkpoints are banked first, so their free-period usage is not lost.
+    @discardableResult
+    private static func prepareUsageCreditForSelectionEdit(ids: Set<UUID>,
+                                                            state: LatchState) -> Bool {
+        LimitFeatures.clearCredits(for: ids)
+        var credit = SharedStore.loadFreeCreditByLimit()
+        let wasTrackingFreeWindow = SharedStore.freeWindowStart != nil
+        if wasTrackingFreeWindow {
+            // Reject callbacks from the old token set before stopping it.
+            SharedStore.freeWindowTrackingEpoch = "rotating"
+            DeviceActivityCenter().stopMonitoring(
+                [DeviceActivityName(freeWindowActivityName)])
+            let validIDs = Set(state.limits.map(\.id))
+            for (id, minutes) in SharedStore.loadFreeWindowUsage()
+            where !ids.contains(id) && validIDs.contains(id) && minutes > 0 {
+                credit[id, default: 0] += min(minutes, 24 * 60)
+            }
+            SharedStore.saveFreeWindowUsage([:])
+        }
+        for id in ids { credit.removeValue(forKey: id) }
+        SharedStore.saveFreeCreditByLimit(credit)
+        return wasTrackingFreeWindow
+    }
+
     static func reconcileFreeWindow() {
         let active = isFreeWindowActive()
         let running = SharedStore.freeWindowStart != nil
         if active && !running { exemptWindowStarted() }
         else if !active && running { exemptWindowEnded() }
+        else if active && running
+                && SharedStore.freeWindowTrackingEpoch == "rotating" {
+            // A process may have died after invalidating old credits but
+            // before it could rearm tracking with the saved selection.
+            startFreeWindowTracking()
+        }
     }
 
     static func exemptWindowStarted() {
@@ -1114,6 +2022,7 @@ enum ChangeEngine {
             SharedStore.saveFreeWindowUsage([:])
             startFreeWindowTracking()
         }
+        LimitFeatures.reconcile(state: SharedStore.loadState())
         ShieldController.refresh()
     }
 
@@ -1126,10 +2035,12 @@ enum ChangeEngine {
         if SharedStore.simulating { return }
         let state = SharedStore.loadState()
         var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
+        let epoch = UUID().uuidString
+        SharedStore.freeWindowTrackingEpoch = epoch
         // 0-minute limits stay blocked all day by the shield; no credit applies.
-        for limit in state.limits where limit.minutesPerDay > 0 {
+        for limit in state.limits where limit.minutes(on: Date()) > 0 {
             for m in freeCheckpointLadder {
-                events[DeviceActivityEvent.Name("fw-\(limit.id.uuidString)-\(m)")] =
+                events[DeviceActivityEvent.Name("fw-\(epoch):\(limit.id.uuidString)-\(m)")] =
                     DeviceActivityEvent(
                         applications: limit.selection.applicationTokens,
                         categories: limit.selection.categoryTokens,
@@ -1137,7 +2048,10 @@ enum ChangeEngine {
                         threshold: thresholdComponents(minutes: m))
             }
         }
-        guard !events.isEmpty else { return }
+        guard !events.isEmpty else {
+            SharedStore.freeWindowTrackingEpoch = nil
+            return
+        }
         let cal = Calendar.current
         let start = Date().addingTimeInterval(60)
         let end = start.addingTimeInterval(24 * 3600)
@@ -1149,7 +2063,7 @@ enum ChangeEngine {
             repeats: false
         )
         do {
-            try DeviceActivityCenter().startMonitoring(
+            try MonitorRegistration.start(
                 DeviceActivityName(freeWindowActivityName),
                 during: schedule, events: events)
         } catch {
@@ -1161,11 +2075,24 @@ enum ChangeEngine {
     /// Monitor extension saw a free-window checkpoint ("fw-<uuid>-<minutes>"):
     /// record the highest rung per limit.
     static func recordFreeWindowCheckpoint(eventName: String) {
+        guard SharedStore.freeWindowStart != nil else { return }
         let body = eventName.dropFirst("fw-".count)
         guard let lastDash = body.lastIndex(of: "-"),
-              let minutes = Int(body[body.index(after: lastDash)...]),
-              let id = UUID(uuidString: String(body[..<lastDash]))
+              let minutes = Int(body[body.index(after: lastDash)...])
         else { return }
+        let identity = body[..<lastDash]
+        let id: UUID?
+        if let separator = identity.firstIndex(of: ":") {
+            let epoch = String(identity[..<separator])
+            guard SharedStore.freeWindowTrackingEpoch == epoch else { return }
+            id = UUID(uuidString: String(identity[identity.index(after: separator)...]))
+        } else {
+            // Tolerate a free-window monitor created by an older build until
+            // it ends. Once tracking is rearmed, its late callbacks are stale.
+            guard SharedStore.freeWindowTrackingEpoch == nil else { return }
+            id = UUID(uuidString: String(identity))
+        }
+        guard let id else { return }
         var usage = SharedStore.loadFreeWindowUsage()
         usage[id] = max(usage[id] ?? 0, minutes)
         SharedStore.saveFreeWindowUsage(usage)
@@ -1178,15 +2105,22 @@ enum ChangeEngine {
     static func exemptWindowEnded() {
         DeviceActivityCenter().stopMonitoring(
             [DeviceActivityName(freeWindowActivityName)])
+        SharedStore.freeWindowTrackingEpoch = "stopped"
         var shouldRearmDailyMonitoring = false
+        var shouldRearmSplitMonitoring = false
         if SharedStore.freeWindowStart != nil {
             let usage = SharedStore.loadFreeWindowUsage()
             let suppressed = SharedStore.loadFreeWindowSuppressedLimitIDs()
+            let suppressedSplit = LimitFeatures.takeSuppressedSplitIDs()
             var credit = SharedStore.loadFreeCreditByLimit()
             for (id, minutes) in usage where minutes > 0 {
                 credit[id, default: 0] += min(minutes, 24 * 60)
             }
             SharedStore.saveFreeCreditByLimit(credit)
+            if let start = SharedStore.freeWindowStart {
+                LimitFeatures.creditFreeUsage(usage, from: start, to: Date(),
+                                              state: SharedStore.loadState())
+            }
 
             if let snapshot = SharedStore.freeWindowBlockedSnapshot {
                 // Restore exactly the limits that were spent before the free
@@ -1204,6 +2138,7 @@ enum ChangeEngine {
 
             SharedStore.saveFreeWindowUsage([:])
             SharedStore.freeWindowStart = nil
+            SharedStore.freeWindowTrackingEpoch = nil
             SharedStore.freeWindowBlockedSnapshot = nil
             SharedStore.clearFreeWindowSuppressedLimitIDs()
 
@@ -1211,10 +2146,18 @@ enum ChangeEngine {
             // monitor is still valid. Avoiding an unnecessary restart avoids
             // the iOS immediate-threshold regression altogether.
             shouldRearmDailyMonitoring = !usage.isEmpty || !suppressed.isEmpty
+            shouldRearmSplitMonitoring = !usage.isEmpty || !suppressedSplit.isEmpty
+        }
+        if SharedStore.freeWindowStart == nil {
+            SharedStore.freeWindowTrackingEpoch = nil
         }
         if shouldRearmDailyMonitoring {
             reconfigureDailyMonitoring(state: SharedStore.loadState())
         }
+        if shouldRearmSplitMonitoring {
+            LimitFeatures.reconfigureSplitMonitoring(state: SharedStore.loadState())
+        }
+        LimitFeatures.reconcile(state: SharedStore.loadState())
         ShieldController.refresh()
     }
 
@@ -1241,7 +2184,7 @@ enum ChangeEngine {
             warningTime: boundaryWarning
         )
         do {
-            try DeviceActivityCenter().startMonitoring(
+            try MonitorRegistration.start(
                 DeviceActivityName(change.activityName), during: schedule)
         } catch {
             print("Demora: failed to schedule apply activity: \(error)")

@@ -16,13 +16,17 @@ struct LatchApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("appearance") private var appearanceRaw = Appearance.system.rawValue
     @AppStorage("textCasing") private var textCasingRaw = TextCasing.lower.rawValue
+    @AppStorage("latch.accentColor", store: SharedStore.defaults)
+    private var accentColorRaw = "blue"
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(model)
-                .tint(Ink.accent)
+                .environment(\.demoraAccentColor, accentColorRaw)
+                .tint(Ink.accent(for: accentColorRaw))
                 .serifDesign()
+                .toggleStyle(DemoraToggleStyle())
                 .textCase((TextCasing(rawValue: textCasingRaw) ?? .lower).textCase)
                 .environment(\.locale, model.language.locale)
                 .preferredColorScheme(
@@ -50,12 +54,14 @@ struct LatchApp: App {
                 // Screen Time report extension (separate process) can match it.
                 .onAppear {
                     SharedStore.defaults.set(appearanceRaw, forKey: "latch.appearance")
+                    DemoraWidgetSnapshot.publish(state: SharedStore.loadState())
                 }
                 .onChange(of: appearanceRaw) { newValue in
                     SharedStore.defaults.set(newValue, forKey: "latch.appearance")
                 }
         }
         .onChange(of: scenePhase) { phase in
+            guard !model.setupStorageUnavailable else { return }
             if phase == .active {
                 if !SharedStore.defaults.bool(forKey: "latch.healedRaceCondition") {
                     SharedStore.saveBlockedLimitIDs([])
@@ -65,6 +71,8 @@ struct LatchApp: App {
 
                 model.refreshAuthorization()
                 model.tick()
+                DemoraNotifications.rescheduleFreeBoundaries(state: SharedStore.loadState())
+                DemoraWidgetSnapshot.publish(state: SharedStore.loadState())
                 // Self-heal monitors that iOS actually dropped or whose saved
                 // configuration is outdated. Healthy monitors are left alone:
                 // restarting them on every foreground entry exposed users to
@@ -83,38 +91,33 @@ struct RootView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.requestReview) private var requestReview
     @State private var tutorialHoles: [CGRect] = []
-    @State private var showLanguageExpansionUpdate = false
-    @State private var wasSetUpAtLaunch = SharedStore.loadState().isSetUp
-    @AppStorage("latch.languageExpansionUpdate.shown",
+    @AppStorage(SharedStore.redesignIntroKey, store: SharedStore.defaults)
+    private var redesignIntroSeen = false
+    @AppStorage(SharedStore.redesignWelcomeKey,
                 store: SharedStore.defaults)
-    private var languageExpansionUpdateShown = false
-    @AppStorage("latch.languageExpansionUpdate.reviewRequested",
-                store: SharedStore.defaults)
-    private var languageExpansionReviewRequested = false
-
-    /// During the tutorial, ignore manual tab taps (only programmatic
-    /// step changes move tabs); otherwise pass through.
-    private var tabSelection: Binding<Int> {
-        Binding(get: { model.selectedTab },
-                set: { if model.tutorial == nil { model.selectedTab = $0 } })
-    }
+    private var redesignWelcomeSeen = false
+    @AppStorage("latch.languageExpansionUpdate.reviewRequested", store: SharedStore.defaults)
+    private var updateReviewRequested = false
 
     private var mainTabView: some View {
-        TabView(selection: tabSelection) {
-            HomeView()
-                .tabItem { Label(tr("Home"), systemImage: "hourglass") }
-                .badge(model.state.pending.count)
-                .tag(0)
-            LimitsView()
-                .tabItem { Label(tr("Limits"), systemImage: "apps.iphone") }
-                .tag(1)
-            SchedulesView()
-                .tabItem { Label(tr("Schedules"), systemImage: "calendar.badge.clock") }
-                .tag(2)
-            SettingsView()
-                .tabItem { Label(tr("Settings"), systemImage: "gearshape") }
-                .badge(model.incomingInviteCount)
-                .tag(3)
+        VStack(spacing: 0) {
+            currentTab
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            DemoraTabBar(selection: $model.selectedTab,
+                         locked: model.inTutorial,
+                         pendingCount: model.state.pending.count,
+                         inviteCount: model.incomingInviteCount)
+        }
+        .background(Ink.paper.ignoresSafeArea())
+    }
+
+    @ViewBuilder private var currentTab: some View {
+        switch model.selectedTab {
+        case 1: LimitsView()
+        case 2: SchedulesView()
+        case 3: SettingsView()
+        case 4: DelaysOverridesTabView()
+        default: HomeView()
         }
     }
 
@@ -131,7 +134,30 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if model.state.isSetUp || model.tutorial != nil {
+            if model.setupStorageUnavailable {
+                VStack(alignment: .leading, spacing: 24) {
+                    DemoraPageTitle(title: tr("Your setup is safe"))
+                    Text(tr("Demora could not finish reading or backing up your saved setup. Nothing has been reset. Try again, or contact hello@getdemora.app before reinstalling."))
+                        .foregroundStyle(Ink.faint)
+                    Button(tr("Try again")) { model.retrySetupStorage() }
+                        .buttonStyle(DemoraPrimaryButtonStyle())
+                    Link("hello@getdemora.app", destination: URL(string: "mailto:hello@getdemora.app")!)
+                }
+                .padding(26).frame(maxWidth: 640).frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Ink.paper.ignoresSafeArea())
+            } else if RedesignIntroGate.shouldShow(
+                storageUnavailable: model.setupStorageUnavailable,
+                tutorialActive: model.tutorial != nil,
+                welcomeSeen: redesignWelcomeSeen, introSeen: redesignIntroSeen
+            ) {
+                RedesignIntroView { redesignIntroSeen = true }
+            } else if model.state.isSetUp, model.tutorial == nil, !redesignWelcomeSeen {
+                RedesignWelcomeView {
+                    redesignWelcomeSeen = true
+                    SharedStore.defaults.set(true, forKey: "latch.languageExpansionUpdate.shown")
+                    requestUpdateReviewIfNeeded()
+                }
+            } else if model.state.isSetUp || model.tutorial != nil {
                 Group {
                     if model.tutorial != nil
                         && UIDevice.current.userInterfaceIdiom == .pad {
@@ -164,7 +190,7 @@ struct RootView: View {
                     TutorialFinishView()
                 }
                 .alert(
-                    model.queueNotice != nil ? tr("Already pending")
+                    model.queueNotice != nil ? tr(model.queueNoticeIsCapacity ? "Background monitoring limit" : "Already pending")
                                              : tr("Trusted contact removed"),
                     isPresented: Binding(
                         get: { model.queueNotice != nil || model.contactNotice != nil },
@@ -179,32 +205,89 @@ struct RootView: View {
                 OnboardingView()
             }
         }
-        .onAppear { presentLanguageExpansionIfNeeded() }
-        .fullScreenCover(
-            isPresented: $showLanguageExpansionUpdate,
-            onDismiss: requestLanguageExpansionReviewIfNeeded
-        ) {
-            LanguageExpansionUpdateView {
-                languageExpansionUpdateShown = true
+    }
+
+    private func requestUpdateReviewIfNeeded() {
+        // Preserve the existing once-only post-update review opportunity.
+        // StoreKit decides whether to show its prompt; never ask on each launch.
+        guard redesignWelcomeSeen, !updateReviewRequested,
+              !model.setupStorageUnavailable else { return }
+        updateReviewRequested = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { requestReview() }
+    }
+}
+
+/// The five destinations in the redesign use an app-owned navigation bar
+/// instead of the system TabView chrome. It leaves system permission sheets
+/// and app pickers native, where replacing them would reduce accessibility.
+private struct DemoraTabBar: View {
+    @AppAccent private var accent
+    @Binding var selection: Int
+    let locked: Bool
+    let pendingCount: Int
+    let inviteCount: Int
+
+    private let items: [(Int, String, String)] = [
+        (4, "Delays", "hourglass"),
+        (1, "Limits", "square.stack.3d.up"),
+        (0, "Home", "house.fill"),
+        (2, "Schedules", "calendar"),
+        (3, "Settings", "slider.horizontal.3")
+    ]
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(items, id: \.0) { item in
+                Button {
+                    guard !locked else { return }
+                    withAnimation(.easeInOut(duration: 0.18)) { selection = item.0 }
+                } label: {
+                    VStack(spacing: 6) {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: item.2)
+                                .font(.system(size: item.0 == 0 ? 19 : 17,
+                                              weight: .regular))
+                                .foregroundStyle(selection == item.0
+                                                 ? accent : Ink.faint)
+                                .frame(width: 44, height: 26)
+                            let count = item.0 == 0 ? pendingCount
+                                : (item.0 == 3 ? inviteCount : 0)
+                            if count > 0 {
+                                Circle().fill(Ink.danger)
+                                    .frame(width: 7, height: 7)
+                                    .offset(x: -2, y: 2)
+                            }
+                        }
+                        Text(tr(item.1))
+                            .font(.system(size: 10, weight: selection == item.0
+                                          ? .semibold : .regular, design: .monospaced))
+                            .foregroundStyle(selection == item.0
+                                             ? Ink.ink : Ink.faint)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .overlay(alignment: .top) {
+                        if selection == item.0 {
+                            Rectangle().fill(accent).frame(width: 24, height: 2)
+                                .offset(y: -10)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tr(item.1))
+                .accessibilityAddTraits(selection == item.0 ? [.isSelected] : [])
             }
         }
-    }
-
-    private func presentLanguageExpansionIfNeeded() {
-        guard wasSetUpAtLaunch,
-              model.tutorial == nil,
-              !languageExpansionUpdateShown,
-              !showLanguageExpansionUpdate else { return }
-        showLanguageExpansionUpdate = true
-    }
-
-    private func requestLanguageExpansionReviewIfNeeded() {
-        guard !languageExpansionReviewRequested else { return }
-        languageExpansionReviewRequested = true
-        // Let the update cover finish dismissing before asking StoreKit. Apple
-        // retains final control over whether its native rating prompt appears.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            requestReview()
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 4)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Ink.rule).frame(height: 1)
         }
+        .frame(maxWidth: 700)
+        .frame(maxWidth: .infinity)
+        .background(Ink.paper.ignoresSafeArea(edges: .bottom))
     }
 }

@@ -34,6 +34,7 @@ struct PasscodeFormatWarning: View {
 /// passcode-store section) and the Help guide (without it — the passcode has
 /// its own screen there).
 struct PreventDisablingContent: View {
+    @AppAccent private var accent
     @EnvironmentObject var model: AppModel
     var showsPasscodeStore = true
     @State private var codeDraft = ""
@@ -45,7 +46,7 @@ struct PreventDisablingContent: View {
 
             Label(tr("Takes about 2 minutes, and you need a second person physically with you."),
                   systemImage: "person.2.fill")
-                .font(.footnote.weight(.medium)).foregroundStyle(Ink.accent)
+                .font(.footnote.weight(.medium)).foregroundStyle(accent)
 
             step(1, tr("Open Settings → Screen Time on this iPhone. If it's off, turn it on."))
             step(2, tr("Tap “Lock Screen Time Settings” (or “Use Screen Time Passcode”)."))
@@ -79,7 +80,7 @@ struct PreventDisablingContent: View {
                     PasscodeFormatWarning(code: codeDraft)
                     if !model.screenTimeCode.isEmpty {
                         Text(String(format: tr("Saved passcode: %@"), model.screenTimeCode))
-                            .font(.footnote.monospaced()).foregroundStyle(Ink.accent)
+                            .font(.footnote.monospaced()).foregroundStyle(accent)
                     }
                 }
                 .onAppear { codeDraft = model.screenTimeCode }
@@ -89,7 +90,7 @@ struct PreventDisablingContent: View {
 
     private func step(_ n: Int, _ text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text("\(n)").font(.headline).foregroundStyle(Ink.accent)
+            Text("\(n)").font(.headline).foregroundStyle(accent)
                 .frame(width: 20, alignment: .trailing)
             Text(text).font(.subheadline)
         }
@@ -103,7 +104,7 @@ struct PreventDisablingGateView: View {
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: gridCols, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 NavigationLink { PreventGuideGateView() } label: {
                     GridCard(symbol: "book", title: tr("Guide"),
                              subtitle: tr("how to lock it with a friend"))
@@ -200,7 +201,7 @@ struct PasscodeHubView: View {
                 Text(tr("The friend who set the Screen Time passcode can store it here so it isn't lost. Going back without saving keeps the current one."))
                     .font(.footnote).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                LazyVGrid(columns: gridCols, spacing: 14) {
+                VStack(alignment: .leading, spacing: 0) {
                     if hasCode {
                         Button { confirmChange = true } label: {
                             GridCard(symbol: "pencil", title: tr("Change passcode"),
@@ -244,19 +245,26 @@ struct PasscodeEntrySheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    DemoraPageTitle(title: tr("Screen Time passcode"))
+                    VStack(alignment: .leading, spacing: 12) {
                     TextField(tr("Passcode"), text: $draft)
                         .keyboardType(.numberPad)
                         .autocorrectionDisabled()
                         .font(.title2.monospaced())
                         .multilineTextAlignment(.center)
                     PasscodeFormatWarning(code: draft)
-                } footer: {
                     Text(tr("The friend who set the Screen Time passcode can store it here so it isn't lost. Going back without saving keeps the current one."))
+                        .font(.footnote).foregroundStyle(Ink.faint)
+                    }
+                    .demoraSurface()
                 }
+                .padding(20)
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity)
             }
-            .paper()
+            .background(Ink.paper.ignoresSafeArea())
             .casedNavigationTitle(tr("Screen Time passcode"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -278,6 +286,7 @@ struct PasscodeEntrySheet: View {
 /// Viewing the stored passcode: its own delayed, single-use gate, mirroring
 /// the guide — request → wait (or override) → one look → locks again.
 struct PasscodeViewGateView: View {
+    @AppAccent private var accent
     @EnvironmentObject var model: AppModel
     @State private var revealed: String?
     // Re-render each second so the countdown→ready transition shows live.
@@ -291,7 +300,7 @@ struct PasscodeViewGateView: View {
                     Label(String(format: tr("Saved passcode: %@"), revealed),
                           systemImage: "key.fill")
                         .font(.title3.monospaced().bold())
-                        .foregroundStyle(Ink.accent)
+                        .foregroundStyle(accent)
                     Text(tr("Access is spent — viewing it again needs a new request."))
                         .font(.footnote).foregroundStyle(.secondary)
                 } else if model.passwordViewReady {

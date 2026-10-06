@@ -1,8 +1,7 @@
 //
 //  Theme.swift
-//  Editorial paper-and-ink look, matching the website: warm paper
-//  background, serif type, a single teal accent. Colors adapt to
-//  light/dark via dynamic providers.
+//  Demora's daily-journal language: open paper, fine rules, time threads,
+//  serif waits, and blue or brick-red ink. Colors adapt to light and dark.
 //
 
 import SwiftUI
@@ -49,10 +48,12 @@ enum TextCasing: String, CaseIterable, Identifiable {
     var textCase: Text.Case? { self == .lower ? .lowercase : nil }
 }
 
-// MARK: - Grid card
+// MARK: - Open navigation rows
 
-/// A square-ish tile used across the grid-style screens (Schedules, Settings).
+/// Kept under its original name for existing destinations. Navigation now
+/// reads like entries in a journal, rather than a dashboard of boxed tiles.
 struct GridCard: View {
+    @AppAccent private var accent
     let symbol: String
     let title: String
     let subtitle: String
@@ -60,29 +61,207 @@ struct GridCard: View {
     var showsDot: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Image(systemName: symbol).font(.title2).foregroundStyle(Ink.accent)
-            Spacer(minLength: 12)
-            Text(title).font(.headline).foregroundStyle(Ink.ink)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 18) {
+                Image(systemName: symbol)
+                    .font(.system(size: 23, weight: .light))
+                    .foregroundStyle(accent)
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title)
+                        .font(.system(.title3, design: .serif))
+                        .foregroundStyle(Ink.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !subtitle.isEmpty {
+                        Text(subtitle).font(.subheadline).foregroundStyle(Ink.faint)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text(subtitle).font(.caption).foregroundStyle(Ink.faint)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                if showsDot {
+                    Circle().fill(Ink.danger).frame(width: 7, height: 7)
+                }
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(Ink.faint)
+            }
+            .padding(.vertical, 22)
+            Rectangle().fill(Ink.rule).frame(height: 1)
         }
-        .frame(maxWidth: .infinity, minHeight: 116, alignment: .leading)
-        .padding(16)
-        .background(Ink.ink.opacity(0.04))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Ink.rule, lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(alignment: .topTrailing) {
-            if showsDot {
-                Circle().fill(Color.red)
-                    .frame(width: 10, height: 10)
-                    .padding(12)
+        .multilineTextAlignment(.leading)
+        .contentShape(Rectangle())
+    }
+}
+
+/// A quiet wordmark and an unboxed, book-sized heading on each main tab.
+struct DemoraPageTitle: View {
+    let title: String
+    @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 42
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            Wordmark(size: 20)
+                .foregroundStyle(Ink.faint)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.system(size: titleSize, weight: .regular, design: .serif))
+                .tracking(-1.4)
+                .foregroundStyle(Ink.ink)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A section label that visually separates content without a system Form header.
+struct DemoraSectionTitle: View {
+    @AppAccent private var accent
+    let title: String
+    var symbol: String? = nil
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(title)
+                .font(.system(.caption, design: .monospaced).weight(.medium))
+                .foregroundStyle(Ink.faint)
+                .fixedSize(horizontal: false, vertical: true)
+            Rectangle().fill(Ink.rule).frame(height: 1)
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.system(size: 14, weight: .light))
+                    .foregroundStyle(accent)
+                    .accessibilityHidden(true)
             }
         }
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+struct DemoraPrimaryButtonStyle: ButtonStyle {
+    @AppAccent private var accent
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.headline, design: .serif))
+            .foregroundStyle(Ink.buttonText)
+            .padding(.horizontal, 20)
+            .frame(maxWidth: .infinity, minHeight: 54)
+            .background(accent, in: Capsule())
+            .opacity(isEnabled ? 1 : 0.48)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+/// The position within a calendar day, not a usage estimate. The little ink
+/// mark moves with the actual clock; Screen Time progress stays in its report.
+struct DemoraDayLine: View {
+    @AppAccent private var accent
+    let date: Date
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Canvas { context, size in
+                let hour = Calendar.current.component(.hour, from: date)
+                let minute = Calendar.current.component(.minute, from: date)
+                let position = CGFloat(hour * 60 + minute) / 1440
+                var ticks = Path()
+                for tick in 0...24 {
+                    let x = CGFloat(tick) / 24 * size.width
+                    ticks.move(to: CGPoint(x: x, y: 0))
+                    ticks.addLine(to: CGPoint(x: x, y: tick % 6 == 0 ? 16 : 7))
+                }
+                context.stroke(ticks, with: .color(Ink.rule), lineWidth: 1)
+                let marker = CGRect(x: position * size.width - 2, y: 0,
+                                    width: 4, height: 23)
+                context.fill(Path(roundedRect: marker, cornerRadius: 2),
+                             with: .color(accent))
+            }
+            .frame(height: 24)
+            HStack {
+                Text("00")
+                Spacer()
+                Text(date, style: .time).foregroundStyle(accent)
+                Spacer()
+                Text("24")
+            }
+            .font(.system(.caption2, design: .monospaced))
+            .foregroundStyle(Ink.faint)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(date, style: .time))
+    }
+}
+
+/// Waits are the defining action in Demora, so they get the largest type,
+/// rather than a small subtitle in the same tile as every other preference.
+struct DemoraDelayRow: View {
+    @AppAccent private var accent
+    let title: String
+    let duration: String
+    let symbol: String
+    @ScaledMetric(relativeTo: .largeTitle) private var timeSize: CGFloat = 38
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label(title, systemImage: symbol)
+                    .font(.subheadline).foregroundStyle(Ink.faint)
+                Spacer()
+                Image(systemName: "arrow.up.right")
+                    .font(.callout.weight(.light)).foregroundStyle(accent)
+            }
+            Text(duration)
+                .font(.system(size: timeSize, weight: .regular, design: .serif))
+                .foregroundStyle(Ink.ink)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .demoraSurface()
+        .contentShape(Rectangle())
+    }
+}
+
+struct DemoraToggleStyle: ToggleStyle {
+    @AppAccent private var accent
+    func makeBody(configuration: Configuration) -> some View {
+        Button { configuration.isOn.toggle() } label: {
+            HStack(spacing: 18) {
+                configuration.label
+                    .foregroundStyle(Ink.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                ZStack {
+                    Circle().stroke(configuration.isOn ? accent : Ink.faint,
+                                    lineWidth: 1.5)
+                    if configuration.isOn {
+                        Circle().fill(accent).padding(4)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Ink.buttonText)
+                    }
+                }
+                .frame(width: 28, height: 28)
+            }
+            .frame(minHeight: 48)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(configuration.isOn ? tr("On") : tr("Off"))
+    }
+}
+
+/// A thread connects related events without enclosing each in a box.
+struct DemoraTimelineMark: View {
+    @AppAccent private var accent
+    var color: Color? = nil
+    var body: some View {
+        VStack(spacing: 7) {
+            Circle().stroke(color ?? accent, lineWidth: 1.5).frame(width: 9, height: 9)
+            Rectangle().fill(Ink.rule).frame(width: 1)
+        }
+        .frame(width: 16)
+        .padding(.top, 6)
+        .accessibilityHidden(true)
     }
 }
 
@@ -90,11 +269,14 @@ struct GridCard: View {
 
 /// "demora" with a teal initial — the app's wordmark. Always lowercase.
 struct Wordmark: View {
+    @AppAccent private var accent
     var size: CGFloat = 34
     var weight: Font.Weight = .regular
+    var onDark = false
 
     var body: some View {
-        (Text("d").foregroundColor(Ink.accent) + Text("emora"))
+        (Text("d").foregroundColor(onDark ? $accent : accent)
+         + Text("emora"))
             .font(.system(size: size, weight: weight, design: .serif))
             .textCase(.lowercase)
     }
@@ -102,12 +284,53 @@ struct Wordmark: View {
 
 // MARK: - Palette
 
+private struct DemoraAccentColorKey: EnvironmentKey {
+    static let defaultValue = "blue"
+}
+
+extension EnvironmentValues {
+    var demoraAccentColor: String {
+        get { self[DemoraAccentColorKey.self] }
+        set { self[DemoraAccentColorKey.self] = newValue }
+    }
+}
+
+/// Observe appearance through SwiftUI, not a non-reactive defaults lookup.
+/// Changing color invalidates just the dependent views, preserving navigation,
+/// sheet state, countdowns, and in-progress edits.
+@propertyWrapper
+struct AppAccent: DynamicProperty {
+    @Environment(\.demoraAccentColor) private var rawValue
+    var wrappedValue: Color { Ink.accent(for: rawValue) }
+    var projectedValue: Color { Ink.accentOnDark(for: rawValue) }
+}
+
 enum Ink {
-    static let paper  = dynamic(0xF1EDE3, 0x181714)
-    static let ink    = dynamic(0x1D1D1B, 0xE9E4D8)
-    static let faint  = dynamic(0x6F6A60, 0x948E80)
-    static let rule   = dynamic(0xCFC8B9, 0x3A3730)
-    static let accent = dynamic(0x1D5C63, 0x8EC4CA)
+    static let paper  = dynamic(0xF6F3EB, 0x191C1D)
+    static let ink    = dynamic(0x252E32, 0xEFEDE5)
+    static let faint  = dynamic(0x656C6D, 0xA5ADAE)
+    static let rule   = dynamic(0xD5D6CF, 0x3D4446)
+    static let surface = dynamic(0xFFFCF5, 0x222829)
+    static let hero = dynamic(0x222D2C, 0x303B39)
+    static let heroText = Color(red: 0.97, green: 0.96, blue: 0.92)
+    static let heroMuted = Color(red: 0.73, green: 0.80, blue: 0.77)
+    static let buttonText = dynamic(0xFFFCF5, 0x171D1B)
+    static var accentOnDark: Color {
+        accentOnDark(for: SharedStore.defaults.string(forKey: "latch.accentColor") ?? "blue")
+    }
+    static func accentOnDark(for value: String) -> Color {
+        value == "red"
+            ? Color(red: 0.94, green: 0.63, blue: 0.56)
+            : Color(red: 0.58, green: 0.82, blue: 0.84)
+    }
+    static var accent: Color {
+        accent(for: SharedStore.defaults.string(forKey: "latch.accentColor") ?? "blue")
+    }
+    static func accent(for value: String) -> Color {
+        value == "red"
+            ? dynamic(0xA23B2E, 0xD9877A)
+            : dynamic(0x325F79, 0xA0C5D9)
+    }
     /// Muted brick red for warnings/expiry — warm enough to sit in the paper
     /// palette rather than a neon system red.
     static let danger = dynamic(0xA23B2E, 0xD9877A)
@@ -132,6 +355,16 @@ private extension UIColor {
 // MARK: - Helpers
 
 extension View {
+    /// A section of the same page: a fine rule and breathing room. No separate
+    /// background, shadow, or repeated rounded rectangle around each control.
+    func demoraSurface() -> some View {
+        self.padding(.vertical, 22)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .top) {
+                Rectangle().fill(Ink.rule).frame(height: 1)
+            }
+    }
+
     /// Paper background behind a List/Form.
     func paper() -> some View {
         self.scrollContentBackground(.hidden)
@@ -177,6 +410,7 @@ struct TutorialCountdownText: View {
 }
 
 private struct TutorialHighlight: ViewModifier {
+    @AppAccent private var accent
     let active: Bool
     var ring: Bool = true
     var cornerRadius: CGFloat = 16
@@ -196,7 +430,7 @@ private struct TutorialHighlight: ViewModifier {
             .overlay {
                 if active && ring {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .stroke(Ink.accent, lineWidth: 2)
+                        .stroke(accent, lineWidth: 2)
                         .opacity(pulse ? 0.25 : 1)
                         .padding(-2)
                         .allowsHitTesting(false)

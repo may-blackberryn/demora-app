@@ -299,6 +299,7 @@ enum ContactsRelay {
     struct Decisions {
         var approved = false
         var denied = false
+        var approvedBy = Set<String>()
     }
 
     /// Decisions made after `since` (re-sends reuse the requestId, so older
@@ -334,7 +335,9 @@ enum ContactsRelay {
                                            forCode: approver) else { continue }
             }
             switch decision {
-            case "approved": out.approved = true
+            case "approved":
+                out.approved = true
+                out.approvedBy.insert(approver)
             case "denied": out.denied = true
             default: break
             }
@@ -524,6 +527,11 @@ enum ContactsRelay {
         var email: Bool
         var relay: Bool
         var sentAt: Double
+        /// Optional for decoding pre-scope requests. Those cannot prove which
+        /// contact was asked and fail closed until sent again.
+        var emailContactIDs: [UUID]? = nil
+        var relayContactIDs: [UUID]? = nil
+        var extraContext: ExtraContactContext? = nil
         var id: String { requestId }
     }
 
@@ -539,15 +547,50 @@ enum ContactsRelay {
         }
     }
     static func recordOutgoing(requestId: String, changeIds: [UUID],
-                               email: Bool, relay: Bool) {
+                               email: Bool, relay: Bool,
+                               emailContactIDs: [UUID], relayContactIDs: [UUID]) {
         #if DEBUG
         print("📤 recordOutgoing req=\(requestId.prefix(8)) changeIds=\(changeIds.count)")
         #endif
         var d = outgoingDict()
         d[requestId] = OutgoingRequest(requestId: requestId, changeIds: changeIds,
                                        email: email, relay: relay,
-                                       sentAt: Date().timeIntervalSince1970)
+                                       sentAt: Date().timeIntervalSince1970,
+                                       emailContactIDs: emailContactIDs,
+                                       relayContactIDs: relayContactIDs)
         saveOutgoing(d)
+    }
+
+    static func recordOutgoingExtra(_ context: ExtraContactContext,
+                                    email: Bool, relay: Bool,
+                                    emailContactIDs: [UUID], relayContactIDs: [UUID]) {
+        var d = outgoingDict()
+        d[context.requestID] = OutgoingRequest(
+            requestId: context.requestID, changeIds: [], email: email,
+            relay: relay, sentAt: Date().timeIntervalSince1970,
+            emailContactIDs: emailContactIDs,
+            relayContactIDs: relayContactIDs, extraContext: context)
+        saveOutgoing(d)
+    }
+
+    static func pendingExtraRequest(for limitID: UUID) -> ExtraContactContext? {
+        let now = TimeGuard.now()
+        let state = SharedStore.loadState()
+        return outgoingDict().values.first { request in
+            guard let context = request.extraContext else { return false }
+            return context.limitID == limitID
+                && context.day == SharedStore.dayKey(for: now)
+                && Date().timeIntervalSince1970 - request.sentAt < requestTTL
+                && state.limits.contains { limit in
+                    guard limit.id == limitID,
+                          let steps = limit.extraTime?.effectiveSteps,
+                          steps.indices.contains(context.stepIndex),
+                          steps[context.stepIndex] == context.step,
+                          case .ready(let remaining) = LimitFeatures.extraTimeState(for: limit)
+                    else { return false }
+                    return context.stepIndex == steps.count - remaining
+                }
+        }?.extraContext
     }
     static func outgoingRequests() -> [OutgoingRequest] {
         outgoingDict().values.sorted { $0.sentAt > $1.sentAt }
@@ -577,32 +620,85 @@ enum ContactsRelay {
             return false
         }
 
-        let applied = await consumeApprovedRequest(request)
+        let applied = await consumeApprovedRequest(request,
+                                                  approverCodes: decision?.approvedBy ?? [])
         await approvalProcessingGate.release(request.requestId)
         return applied
     }
 
-    /// The contact sheet already observed a valid approval while polling. It
-    /// still enters the same gate; if another listener consumed it first, the
-    /// missing outgoing record means the work is already complete.
+    /// The contact sheet already observed a valid approval while polling.
+    /// Recheck it through the same authorization path as background listeners.
     static func applyKnownApproval(requestId: String) async -> Bool {
-        await approvalProcessingGate.acquire(requestId)
         guard let request = outgoingDict()[requestId] else {
-            await approvalProcessingGate.release(requestId)
-            return true
+            return false
         }
-        let applied = await consumeApprovedRequest(request)
-        await approvalProcessingGate.release(requestId)
-        return applied
+        return await processApprovalIfAvailable(request)
     }
 
-    private static func consumeApprovedRequest(_ request: OutgoingRequest) async -> Bool {
-        let appliedCount = await ChangeEngine.applyNowOffMain(
-            changeIDs: request.changeIds)
-        clearSent(request.requestId)
-        clearOutgoing(request.requestId)
-        await cleanup(requestId: request.requestId)
-        return appliedCount > 0
+    private static func consumeApprovedRequest(_ request: OutgoingRequest,
+                                               approverCodes: Set<String>) async -> Bool {
+        if let context = request.extraContext {
+            guard Date().timeIntervalSince1970 - request.sentAt < requestTTL else {
+                clearSent(request.requestId)
+                clearOutgoing(request.requestId)
+                await cleanup(requestId: request.requestId)
+                return false
+            }
+            let granted = await ChangeEngine.grantContactExtraTimeOffMain(
+                context: context,
+                source: .relay(contactIDs: request.relayContactIDs ?? [],
+                               approvedCodes: approverCodes))
+            if granted || context.day != SharedStore.dayKey(for: TimeGuard.now())
+                || Date().timeIntervalSince1970 - request.sentAt >= requestTTL {
+                clearSent(request.requestId)
+                clearOutgoing(request.requestId)
+                await cleanup(requestId: request.requestId)
+            }
+            return granted
+        }
+        let appliedCount = await ChangeEngine.applyNowWithContactOffMain(
+            changeIDs: request.changeIds,
+            source: .relay(contactIDs: request.relayContactIDs ?? [],
+                           approvedCodes: approverCodes))
+        if appliedCount > 0 || request.changeIds.allSatisfy({ id in
+            !SharedStore.loadState().pending.contains(where: { $0.id == id })
+        }) {
+            clearSent(request.requestId)
+            clearOutgoing(request.requestId)
+            await cleanup(requestId: request.requestId)
+        }
+        return appliedCount == Set(request.changeIds).count
+    }
+
+    static func consumeVerifiedEmailRequest(requestId: String) async -> Bool {
+        await approvalProcessingGate.acquire(requestId)
+        guard let request = outgoingDict()[requestId], request.email else {
+            await approvalProcessingGate.release(requestId)
+            return false
+        }
+        guard Date().timeIntervalSince1970 - request.sentAt < requestTTL else {
+            clearSent(requestId)
+            clearOutgoing(requestId)
+            await cleanup(requestId: requestId)
+            await approvalProcessingGate.release(requestId)
+            return false
+        }
+        let approved: Bool
+        if let context = request.extraContext {
+            approved = await ChangeEngine.grantContactExtraTimeOffMain(
+                context: context,
+                source: .email(contactIDs: request.emailContactIDs ?? []))
+        } else {
+            let count = await ChangeEngine.applyNowWithContactOffMain(
+                changeIDs: request.changeIds,
+                source: .email(contactIDs: request.emailContactIDs ?? []))
+            approved = count == Set(request.changeIds).count && count > 0
+        }
+        clearSent(requestId)
+        clearOutgoing(requestId)
+        await cleanup(requestId: requestId)
+        await approvalProcessingGate.release(requestId)
+        return approved
     }
 
     // MARK: - Contact invites (consent)

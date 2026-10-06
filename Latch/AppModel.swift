@@ -8,6 +8,7 @@ import SwiftUI
 import Combine
 import CryptoKit
 import FamilyControls
+import DeviceActivity
 import UserNotifications
 import UIKit
 
@@ -16,7 +17,7 @@ import UIKit
 enum TutorialStep: Int {
     case addLimit         // Limits: add your first limit
     case addSchedule      // Schedules: add a recurring schedule
-    case applyBoth        // Home: select both pending and apply via password
+    case applyBoth        // Home: select both pending and apply via contact
     case exploreCalendar  // Schedules: see now & next, open the calendar
     case removeSchedule   // Schedules: remove the recurring schedule
     case removeLimit      // Limits: remove the limit (auto-switched here)
@@ -32,6 +33,7 @@ final class AppModel: ObservableObject {
 
     /// Non-nil while the first-run tutorial is running.
     @Published var tutorial: TutorialStep?
+    @Published var setupStorageUnavailable = false
     var inTutorial: Bool { tutorial != nil }
 
     /// True while replaying the walkthrough from Help (vs the first-run tour).
@@ -53,8 +55,9 @@ final class AppModel: ObservableObject {
     @Published var language: AppLanguage = AppLanguage.current {
         didSet { AppLanguage.current = language }
     }
-    /// Set when a queue attempt is rejected (duplicate); shown as an alert.
+    /// Set when a queue attempt is rejected; shown as an alert.
     @Published var queueNotice: String?
+    @Published var queueNoticeIsCapacity = false
 
     /// Set when a trusted contact revokes their permission; shown as an alert.
     @Published var contactNotice: String?
@@ -80,8 +83,8 @@ final class AppModel: ObservableObject {
     /// in-app "Unavailable" indicator; no notification is sent.
     @Published var unavailableContactCodes: Set<String> = []
 
-    /// Selected bottom tab (0 Home, 1 Limits, 2 Schedules, 3 Settings).
-    /// Published so views can navigate between tabs (e.g. Home → Settings).
+    /// Selected bottom tab (0 Home, 1 Limits, 2 Schedules, 3 Settings,
+    /// 4 Delays & Overrides). Published for cross-tab navigation.
     @Published var selectedTab = 0
 
     /// Navigation path for the Settings tab. Held here (not @State in the view)
@@ -100,13 +103,16 @@ final class AppModel: ObservableObject {
         if SharedStore.isReplaying {
             restoreFromReplay()
         }
+        let replayRestored = !SharedStore.isReplaying
+        if replayRestored { migrateScreenTimeCodeToKeychain() }
+        let migrationSucceeded = replayRestored && SharedStore.prepareRedesignMigration()
+        setupStorageUnavailable = !migrationSucceeded || SharedStore.stateRecoveryNeeded
         // A force-quit mid-tutorial leaves the app not-yet-set-up with leftover
         // dummy data; wipe it so onboarding restarts clean.
-        if !SharedStore.loadState().isSetUp {
+        if migrationSucceeded && !SharedStore.stateRecoveryNeeded && !SharedStore.loadState().isSetUp {
             resetForOnboarding()
         }
         isReplay = SharedStore.isReplaying
-        migrateScreenTimeCodeToKeychain()
         // Fast path so an approved install doesn't flash the banner.
         authorized = AuthorizationCenter.shared.authorizationStatus == .approved
         // authorizationStatus is unreliable — it can read .notDetermined even
@@ -115,7 +121,7 @@ final class AppModel: ObservableObject {
         // when already approved, so confirm with it for a set-up install. It
         // won't prompt unless access is genuinely missing, and never runs during
         // onboarding/the tutorial (which handle authorization themselves).
-        if SharedStore.loadState().isSetUp && tutorial == nil {
+        if !setupStorageUnavailable && SharedStore.loadState().isSetUp && tutorial == nil {
             Task { [weak self] in await self?.verifyAuthorization() }
         }
         // Re-check due changes every 30s while the app is open so a
@@ -128,6 +134,7 @@ final class AppModel: ObservableObject {
 
     /// Apply due changes, prune finished sessions, refresh shields & state.
     func tick() {
+        guard !setupStorageUnavailable else { return }
         guard !housekeepingInFlight else { return }
         housekeepingInFlight = true
         Task { [weak self] in
@@ -372,14 +379,20 @@ final class AppModel: ObservableObject {
     /// into the Keychain.
     private func migrateScreenTimeCodeToKeychain() {
         let s = SharedStore.loadState()
-        guard !s.screenTimeCode.isEmpty else { return }
+        guard !SharedStore.stateRecoveryNeeded, !s.screenTimeCode.isEmpty else { return }
         if Keychain.getString(for: Self.screenTimeCodeKey) == nil {
             Keychain.setString(s.screenTimeCode, for: Self.screenTimeCodeKey)
+            guard Keychain.getString(for: Self.screenTimeCodeKey) == s.screenTimeCode else { return }
         }
-        var t = s
-        t.screenTimeCode = ""
-        SharedStore.save(t)
-        state = t
+        // Remove only the legacy secret before taking a 2.0 backup. Preserve
+        // every other raw field, even keys this version doesn't interpret.
+        guard let raw = SharedStore.defaults.data(forKey: LatchConstants.stateKey),
+              var object = (try? JSONSerialization.jsonObject(with: raw)) as? [String: Any]
+        else { return }
+        object["screenTimeCode"] = ""
+        guard let redacted = try? JSONSerialization.data(withJSONObject: object) else { return }
+        SharedStore.defaults.set(redacted, forKey: LatchConstants.stateKey)
+        state = SharedStore.loadState()
     }
 
     // MARK: - Authorization
@@ -440,6 +453,8 @@ final class AppModel: ObservableObject {
     private func rebuildMonitoringAfterAuthorization() {
         let current = SharedStore.loadState()
         ChangeEngine.reconfigureDailyMonitoring(state: current)
+        LimitFeatures.reconfigureSplitMonitoring(state: current)
+        LimitFeatures.reconcile(state: current)
         ChangeEngine.reconfigureWindowMonitoring(state: current)
         ShieldController.refresh()
     }
@@ -464,9 +479,9 @@ final class AppModel: ObservableObject {
                 case .addSchedule:
                     // A recurring block or a recurring free period both count.
                     if case .addSchedule = action {
-                        freezePending(change.id); advanceTutorial(to: .applyBoth)
+                        freezePending(change.id); advanceTutorial(to: .addContact)
                     } else if case .addExemption = action {
-                        freezePending(change.id); advanceTutorial(to: .applyBoth)
+                        freezePending(change.id); advanceTutorial(to: .addContact)
                     }
                 case .removeSchedule:
                     // The thing they added may be a block schedule or a free
@@ -478,7 +493,7 @@ final class AppModel: ObservableObject {
                     }
                 case .removeLimit:
                     if case .removeLimit = action {
-                        freezePending(change.id); advanceTutorial(to: .addContact)
+                        freezePending(change.id); advanceTutorial(to: .applyViaContact)
                     }
                 default:
                     break
@@ -486,7 +501,10 @@ final class AppModel: ObservableObject {
             }
         } else {
             haptic.notificationOccurred(.error)
-            queueNotice = tr("A change for this setting is already pending. Cancel it on the Home tab first if you want something different.")
+            let capacityNotice = MonitorRegistration.rejectionMessage
+            queueNoticeIsCapacity = capacityNotice != nil
+            queueNotice = capacityNotice
+                ?? tr("A change for this setting is already pending. Cancel it on the Home tab first if you want something different.")
         }
         return change
     }
@@ -528,8 +546,7 @@ final class AppModel: ObservableObject {
     // MARK: - Guided tutorial
 
     /// Start the first-run tutorial from a clean slate, with dummy delays
-    /// (5 min strict / 15 min lenient) and overrides where only the password
-    /// works (the password is "test"). Nothing is marked set-up yet.
+    /// (5 min strict / 15 min lenient). Nothing is marked set-up yet.
     func beginTutorial() {
         var s = SharedStore.loadState()
         s.limits = []; s.schedules = []; s.exemptions = []
@@ -537,8 +554,6 @@ final class AppModel: ObservableObject {
         s.strictDelay = 5 * 60
         s.lenientDelay = 15 * 60
         var o = OverridesConfig()
-        o.mathEnabled = true; o.mathDifficulty = .elementary
-        o.passwordEnabled = true; o.passwordHash = AppModel.hash("test")
         o.contactsEnabled = false
         s.overrides = o
         s.isSetUp = false
@@ -600,7 +615,7 @@ final class AppModel: ObservableObject {
         if s.overrides.contacts.isEmpty { s.overrides.contacts.append(c) }
         SharedStore.save(s)
         state = s
-        advanceTutorial(to: .applyViaContact)
+        advanceTutorial(to: .applyBoth)
     }
 
     /// When the current tutorial change was frozen — anchors the countdown.
@@ -676,23 +691,34 @@ final class AppModel: ObservableObject {
         selectedTab = 0
         settingsPath = []
         ChangeEngine.reconfigureDailyMonitoring(state: s)
+        LimitFeatures.resetForNewDay()
+        LimitFeatures.reconfigureSplitMonitoring(state: s)
         ChangeEngine.reconfigureWindowMonitoring(state: s)
         ShieldController.refresh()
     }
     #endif
 
     private func restoreFromReplay() {
+        guard !SharedStore.stateRecoveryNeeded,
+              let backup = SharedStore.loadBackup() else {
+            setupStorageUnavailable = true
+            return
+        }
+        guard SharedStore.save(backup) else {
+            setupStorageUnavailable = true
+            return
+        }
+        SharedStore.isReplaying = false
+        guard !SharedStore.isReplaying else { setupStorageUnavailable = true; return }
+        SharedStore.clearBackup()
         tutorial = nil
         SharedStore.simulating = false
-        if let backup = SharedStore.loadBackup() {
-            SharedStore.save(backup)
-            state = backup
-        }
-        SharedStore.clearBackup()
-        SharedStore.isReplaying = false
+        state = backup
         isReplay = false
         SharedStore.saveBlockedLimitIDs([])
         ChangeEngine.reconfigureDailyMonitoring(state: state)
+        LimitFeatures.reconfigureSplitMonitoring(state: state)
+        LimitFeatures.reconcile(state: state)
         ChangeEngine.reconfigureWindowMonitoring(state: state)
         ShieldController.refresh()
         selectedTab = 0
@@ -702,7 +728,8 @@ final class AppModel: ObservableObject {
                         lenientDelay: TimeInterval,
                         overrides: OverridesConfig,
                         blockAppRemoval: Bool = false,
-                        blockAdultWebsites: Bool = false) {
+                        blockAdultWebsites: Bool = false,
+                        delayMode: DelayMode = .separate) {
         // A replay ends by restoring the real setup, not writing a new one.
         if SharedStore.isReplaying { restoreFromReplay(); return }
         tutorial = nil
@@ -713,16 +740,18 @@ final class AppModel: ObservableObject {
         s.schedules = []
         s.exemptions = []
         s.sessions = []
-        s.strictDelay = strictDelay
-        s.lenientDelay = lenientDelay
+        s.delayPolicy = DelayPolicy(mode: delayMode, strictDelay: strictDelay, lenientDelay: lenientDelay)
         s.overrides = overrides
         s.blockAppRemoval = blockAppRemoval
         s.blockAdultWebsites = blockAdultWebsites
         s.isSetUp = true
         SharedStore.save(s)
+        SharedStore.defaults.set(true, forKey: SharedStore.redesignWelcomeKey)
         SharedStore.saveBlockedLimitIDs([])
         state = s
         ChangeEngine.reconfigureDailyMonitoring(state: s)
+        LimitFeatures.resetForNewDay()
+        LimitFeatures.reconfigureSplitMonitoring(state: s)
         ChangeEngine.reconfigureWindowMonitoring(state: s)
         ShieldController.refresh()
         selectedTab = 0
@@ -731,12 +760,15 @@ final class AppModel: ObservableObject {
     /// Wipe any leftover tutorial state so a force-quit mid-tutorial starts the
     /// walkthrough fresh (the app only marks itself set up at the very end).
     func resetForOnboarding() {
+        guard !SharedStore.stateRecoveryNeeded else { return }
         SharedStore.simulating = false
         let s = LatchState()
         SharedStore.save(s)
         SharedStore.saveBlockedLimitIDs([])
         state = s
         ChangeEngine.reconfigureDailyMonitoring(state: s)
+        LimitFeatures.resetForNewDay()
+        LimitFeatures.reconfigureSplitMonitoring(state: s)
         ChangeEngine.reconfigureWindowMonitoring(state: s)
         ShieldController.refresh()
     }
@@ -744,7 +776,54 @@ final class AppModel: ObservableObject {
     /// Direction an action *would* have — used to show "this will take X" hints.
     func preview(_ action: ChangeAction) -> (ChangeDirection, TimeInterval) {
         let dir = ChangeEngine.classify(action, state: state)
-        return (dir, dir == .stricter ? state.strictDelay : state.lenientDelay)
+        return (dir, state.delayPolicy.delay(for: dir))
+    }
+
+    /// Fresh setup commits only its drafts. The migration welcome has a separate
+    /// one-time additive day/night path; it never calls or resets this setup.
+    func completeInitialSetup(policy: DelayPolicy, firstLimit: AppLimit?,
+                              dayNightGroups: [DayNightGroup] = [],
+                              overrides: OverridesConfig = OverridesConfig()) async -> Bool {
+        MonitorRegistration.clearRejection()
+        guard policy.isValid, overrides.isValidInitialSetup,
+              !setupStorageUnavailable, !SharedStore.stateRecoveryNeeded,
+              !SharedStore.isReplaying, !SharedStore.loadState().isSetUp else { return false }
+        if let limit = firstLimit {
+            guard (1...720).contains(limit.minutesPerDay),
+                  !limit.selection.applicationTokens.isEmpty
+                    || !limit.selection.categoryTokens.isEmpty
+                    || !limit.selection.webDomainTokens.isEmpty else { return false }
+        }
+        var setup = LatchState()
+        setup.delayPolicy = policy
+        setup.overrides = overrides
+        if let firstLimit { setup.limits = [firstLimit] }
+        guard DayNightGroup.isValidCollection(dayNightGroups, limits: setup.limits) else { return false }
+        setup.dayNightGroups = dayNightGroups
+        setup.dayNightSetupDone = true
+        setup.isSetUp = true
+        let running = Set(DeviceActivityCenter().activities.map(\.rawValue))
+        guard MonitorRegistration.admit(state: setup, running: running) else { return false }
+        SharedStore.simulating = false
+        guard SharedStore.save(setup), SharedStore.loadState().isSetUp else { return false }
+        state = SharedStore.loadState()
+        SharedStore.defaults.set(true, forKey: SharedStore.redesignWelcomeKey)
+        SharedStore.defaults.set(true, forKey: SharedStore.redesignMigrationKey)
+        SharedStore.defaults.set(true, forKey: "latch.languageExpansionUpdate.shown")
+        selectedTab = 0
+        await ChangeEngine.ensureMonitoringOffMain()
+        return true
+    }
+
+    func retrySetupStorage() {
+        if SharedStore.isReplaying { restoreFromReplay() }
+        guard !SharedStore.isReplaying else { return }
+        migrateScreenTimeCodeToKeychain()
+        guard SharedStore.prepareRedesignMigration(), !SharedStore.stateRecoveryNeeded else { return }
+        state = SharedStore.loadState()
+        setupStorageUnavailable = false
+        tick()
+        if state.isSetUp { Task { await verifyAuthorization() } }
     }
 
     // MARK: - Limit usage
@@ -770,6 +849,25 @@ final class AppModel: ObservableObject {
         SharedStore.save(s)
         state = s
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
+    /// Preserves the old "know the current password → change it now" path.
+    /// Only the secret changes; permission edits still require a queued delay.
+    func updatePasswordPolicySecretNow(id: UUID, current: String,
+                                       newPassword: String) -> Bool {
+        guard !current.isEmpty, !newPassword.isEmpty else { return false }
+        var s = SharedStore.loadState()
+        guard let index = s.overrides.passwordPolicies.firstIndex(where: { $0.id == id }),
+              s.overrides.passwordPolicies[index].hash == AppModel.hash(current),
+              !s.pending.contains(where: {
+                  ChangeEngine.conflictKey($0.action)
+                      == "passwordPolicy-\(id.uuidString)"
+              }) else { return false }
+        s.overrides.passwordPolicies[index].hash = AppModel.hash(newPassword)
+        SharedStore.save(s)
+        state = s
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        return true
     }
 
     // MARK: - Password hashing

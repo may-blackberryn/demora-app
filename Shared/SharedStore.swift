@@ -8,6 +8,174 @@ import Foundation
 
 struct SharedStore {
     static let defaults = UserDefaults(suiteName: LatchConstants.appGroupID)!
+    static let redesignMigrationKey = "latch.redesign2.migrated"
+    static let redesignWelcomeKey = "latch.redesign2.welcomeSeen"
+    static let redesignIntroKey = "latch.redesign2.introSeen"
+    static var canSetUpInitialDayNight: Bool {
+        guard !stateRecoveryNeeded else { return false }
+        return canSetUpInitialDayNight(in: defaults, state: loadState())
+    }
+
+    static func canSetUpInitialDayNight(in defaults: UserDefaults, state: LatchState) -> Bool {
+        state.isSetUp && !state.dayNightSetupDone && state.dayNightGroups.isEmpty
+            && defaults.bool(forKey: redesignMigrationKey)
+            && !defaults.bool(forKey: redesignWelcomeKey)
+            && !defaults.bool(forKey: "latch.stateRecoveryNeeded")
+            && !defaults.bool(forKey: "latch.redesign2.migrationUnverified")
+    }
+
+    /// Additive, one-shot welcome allowance. Never edits an existing gate.
+    static func initialDayNightState(_ groups: [DayNightGroup], state: LatchState,
+                                     in defaults: UserDefaults) -> LatchState? {
+        guard canSetUpInitialDayNight(in: defaults, state: state), !groups.isEmpty,
+              DayNightGroup.isValidCollection(groups, limits: state.limits) else { return nil }
+        var updated = state
+        updated.dayNightGroups = groups
+        updated.dayNightSetupDone = true
+        return updated
+    }
+    static let mathReplacementEligibleKey = "latch.redesign2.mathReplacement.eligible"
+    static let mathReplacementCapturedKey = "latch.redesign2.mathReplacement.captured"
+    static let mathReplacementConsumedKey = "latch.redesign2.mathReplacement.consumed"
+
+    static var canReplaceLegacyMath: Bool {
+        guard !stateRecoveryNeeded else { return false }
+        return canReplaceLegacyMath(in: defaults, state: loadState())
+    }
+
+    static func canReplaceLegacyMath(in defaults: UserDefaults, state: LatchState) -> Bool {
+        state.isSetUp && !state.mathPhraseReplacementDone
+            && !defaults.bool(forKey: mathReplacementConsumedKey)
+            && defaults.bool(forKey: redesignMigrationKey)
+            && defaults.bool(forKey: mathReplacementEligibleKey)
+            && !defaults.bool(forKey: redesignWelcomeKey)
+            && !defaults.bool(forKey: "latch.stateRecoveryNeeded")
+            && !defaults.bool(forKey: "latch.redesign2.migrationUnverified")
+    }
+
+    /// Only the original math gate's pending-change permissions can be
+    /// replaced. Extra-time access is a new feature and still delay-gated.
+    static func mathReplacementState(_ policies: [PhrasePolicy], state: LatchState,
+                                     in defaults: UserDefaults) -> LatchState? {
+        let legacyScope = Set(OverrideCapability.allCases.filter { $0 != .extraTime })
+        guard canReplaceLegacyMath(in: defaults, state: state),
+              (1...5).contains(policies.count),
+              Set(policies.map(\.id)).count == policies.count,
+              policies.allSatisfy({ policy in
+                  PhraseWords.isValid(policy) && policy.allowed.isSubset(of: legacyScope)
+                      && !state.overrides.phrasePolicies.contains(where: { $0.id == policy.id })
+              }) else { return nil }
+        var replacement = state
+        replacement.overrides.phrasePolicies.append(contentsOf: policies)
+        replacement.mathPhraseReplacementDone = true
+        return replacement
+    }
+
+    private static var stateCoordinationURL: URL? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: LatchConstants.appGroupID)?
+            .appendingPathComponent("stateMutation.lock")
+    }
+
+    /// Shared by app and monitor writers. Nested saves stay on the same
+    /// transaction rather than trying to acquire the coordination a second time.
+    static func coordinateStateMutation<T>(_ body: () -> T) -> T? {
+        let threadKey = "demora.stateMutation.coordinating"
+        if Thread.current.threadDictionary[threadKey] as? Bool == true { return body() }
+        guard let url = stateCoordinationURL else { return nil }
+        var result: T?
+        var error: NSError?
+        var publish = false
+        NSFileCoordinator().coordinate(writingItemAt: url, options: .forMerging, error: &error) { _ in
+            Thread.current.threadDictionary[threadKey] = true
+            defer { Thread.current.threadDictionary.removeObject(forKey: threadKey) }
+            result = body()
+            publish = Thread.current.threadDictionary["demora.stateMutation.publish"] as? Bool == true
+            Thread.current.threadDictionary.removeObject(forKey: "demora.stateMutation.publish")
+        }
+        if error != nil { return nil }
+        // Notification and WidgetKit services run only after coordination is
+        // released. Project the latest saved state, not a stale caller snapshot.
+        if publish {
+            let state = loadState()
+            DemoraNotifications.rescheduleFreeBoundaries(state: state)
+            DemoraWidgetSnapshot.publish(state: state)
+        }
+        return result
+    }
+    static var stateRecoveryNeeded: Bool {
+        defaults.bool(forKey: "latch.stateRecoveryNeeded")
+            || defaults.bool(forKey: "latch.redesign2.migrationUnverified")
+    }
+
+    /// Back up the exact legacy bytes before committing the tolerant decoded
+    /// representation. Decoding changes retire only the documented legacy
+    /// features; they do not recalculate IDs, deadlines, budgets, or usage.
+    /// Never substitute a blank setup if migration cannot be verified.
+    @discardableResult
+    static func prepareRedesignMigration() -> Bool {
+        prepareRedesignMigration(in: defaults)
+    }
+
+    /// The same migration can run against an isolated developer-preview suite.
+    /// Only this explicit store is touched: no monitors, widgets or live usage.
+    @discardableResult
+    static func prepareRedesignMigration(in defaults: UserDefaults) -> Bool {
+        guard let raw = defaults.data(forKey: LatchConstants.stateKey) else { return true }
+        do {
+            let state = try JSONDecoder().decode(LatchState.self, from: raw)
+            defaults.set(false, forKey: "latch.stateRecoveryNeeded")
+            guard state.isSetUp else { return true }
+            // Capture before tolerant decoding retires the old switches. An
+            // existing redesign backup also supports installations that ran
+            // the migration before this replacement offer was introduced.
+            if !defaults.bool(forKey: mathReplacementCapturedKey) {
+                let legacy = defaults.data(forKey: LatchConstants.stateKey + ".preRedesign2") ?? raw
+                let json = try JSONSerialization.jsonObject(with: legacy) as? [String: Any]
+                let overrides = json?["overrides"] as? [String: Any]
+                let eligible = overrides?["mathEnabled"] as? Bool ?? false
+                defaults.set(eligible, forKey: mathReplacementEligibleKey)
+                defaults.set(true, forKey: mathReplacementCapturedKey)
+                guard defaults.bool(forKey: mathReplacementCapturedKey),
+                      defaults.bool(forKey: mathReplacementEligibleKey) == eligible else {
+                    defaults.set(true, forKey: "latch.redesign2.migrationUnverified")
+                    return false
+                }
+            }
+            if defaults.bool(forKey: redesignMigrationKey) {
+                defaults.set(false, forKey: "latch.redesign2.migrationUnverified")
+                return true
+            }
+            // The app migrates a legacy passcode into Keychain first. Never
+            // create a durable plain-text copy of that secret in this backup.
+            guard state.screenTimeCode.isEmpty else { return false }
+            let backupKey = LatchConstants.stateKey + ".preRedesign2"
+            if defaults.data(forKey: backupKey) == nil {
+                defaults.set(raw, forKey: backupKey)
+                guard defaults.data(forKey: backupKey) == raw else {
+                    defaults.set(true, forKey: "latch.redesign2.migrationUnverified")
+                    return false
+                }
+            }
+            let migrated = try JSONEncoder().encode(state)
+            defaults.set(migrated, forKey: LatchConstants.stateKey)
+            guard defaults.data(forKey: LatchConstants.stateKey) == migrated else {
+                defaults.set(true, forKey: "latch.redesign2.migrationUnverified")
+                return false
+            }
+            defaults.set(true, forKey: redesignMigrationKey)
+            guard defaults.bool(forKey: redesignMigrationKey) else {
+                defaults.set(true, forKey: "latch.redesign2.migrationUnverified")
+                return false
+            }
+            defaults.set(false, forKey: "latch.redesign2.migrationUnverified")
+            return true
+        } catch {
+            defaults.set(raw, forKey: LatchConstants.stateKey + ".corrupt")
+            defaults.set(true, forKey: "latch.stateRecoveryNeeded")
+            NSLog("Demora: migration could not decode saved setup; original retained.")
+            return false
+        }
+    }
 
     /// True only during the first-run tutorial. While set, no real Screen Time
     /// shields or monitors are applied — the app goes through the motions but
@@ -32,7 +200,9 @@ struct SharedStore {
             return LatchState()   // genuinely fresh install
         }
         do {
-            return try JSONDecoder().decode(LatchState.self, from: data)
+            let state = try JSONDecoder().decode(LatchState.self, from: data)
+            defaults.set(false, forKey: "latch.stateRecoveryNeeded")
+            return state
         } catch {
             // Don't silently wipe a user's setup: log, and stash the unreadable
             // bytes so they're recoverable rather than overwritten by the blank
@@ -40,17 +210,50 @@ struct SharedStore {
             NSLog("Demora: state decode failed (%@). Preserved raw blob.",
                   String(describing: error))
             defaults.set(data, forKey: LatchConstants.stateKey + ".corrupt")
+            defaults.set(true, forKey: "latch.stateRecoveryNeeded")
             return LatchState()
         }
     }
 
-    static func save(_ state: LatchState) {
+    @discardableResult
+    static func save(_ state: LatchState) -> Bool {
+        coordinateStateMutation {
+            let saved = saveCoordinated(state)
+            if saved { Thread.current.threadDictionary["demora.stateMutation.publish"] = true }
+            return saved
+        } ?? false
+    }
+
+    private static func saveCoordinated(_ state: LatchState) -> Bool {
+        guard !stateRecoveryNeeded else {
+            NSLog("Demora: refusing to overwrite an unreadable saved setup.")
+            return false
+        }
+        // A stale UI/replay snapshot cannot undo the consumed migration grant.
+        let previousState = defaults.data(forKey: LatchConstants.stateKey)
+            .flatMap { try? JSONDecoder().decode(LatchState.self, from: $0) }
+        let previousReplacementDone = previousState?.mathPhraseReplacementDone ?? false
+        if previousState?.dayNightSetupDone == true, !state.dayNightSetupDone {
+            NSLog("Demora: refusing stale state that would undo initial day/night setup.")
+            return false
+        }
+        if (defaults.bool(forKey: mathReplacementConsumedKey) || previousReplacementDone),
+           !state.mathPhraseReplacementDone {
+            NSLog("Demora: refusing stale state that would undo a completed phrase replacement.")
+            return false
+        }
         do {
             let data = try JSONEncoder().encode(state)
             defaults.set(data, forKey: LatchConstants.stateKey)
+            guard defaults.data(forKey: LatchConstants.stateKey) == data else {
+                NSLog("Demora: state save could not be verified; kept recoverable backups.")
+                return false
+            }
+            return true
         } catch {
             NSLog("Demora: state encode failed (%@). Kept previous state.",
                   String(describing: error))
+            return false
         }
     }
 
@@ -123,6 +326,7 @@ struct SharedStore {
                 }
             }
         }
+        DemoraWidgetSnapshot.publish(state: loadState())
     }
 
     /// Safely load, modify, and save the blocked limit IDs with an atomic lock
@@ -152,6 +356,7 @@ struct SharedStore {
                 }
             }
         }
+        DemoraWidgetSnapshot.publish(state: loadState())
     }
 
     // MARK: - Limit threshold verification
@@ -218,6 +423,7 @@ struct SharedStore {
     private static let freeCreditKey = "latch.freeCreditByLimit.v1"
     private static let freeWindowUsageKey = "latch.freeWindowUsage.v1"
     private static let freeWindowStartKey = "latch.freeWindowStart.v1"
+    private static let freeWindowTrackingEpochKey = "latch.freeWindowTrackingEpoch.v1"
     private static let freeWindowBlockedSnapshotKey = "latch.freeWindowBlockedSnapshot.v1"
     private static let freeWindowSuppressedLimitsKey = "latch.freeWindowSuppressedLimits.v1"
 
@@ -250,6 +456,14 @@ struct SharedStore {
             return t > 0 ? Date(timeIntervalSince1970: t) : nil
         }
         set { defaults.set(newValue?.timeIntervalSince1970 ?? 0, forKey: freeWindowStartKey) }
+    }
+
+    /// Distinguishes callbacks from the current free-window monitor from
+    /// delayed callbacks after a limit's selection changed and tracking was
+    /// rearmed with different app tokens.
+    static var freeWindowTrackingEpoch: String? {
+        get { defaults.string(forKey: freeWindowTrackingEpochKey) }
+        set { defaults.set(newValue, forKey: freeWindowTrackingEpochKey) }
     }
 
     /// The limits that were genuinely blocked before the current free window.
@@ -296,6 +510,7 @@ struct SharedStore {
         saveFreeCreditByLimit([:])
         saveFreeWindowUsage([:])
         freeWindowStart = nil
+        freeWindowTrackingEpoch = nil
         freeWindowBlockedSnapshot = nil
         clearFreeWindowSuppressedLimitIDs()
         clearLimitThresholdCallbacks()

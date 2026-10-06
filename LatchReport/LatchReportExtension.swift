@@ -48,6 +48,12 @@ private struct MiniLimit: Decodable {
     var name: String
     var selection: FamilyActivitySelection
     var minutesPerDay: Int
+    var weekdayMinutes: [Int: Int]?
+
+    func minutes(on date: Date) -> Int {
+        weekdayMinutes?[Calendar.current.component(.weekday, from: date)]
+            ?? minutesPerDay
+    }
 }
 private struct MiniState: Decodable {
     var limits: [MiniLimit]
@@ -104,7 +110,7 @@ struct LimitsUsageReport: nonisolated DeviceActivityReportScene {
             for t in limit.selection.categoryTokens { used += perCat[t] ?? 0 }
             return LimitUsageRow(id: limit.id, name: limit.name,
                                  usedMinutes: Int(used / 60),
-                                 budget: limit.minutesPerDay)
+                                 budget: limit.minutes(on: Date()))
         }
     }
 

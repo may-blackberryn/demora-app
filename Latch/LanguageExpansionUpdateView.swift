@@ -16,11 +16,6 @@ struct LanguageExpansionUpdateView: View {
     @State private var showLanguageBetaNotice = false
     @State private var dismissAfterBetaNotice = false
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14)
-    ]
-
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -42,7 +37,7 @@ struct LanguageExpansionUpdateView: View {
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
 
-                    LazyVGrid(columns: columns, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 0) {
                         ForEach(AppLanguage.allCases) { language in
                             Button {
                                 selectedLanguage = language

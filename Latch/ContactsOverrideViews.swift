@@ -104,6 +104,7 @@ struct ContactAvatarView: View {
 
 /// A reusable editor section: pick photo / emoji / symbol+color (one of).
 struct AvatarEditorView: View {
+    @AppAccent private var accent
     @Binding var avatar: ContactAvatar
     @State private var pickerSource: ImagePickerSource?
 
@@ -165,7 +166,7 @@ struct AvatarEditorView: View {
                             Text(e).font(.system(size: 24))
                                 .frame(width: 38, height: 38)
                                 .background((avatar.emoji == e
-                                             ? Ink.accent.opacity(0.18) : Color.clear),
+                                             ? accent.opacity(0.18) : Color.clear),
                                             in: Circle())
                         }
                         .buttonStyle(.plain)
@@ -527,7 +528,7 @@ extension ContactAvatar {
     }
 }
 
-/// A square, tappable contact tile used across the contact grids.
+/// A person's identity on an open, ruled row.
 struct ContactSquare<Destination: View>: View {
     let avatar: ContactAvatar?
     let name: String
@@ -537,43 +538,101 @@ struct ContactSquare<Destination: View>: View {
 
     var body: some View {
         NavigationLink { destination() } label: {
-            VStack(spacing: 8) {
-                ContactAvatarView(avatar: avatar, size: 54)
-                Text(name).font(.subheadline.weight(.medium))
-                    .lineLimit(1).foregroundStyle(Ink.ink)
+            HStack(spacing: 16) {
+                ContactAvatarView(avatar: avatar, size: 44)
+                VStack(alignment: .leading, spacing: 5) {
+                Text(name).font(.system(.title3, design: .serif))
+                    .fixedSize(horizontal: false, vertical: true).foregroundStyle(Ink.ink)
                 if let subtitle {
                     Text(subtitle).font(.caption2).foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .textCase(nil)
                 }
                 if let badge {
                     Text(badge.text).font(.caption2.bold())
-                        .padding(.horizontal, 7).padding(.vertical, 2)
-                        .background(badge.color.opacity(0.15), in: Capsule())
                         .foregroundStyle(badge.color)
                 }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "arrow.up.right")
+                    .font(.callout.weight(.light)).foregroundStyle(Ink.faint)
             }
-            .frame(maxWidth: .infinity).frame(height: 134)
-            .padding(8)
-            .background(Ink.ink.opacity(0.04))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Ink.rule, lineWidth: 1))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .demoraSurface()
         }
         .buttonStyle(.plain)
     }
 }
 
-let contactGridCols = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+/// Profile and permissions are separate links, so options need no profile detour.
+struct TrustedContactApprovalRow: View {
+    let contact: TrustedContact
+    @EnvironmentObject private var model: AppModel
+
+    private var name: String {
+        if let code = contact.latchUserCode {
+            return resolvedName(forCode: code, model: model, fallback: tr("Unnamed"))
+        }
+        return contact.name.isEmpty ? tr("Unnamed") : contact.name
+    }
+
+    private var avatar: ContactAvatar? {
+        if let code = contact.latchUserCode { return resolvedAvatar(forCode: code, model: model) }
+        return contact.avatar
+    }
+
+    private var status: String {
+        if contact.isPending { return tr("Pending") }
+        if let code = contact.latchUserCode, model.unavailableContactCodes.contains(code) {
+            return tr("Unavailable")
+        }
+        return tr("Active")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            NavigationLink {
+                if contact.isEmail {
+                    EmailContactProfileView(contactID: contact.id)
+                } else {
+                    ContactProfileView(contactID: contact.id)
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    ContactAvatarView(avatar: avatar, size: 44)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(name).font(.system(.title3, design: .serif))
+                            .foregroundStyle(Ink.ink)
+                        Text(contact.detail).font(.caption).foregroundStyle(Ink.faint)
+                            .textCase(nil)
+                        Text(status).font(.caption.weight(.semibold)).foregroundStyle(Ink.faint)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                        .foregroundStyle(Ink.faint)
+                }
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            ContactApprovalSummary(contact: contact)
+            Divider().overlay(Ink.rule)
+        }
+    }
+}
 
 // MARK: - Settings editor
 
 struct ContactsOverrideEditor: View {
+    @AppAccent private var accent
     @EnvironmentObject var model: AppModel
     @State private var invites: [ContactsRelay.IncomingInvite] = []
     @State private var showTutorialAddContact = false
+    @State private var showAddContact = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
+                DemoraPageTitle(title: tr("Trusted contacts"))
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 if model.tutorial == .addContact && model.tutorialScreen == "contacts" {
                     Button { showTutorialAddContact = true } label: {
                         Label(tr("Add a contact"),
@@ -581,25 +640,49 @@ struct ContactsOverrideEditor: View {
                             .font(.headline)
                             .frame(maxWidth: .infinity)
                             .padding(14)
-                            .background(Ink.ink.opacity(0.04))
-                            .overlay(RoundedRectangle(cornerRadius: 16)
-                                .stroke(Ink.rule, lineWidth: 1))
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .background(Ink.surface, in: RoundedRectangle(cornerRadius: 22))
+                            .overlay(RoundedRectangle(cornerRadius: 22)
+                                .strokeBorder(Ink.rule, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .tutorialHighlight(true)
                 }
                 overrideCard
-                if !invites.isEmpty { invitesCard }
-                LazyVGrid(columns: gridCols, spacing: 14) {
-                    NavigationLink { MyInfoView() } label: {
-                        GridCard(symbol: "person.text.rectangle", title: tr("My info"),
-                                 subtitle: ContactsRelay.myName.isEmpty
-                                    ? ContactsRelay.myCode : ContactsRelay.myName)
+                VStack(alignment: .leading, spacing: 12) {
+                    DemoraSectionTitle(title: tr("People who approve for you"), symbol: "person.2")
+                    Text(tr("Choose approval permissions separately for each contact."))
+                        .font(.footnote).foregroundStyle(Ink.faint)
+                    if model.state.overrides.contacts.isEmpty {
+                        Text(tr("No contacts yet")).font(.subheadline).foregroundStyle(Ink.faint)
+                    } else {
+                        ForEach(model.state.overrides.contacts) { contact in
+                            TrustedContactApprovalRow(contact: contact)
+                        }
                     }
-                    NavigationLink { ContactsHubView() } label: {
-                        GridCard(symbol: "person.2", title: tr("Contacts"),
-                                 subtitle: tr("approvers, blocked"))
+                    Button {
+                        if model.tutorial == .addContact { showTutorialAddContact = true }
+                        else { showAddContact = true }
+                    } label: {
+                        Label(tr("Add a contact"), systemImage: "person.badge.plus")
+                    }
+                    .buttonStyle(.plain).foregroundStyle(accent)
+                    .padding(.vertical, 8)
+                }
+                if !invites.isEmpty { invitesCard }
+                VStack(alignment: .leading, spacing: 0) {
+                    NavigationLink { MyInfoView() } label: {
+                        GridCard(symbol: "number", title: tr("My code"),
+                                 subtitle: ContactsRelay.myCode)
+                    }
+                    NavigationLink { ApproveForView() } label: {
+                        GridCard(symbol: "person.crop.circle.badge.checkmark",
+                                 title: tr("People you approve for"),
+                                 subtitle: tr("Trusted contacts"))
+                    }
+                    NavigationLink { BlockedUsersView() } label: {
+                        GridCard(symbol: "hand.raised", title: tr("Blocked users"),
+                                 subtitle: String(format: tr("%d total"),
+                                                  ContactsRelay.blockedCodes().count))
                     }
                 }
             }
@@ -620,6 +703,7 @@ struct ContactsOverrideEditor: View {
         .sheet(isPresented: $showTutorialAddContact) {
             AddContactView(onAdd: { model.addTutorialContact($0) }, tutorialMode: true)
         }
+        .sheet(isPresented: $showAddContact) { AddContactView() }
     }
 
     private var overrideCard: some View {
@@ -631,7 +715,7 @@ struct ContactsOverrideEditor: View {
                 Text(tr("Trusted-contact override")).font(.headline)
                 Spacer()
                 Text(enabled ? tr("On") : tr("Off"))
-                    .foregroundStyle(enabled ? Ink.accent : Ink.faint)
+                    .foregroundStyle(enabled ? accent : Ink.faint)
             }
             Button(enabled ? tr("Queue: turn off") : tr("Queue: turn on")) {
                 model.queue(action)
@@ -641,10 +725,7 @@ struct ContactsOverrideEditor: View {
                          dir.label, delay.shortDelayLabel), systemImage: "clock")
                 .font(.footnote).foregroundStyle(.secondary)
         }
-        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Ink.ink.opacity(0.04))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Ink.rule, lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .demoraSurface()
     }
 
     private var invitesCard: some View {
@@ -671,10 +752,7 @@ struct ContactsOverrideEditor: View {
                 .padding(.vertical, 2)
             }
         }
-        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Ink.ink.opacity(0.04))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Ink.rule, lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .demoraSurface()
     }
 
     private func respond(_ invite: ContactsRelay.IncomingInvite, accept: Bool) {
@@ -695,7 +773,7 @@ struct ContactsHubView: View {
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: gridCols, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 NavigationLink { ContactsDetailView() } label: {
                     GridCard(symbol: "person.crop.circle.badge.plus",
                              title: tr("People who approve for you"),
@@ -723,31 +801,43 @@ struct ContactsHubView: View {
 // MARK: - My info
 
 struct MyInfoView: View {
+    @AppAccent private var accent
     @State private var myName = ""
 
     var body: some View {
-        Form {
-            Section {
-                TextField(tr("Your name (optional)"), text: $myName)
-                    .textInputAutocapitalization(.words)
-                    .onChange(of: myName) { newValue in ContactsRelay.myName = newValue }
-            } header: {
-                Text(tr("Your name"))
-            } footer: {
-                Text(tr("Shown to people you ask to approve, so they know it's you."))
-            }
-            Section {
-                HStack {
-                    Text(tr("My code"))
-                    Spacer()
-                    Text(ContactsRelay.myCode)
-                        .font(.body.monospaced().bold()).textSelection(.enabled)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                DemoraPageTitle(title: tr("My info"))
+                VStack(alignment: .leading, spacing: 12) {
+                    DemoraSectionTitle(title: tr("Your name"), symbol: "person.crop.circle")
+                    TextField(tr("Your name (optional)"), text: $myName)
+                        .textFieldStyle(.plain)
+                        .font(.system(.title3, design: .serif))
+                        .textInputAutocapitalization(.words)
+                        .onChange(of: myName) { newValue in ContactsRelay.myName = newValue }
+                    Text(tr("Shown to people you ask to approve, so they know it's you."))
+                        .font(.footnote).foregroundStyle(Ink.faint)
                 }
-            } footer: {
-                Text(tr("Share this code so another Demora user can add you. You get a request to accept before it's active."))
+                .demoraSurface()
+                VStack(alignment: .leading, spacing: 12) {
+                    DemoraSectionTitle(title: tr("My code"), symbol: "number")
+                    Text(ContactsRelay.myCode)
+                        .font(.system(size: 30, weight: .semibold, design: .monospaced))
+                        .tracking(3)
+                        .foregroundStyle(accent)
+                        .textSelection(.enabled)
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(1)
+                    Text(tr("Share this code so another Demora user can add you. You get a request to accept before it's active."))
+                        .font(.footnote).foregroundStyle(Ink.faint)
+                }
+                .demoraSurface()
             }
+            .padding(20)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
         }
-        .paper()
+        .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(tr("My info"))
         .onAppear { myName = ContactsRelay.myName }
     }
@@ -762,22 +852,15 @@ struct ContactsDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                DemoraPageTitle(title: tr("People who approve for you"))
+                Text(tr("Choose approval permissions separately for each contact."))
+                    .font(.footnote).foregroundStyle(Ink.faint)
                 if model.state.overrides.contacts.isEmpty {
                     Text(tr("No contacts yet")).foregroundStyle(.secondary)
                 } else {
-                    LazyVGrid(columns: contactGridCols, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 12) {
                         ForEach(model.state.overrides.contacts) { contact in
-                            ContactSquare(
-                                avatar: avatarFor(contact),
-                                name: nameFor(contact),
-                                badge: badgeFor(contact)
-                            ) {
-                                if contact.isEmail {
-                                    EmailContactProfileView(contactID: contact.id)
-                                } else {
-                                    ContactProfileView(contactID: contact.id)
-                                }
-                            }
+                            TrustedContactApprovalRow(contact: contact)
                         }
                     }
                 }
@@ -798,25 +881,6 @@ struct ContactsDetailView: View {
         .sheet(isPresented: $showAdd) { AddContactView() }
     }
 
-    // Demora-user contacts share their name/avatar with the "people you approve
-    // for" list; email contacts keep their own.
-    private func nameFor(_ c: TrustedContact) -> String {
-        if let code = c.latchUserCode {
-            return resolvedName(forCode: code, model: model, fallback: tr("Unnamed"))
-        }
-        return c.name.isEmpty ? tr("Unnamed") : c.name
-    }
-    private func avatarFor(_ c: TrustedContact) -> ContactAvatar? {
-        if let code = c.latchUserCode { return resolvedAvatar(forCode: code, model: model) }
-        return c.avatar
-    }
-    private func badgeFor(_ c: TrustedContact) -> (text: String, color: Color) {
-        if c.isPending { return (tr("Pending"), .orange) }
-        if let code = c.latchUserCode, model.unavailableContactCodes.contains(code) {
-            return (tr("Unavailable"), .gray)
-        }
-        return (tr("Active"), .green)
-    }
 }
 
 /// Optional out-of-band verification for a Demora-user contact: a safety code
@@ -830,7 +894,8 @@ struct ContactVerificationSection: View {
         let fingerprint = ContactCrypto.verificationCode(forCode: code)
         let verified = fingerprint != nil
             && ContactsRelay.verifiedFingerprint(forCode: code) == fingerprint
-        Section {
+        VStack(alignment: .leading, spacing: 12) {
+            DemoraSectionTitle(title: tr("Security"), symbol: "checkmark.shield")
             if let fingerprint {
                 HStack {
                     Text(tr("Safety code"))
@@ -849,13 +914,12 @@ struct ContactVerificationSection: View {
                 }
             } else {
                 Text(tr("Available once you've both added each other."))
-                    .font(.footnote).foregroundStyle(.secondary)
+                    .font(.footnote).foregroundStyle(Ink.faint)
             }
-        } header: {
-            Text(tr("Security"))
-        } footer: {
             Text(tr("Compare this code with your contact in person or on a call. If it matches on both phones, no one has tampered with the connection."))
+                .font(.footnote).foregroundStyle(Ink.faint)
         }
+        .demoraSurface()
     }
 }
 
@@ -881,7 +945,13 @@ struct ContactProfileView: View {
     }
 
     var body: some View {
-        Form {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+            DemoraPageTitle(title: navTitle)
+            if let contact {
+                ContactApprovalSummary(contact: contact)
+                Divider().overlay(Ink.rule)
+            }
             AvatarEditorView(avatar: $avatar)
                 .onChange(of: avatar) {
                     model.setContactAvatar(id: contactID, $0)
@@ -889,8 +959,12 @@ struct ContactProfileView: View {
                         ContactsRelay.setAvatar($0, forCode: code)
                     }
                 }
-            Section {
+                .demoraSurface()
+            VStack(alignment: .leading, spacing: 12) {
+                DemoraSectionTitle(title: tr("Name"))
                 TextField(tr("Name (optional)"), text: $name)
+                    .textFieldStyle(.plain)
+                    .font(.system(.title3, design: .serif))
                     .textInputAutocapitalization(.words)
                     .onChange(of: name) { newValue in
                         model.renameContact(id: contactID, to: newValue)
@@ -898,11 +972,11 @@ struct ContactProfileView: View {
                             ContactsRelay.setName(newValue, forCode: code)
                         }
                     }
-            } header: {
-                Text(tr("Name"))
             }
+            .demoraSurface()
             if let code = contact?.latchUserCode {
-                Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    DemoraSectionTitle(title: tr("Demora code"))
                     HStack {
                         Text(tr("Code"))
                         Spacer()
@@ -916,18 +990,20 @@ struct ContactProfileView: View {
                               systemImage: "exclamationmark.triangle")
                             .font(.caption2).foregroundStyle(.orange)
                     }
-                } header: {
-                    Text(tr("Demora code"))
                 }
+                .demoraSurface()
                 ContactVerificationSection(code: code)
             }
-            Section {
-                Button(tr("Remove…"), role: .destructive) {
-                    model.queue(.removeContact(id: contactID))
-                }
+            Button(tr("Remove…"), role: .destructive) {
+                model.queue(.removeContact(id: contactID))
             }
+            .demoraSurface()
+            }
+            .padding(20)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
         }
-        .paper()
+        .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(navTitle)
         .onAppear {
             // Prefer the shared per-code values so a name/photo set from the
@@ -975,32 +1051,41 @@ struct EmailContactProfileView: View {
     }
 
     var body: some View {
-        Form {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+            DemoraPageTitle(title: navTitle)
+            if let contact {
+                ContactApprovalSummary(contact: contact)
+                Divider().overlay(Ink.rule)
+            }
             AvatarEditorView(avatar: $avatar)
                 .onChange(of: avatar) { model.setContactAvatar(id: contactID, $0) }
-            Section {
+                .demoraSurface()
+            VStack(alignment: .leading, spacing: 12) {
+                DemoraSectionTitle(title: tr("Name"))
                 TextField(tr("Name (optional)"), text: $name)
+                    .textFieldStyle(.plain)
+                    .font(.system(.title3, design: .serif))
                     .textInputAutocapitalization(.words)
                     .onChange(of: name) { newValue in
                         model.renameContact(id: contactID, to: newValue)
                     }
-            } header: {
-                Text(tr("Name"))
             }
-            Section {
+            .demoraSurface()
+            VStack(alignment: .leading, spacing: 12) {
+                DemoraSectionTitle(title: tr("Email"))
                 HStack {
-                    Text(tr("Email"))
+                    Text(email).foregroundStyle(Ink.ink).textSelection(.enabled)
                     Spacer()
-                    Text(email).foregroundStyle(.secondary).textSelection(.enabled)
                 }
             }
+            .demoraSurface()
             if contact?.accepted == true {
-                Section {
-                    Label(tr("Confirmed"), systemImage: "checkmark.seal")
-                        .foregroundStyle(.green)
-                }
+                Label(tr("Confirmed"), systemImage: "checkmark.seal")
+                    .foregroundStyle(.green).demoraSurface()
             } else if EmailCodeService.isConfigured {
-                Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    DemoraSectionTitle(title: tr("Confirm by email"))
                     Button(sending ? tr("Sending…")
                            : (inviteSent ? tr("Resend code")
                                          : tr("Send confirmation code"))) {
@@ -1017,30 +1102,32 @@ struct EmailContactProfileView: View {
                         }
                         .disabled(codeInput.count != 6 || verifying)
                     }
-                } header: {
-                    Text(tr("Confirm by email"))
-                } footer: {
                     Text(tr("We email a code to this address. Your contact gives you the code, you enter it here, and then they can approve for you. Until then they can't."))
+                        .font(.footnote).foregroundStyle(Ink.faint)
                 }
+                .demoraSurface()
             } else {
-                Section {
-                    Text(tr("Email contacts aren't available yet in this build."))
-                        .foregroundStyle(.secondary)
-                }
+                Text(tr("Email contacts aren't available yet in this build."))
+                    .foregroundStyle(Ink.faint).demoraSurface()
             }
             if let info {
-                Section { Text(info).font(.footnote).foregroundStyle(.secondary) }
+                Text(info).font(.footnote).foregroundStyle(Ink.faint)
+                    .demoraSurface()
             }
             if let error {
-                Section { Text(error).font(.footnote).foregroundStyle(.red) }
+                Text(error).font(.footnote).foregroundStyle(Ink.danger)
+                    .demoraSurface()
             }
-            Section {
-                Button(tr("Remove…"), role: .destructive) {
-                    model.queue(.removeContact(id: contactID))
-                }
+            Button(tr("Remove…"), role: .destructive) {
+                model.queue(.removeContact(id: contactID))
             }
+            .demoraSurface()
+            }
+            .padding(20)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
         }
-        .paper()
+        .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(navTitle)
         .onAppear {
             name = contact?.name ?? ""
@@ -1099,7 +1186,7 @@ struct ApproveForView: View {
                 if grants.isEmpty {
                     Text(tr("Nobody yet")).foregroundStyle(.secondary)
                 } else {
-                    LazyVGrid(columns: contactGridCols, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 0) {
                         ForEach(grants) { grant in
                             ContactSquare(
                                 avatar: resolvedAvatar(forCode: grant.id, model: model),
@@ -1159,11 +1246,17 @@ struct GrantProfileView: View {
     }
 
     var body: some View {
-        Form {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+            DemoraPageTitle(title: navTitle)
             AvatarEditorView(avatar: $avatar)
                 .onChange(of: avatar) { syncContactAvatar($0, forCode: grant.id, model: model) }
-            Section {
+                .demoraSurface()
+            VStack(alignment: .leading, spacing: 12) {
+                DemoraSectionTitle(title: tr("Name"))
                 TextField(tr("Name (optional)"), text: $name)
+                    .textFieldStyle(.plain)
+                    .font(.system(.title3, design: .serif))
                     .textInputAutocapitalization(.words)
                     .onChange(of: name) { newValue in
                         syncContactName(newValue, forCode: grant.id, model: model)
@@ -1173,37 +1266,43 @@ struct GrantProfileView: View {
                     Spacer()
                     Text(grant.id).foregroundStyle(.secondary).textSelection(.enabled)
                 }
-            } header: {
-                Text(tr("Name"))
-            } footer: {
                 if !grant.ownerName.isEmpty {
                     Text(String(format: tr("They call themselves “%@”."), grant.ownerName))
+                        .font(.footnote).foregroundStyle(Ink.faint)
                 }
             }
+            .demoraSurface()
             ContactVerificationSection(code: grant.id)
-            Section {
+            VStack(alignment: .leading, spacing: 12) {
                 if alreadyContact || added {
                     Label(tr("Added as a trusted contact"), systemImage: "checkmark.seal")
                         .foregroundStyle(.secondary)
                 } else {
                     Button(tr("Add as trusted contact")) { addAsContact() }
                 }
-            } footer: {
                 Text(tr("They'll get a request to accept before they can approve for you. Adding a contact goes through a delay."))
+                    .font(.footnote).foregroundStyle(Ink.faint)
             }
+            .demoraSurface()
             if let error {
-                Section { Text(error).font(.footnote).foregroundStyle(.red) }
+                Text(error).font(.footnote).foregroundStyle(Ink.danger)
+                    .demoraSurface()
             }
-            Section {
+            VStack(alignment: .leading, spacing: 10) {
                 Button(tr("Remove…"), role: .destructive) {
                     onRevoke()
                     dismiss()
                 }
-            } footer: {
                 Text(tr("Removing yourself tells them and stops their requests."))
+                    .font(.footnote).foregroundStyle(Ink.faint)
             }
+            .demoraSurface()
+            }
+            .padding(20)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
         }
-        .paper()
+        .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(navTitle)
         .onAppear {
             name = resolvedName(forCode: grant.id, model: model, fallback: "")
@@ -1233,9 +1332,12 @@ struct SentHistoryView: View {
     @State private var entries: [ContactsRelay.SentRecord] = []
 
     var body: some View {
-        Form {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+            DemoraPageTitle(title: tr("Request history"))
             if entries.isEmpty {
-                Text(tr("No requests yet.")).foregroundStyle(.secondary)
+                Text(tr("No requests yet."))
+                    .foregroundStyle(Ink.faint).demoraSurface()
             }
             ForEach(entries) { e in
                 VStack(alignment: .leading, spacing: 4) {
@@ -1252,10 +1354,14 @@ struct SentHistoryView: View {
                         .formatted(date: .abbreviated, time: .omitted))
                         .font(.caption2).foregroundStyle(.secondary)
                 }
-                .padding(.vertical, 2)
+                .demoraSurface()
             }
+            }
+            .padding(20)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
         }
-        .paper()
+        .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(tr("Request history"))
         .onAppear { entries = ContactsRelay.sentRequestHistory() }
     }
@@ -1280,9 +1386,12 @@ struct RequestHistoryView: View {
     @State private var blocked: Set<String> = []
 
     var body: some View {
-        Form {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+            DemoraPageTitle(title: tr("Request history"))
             if entries.isEmpty {
-                Text(tr("No requests yet.")).foregroundStyle(.secondary)
+                Text(tr("No requests yet."))
+                    .foregroundStyle(Ink.faint).demoraSurface()
             }
             ForEach(entries) { entry in
                 VStack(alignment: .leading, spacing: 4) {
@@ -1315,10 +1424,14 @@ struct RequestHistoryView: View {
                         .buttonStyle(.bordered).controlSize(.small)
                     }
                 }
-                .padding(.vertical, 2)
+                .demoraSurface()
             }
+            }
+            .padding(20)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
         }
-        .paper()
+        .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(tr("Request history"))
         .onAppear(perform: refresh)
     }
@@ -1349,7 +1462,7 @@ struct BlockedUsersView: View {
                 if codes.isEmpty {
                     Text(tr("No blocked users.")).foregroundStyle(.secondary)
                 } else {
-                    LazyVGrid(columns: contactGridCols, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 0) {
                         ForEach(codes, id: \.self) { code in
                             ContactSquare(
                                 avatar: ContactsRelay.avatar(forCode: code),
@@ -1391,10 +1504,13 @@ struct BlockedUserProfileView: View {
     @State private var avatar = ContactAvatar()
 
     var body: some View {
-        Form {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+            DemoraPageTitle(title: name.isEmpty ? tr("Blocked user") : name)
             AvatarEditorView(avatar: $avatar)
                 .onChange(of: avatar) { ContactsRelay.setAvatar($0, forCode: code) }
-            Section {
+                .demoraSurface()
+            VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text(tr("Name"))
                     Spacer()
@@ -1406,14 +1522,18 @@ struct BlockedUserProfileView: View {
                     Text(code).foregroundStyle(.secondary).textSelection(.enabled)
                 }
             }
-            Section {
-                Button(tr("Unblock"), role: .destructive) {
-                    onUnblock()
-                    dismiss()
-                }
+            .demoraSurface()
+            Button(tr("Unblock"), role: .destructive) {
+                onUnblock()
+                dismiss()
             }
+            .demoraSurface()
+            }
+            .padding(20)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
         }
-        .paper()
+        .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(name.isEmpty ? tr("Blocked user") : name)
         .onAppear { avatar = ContactsRelay.avatar(forCode: code) ?? ContactAvatar() }
     }
@@ -1426,6 +1546,8 @@ struct AddContactView: View {
     /// During onboarding, contacts are part of initial setup and apply
     /// instantly — the caller collects them instead of queueing changes.
     var onAdd: ((TrustedContact) -> Void)? = nil
+    var existingContacts: [TrustedContact] = []
+    var isDemo = false
     /// In the guided tutorial: prefill a sample, skip the relay code check,
     /// and show the "normally this takes a delay" note.
     var tutorialMode = false
@@ -1448,15 +1570,26 @@ struct AddContactView: View {
     @State private var emailUsage: EmailCodeService.Usage?
     /// Fresh per add, so re-adding a contact requires a new acceptance.
     @State private var inviteId = UUID().uuidString
+    @State private var allowed = Set(OverrideCapability.allCases.filter { $0 != .extraTime })
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section(tr("Name")) {
-                    TextField(tr("e.g. Mom, Alex"), text: $name)
-                }
-                .disabled(tutorialMode)
-                Section {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    DemoraPageTitle(title: tr("Add contact"))
+                    #if DEBUG
+                    if isDemo { DeveloperDemoNotice() }
+                    #endif
+                    VStack(alignment: .leading, spacing: 12) {
+                        DemoraSectionTitle(title: tr("Name"))
+                        TextField(tr("e.g. Mom, Alex"), text: $name)
+                            .textFieldStyle(.plain)
+                            .font(.system(.title3, design: .serif))
+                    }
+                    .demoraSurface()
+                    .disabled(tutorialMode)
+                    VStack(alignment: .leading, spacing: 14) {
+                    DemoraSectionTitle(title: tr("Type"))
                     Picker(tr("Type"), selection: $type) {
                         ForEach(ContactType.allCases) { Text($0.label).tag($0) }
                     }
@@ -1472,46 +1605,67 @@ struct AddContactView: View {
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
                     }
-                } footer: {
                     VStack(alignment: .leading, spacing: 6) {
                         if type == .email && !EmailCodeService.isConfigured {
                             Text(tr("Email contacts aren't available yet in this build."))
-                                .foregroundStyle(.red)
+                                .foregroundStyle(Ink.danger)
                         } else if type == .latchUser {
                             Text(tr("Ask them for the code in their Demora settings. They'll get a request to accept before they can approve for you."))
                         }
                         Text(tr("Email contacts have a daily send limit; Demora-user contacts don't."))
                     }
+                    .font(.footnote).foregroundStyle(Ink.faint)
                 }
-                .disabled(tutorialMode)
-                if type == .email, EmailCodeService.isConfigured, let u = emailUsage {
-                    Section(tr("Email limit")) {
+                    .demoraSurface()
+                    .disabled(tutorialMode)
+                if !isDemo, type == .email, EmailCodeService.isConfigured, let u = emailUsage {
+                    VStack(alignment: .leading, spacing: 12) {
+                        DemoraSectionTitle(title: tr("Email limit"))
                         EmailUsageBars(usage: u)
                     }
+                    .demoraSurface()
                 }
                 if tutorialMode {
-                    Section {
                         Label(tr("Adding a trusted contact normally waits out a delay. In this tutorial it's instant."),
                               systemImage: "info.circle")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
+                            .font(.footnote).foregroundStyle(Ink.faint)
+                            .demoraSurface()
                 }
                 if let error {
-                    Section {
-                        Text(error).font(.footnote).foregroundStyle(.red)
-                    }
+                    Text(error).font(.footnote).foregroundStyle(Ink.danger)
+                        .demoraSurface()
                 }
                 if onAdd == nil {
-                    Section {
+                    VStack(alignment: .leading, spacing: 8) {
                         let (dir, delay) = model.preview(.addContact(draft))
                         Label(String(format: tr("%@ — takes effect in %@"),
                                      dir.label, delay.shortDelayLabel),
                               systemImage: "clock")
-                            .font(.footnote).foregroundStyle(.secondary)
+                            .font(.footnote).foregroundStyle(Ink.faint)
                     }
+                    .demoraSurface()
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(tr("Allowed uses")).font(.headline)
+                        ForEach(OverrideCapability.allCases) { area in
+                            Toggle(area.label, isOn: Binding(
+                                get: { allowed.contains(area) },
+                                set: { enabled in
+                                    if enabled { allowed.insert(area) }
+                                    else { allowed.remove(area) }
+                                }))
+                        }
+                        Text(tr("This contact must confirm before they can approve."))
+                            .font(.footnote).foregroundStyle(Ink.faint)
+                    }
+                    .demoraSurface()
                 }
+                }
+                .padding(20)
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity)
             }
-            .paper()
+            .background(Ink.paper.ignoresSafeArea())
             .casedNavigationTitle(tr("Add contact"))
             .onAppear {
                 if tutorialMode {
@@ -1521,7 +1675,7 @@ struct AddContactView: View {
                 }
             }
             .task {
-                if EmailCodeService.isConfigured {
+                if !isDemo && !tutorialMode && EmailCodeService.isConfigured {
                     emailUsage = try? await EmailCodeService.usage()
                 }
             }
@@ -1547,17 +1701,23 @@ struct AddContactView: View {
         switch type {
         case .email:
             return TrustedContact(name: name, kind: .email(
-                email.trimmingCharacters(in: .whitespaces).lowercased()),
-                accepted: false, inviteId: inviteId)
+                email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()),
+                accepted: false, inviteId: inviteId, allowed: allowed)
         case .latchUser:
             return TrustedContact(name: name, kind: .latchUser(code:
-                buddyCode.trimmingCharacters(in: .whitespaces).uppercased()),
-                accepted: false, inviteId: inviteId)
+                buddyCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()),
+                accepted: false, inviteId: inviteId, allowed: allowed)
         }
     }
 
     private var isValid: Bool {
-        guard !name.isEmpty else { return false }
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        if onAdd != nil {
+            var config = OverridesConfig()
+            config.contacts = [draft]
+            config.contactsEnabled = true
+            guard config.isValidInitialSetup else { return false }
+        }
         switch type {
         case .email:
             return EmailCodeService.isConfigured && email.contains("@")
@@ -1567,7 +1727,8 @@ struct AddContactView: View {
     }
 
     private func submit() async {
-        let dupExists = model.state.overrides.contacts.contains { existing in
+        let contacts = onAdd == nil ? model.state.overrides.contacts : existingContacts
+        let dupExists = contacts.contains { existing in
             switch (existing.kind, draft.kind) {
             case let (.email(a), .email(b)): return a == b
             case let (.latchUser(a), .latchUser(b)): return a == b
@@ -1579,11 +1740,11 @@ struct AddContactView: View {
             return
         }
         if case .latchUser(let code) = draft.kind {
-            guard code != ContactsRelay.myCode else {
+            guard isDemo || code != ContactsRelay.myCode else {
                 error = tr("That's your own code — add someone else.")
                 return
             }
-            if !tutorialMode {
+            if !tutorialMode && !isDemo {
                 checking = true
                 defer { checking = false }
                 let exists = (try? await ContactsRelay.codeExists(code)) ?? false
@@ -1608,6 +1769,7 @@ struct AddContactView: View {
 /// daily and monthly pools — drawn as small bars. Shown anywhere an email is
 /// about to be sent (asking a contact to approve, or adding an email contact).
 struct EmailUsageBars: View {
+    @AppAccent private var accent
     let usage: EmailCodeService.Usage
 
     private func pct(_ a: Int, _ b: Int) -> Int {
@@ -1639,7 +1801,7 @@ struct EmailUsageBars: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.secondary.opacity(0.2))
-                    Capsule().fill(Ink.accent)
+                    Capsule().fill(accent)
                         .frame(width: max(3, geo.size.width * min(1, max(0, fraction))))
                 }
             }
@@ -1652,6 +1814,7 @@ struct EmailUsageBars: View {
 
 struct ContactGateView: View {
     let changes: [PendingChange]
+    var extraContext: ExtraContactContext? = nil
     /// Show the requested-change list at the top. On when opened standalone
     /// (from Home); off inside OverrideGateView, which already shows it.
     var showChangeList: Bool = false
@@ -1661,11 +1824,17 @@ struct ContactGateView: View {
     @Environment(\.dismiss) private var dismiss
 
     /// One request id covers the whole group (the first change's id).
-    private var reqId: String { changes.first?.id.uuidString ?? "" }
+    private var reqId: String {
+        extraContext?.requestID ?? changes.first?.id.uuidString ?? ""
+    }
 
     /// What the contact is asked to approve — every change, not just the first.
     private var combinedSummary: String {
-        changes.count == 1
+        if let extraContext {
+            return String(format: tr("Extra time for %@: %d usage minutes"),
+                          extraContext.limitName, extraContext.step.minutes)
+        }
+        return changes.count == 1
             ? (changes.first?.summary ?? "")
             : String(format: tr("%d changes: %@"), changes.count,
                      changes.map(\.summary).joined(separator: " • "))
@@ -1685,26 +1854,47 @@ struct ContactGateView: View {
     @State private var deniedDetected = false
     @State private var usage: EmailCodeService.Usage?
 
-    private var contacts: [TrustedContact] { model.state.overrides.contacts }
+    private var contacts: [TrustedContact] {
+        model.state.overrides.contacts.filter { contact in
+            if extraContext != nil { return contact.allowed.contains(.extraTime) }
+            return changes.allSatisfy { change in
+                guard let area = ChangeEngine.overrideCapability(for: change.action) else {
+                    return false
+                }
+                return contact.allowed.contains(area)
+            }
+        }
+    }
     private var selectedContacts: [TrustedContact] {
         contacts.filter { selected.contains($0.id) }
     }
 
     var body: some View {
         NavigationStack {
-            Form {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                DemoraPageTitle(title: tr("Ask a contact"))
+                if extraContext != nil {
+                    VStack(alignment: .leading, spacing: 10) {
+                        DemoraSectionTitle(title: tr("Requested extra time"))
+                        Text(combinedSummary).font(.subheadline)
+                    }
+                    .demoraSurface()
+                }
                 if showChangeList {
-                    Section {
+                    VStack(alignment: .leading, spacing: 10) {
+                        DemoraSectionTitle(title: changes.count == 1
+                                           ? tr("Requested change")
+                                           : tr("Requested changes"))
                         ForEach(changes) { c in
                             Text(c.summary).font(.subheadline)
                         }
-                    } header: {
-                        Text(changes.count == 1 ? tr("Requested change")
-                                                : tr("Requested changes"))
                     }
+                    .demoraSurface()
                 }
                 if !sent {
-                    Section {
+                    VStack(alignment: .leading, spacing: 12) {
+                        DemoraSectionTitle(title: tr("Who should approve?"))
                         ForEach(contacts) { contact in
                             let unusable = contact.isPending
                                 || (contact.isEmail && !EmailCodeService.isConfigured)
@@ -1735,35 +1925,37 @@ struct ContactGateView: View {
                             .tint(.primary)
                             .disabled(unusable)
                         }
-                    } header: {
-                        Text(tr("Who should approve?"))
-                    } footer: {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(tr("Any one approval unlocks the change."))
                             Text(tr("Email contacts have a daily send limit; Demora-user contacts don't."))
                         }
+                        .font(.footnote).foregroundStyle(Ink.faint)
                     }
-                    Section {
+                    .demoraSurface()
+                    VStack(alignment: .leading, spacing: 12) {
+                        DemoraSectionTitle(title: tr("Message (optional)"))
                         TextField(tr("e.g. why you need this"),
                                   text: $message, axis: .vertical)
                             .lineLimit(2...4)
-                    } header: {
-                        Text(tr("Message (optional)"))
-                    } footer: {
                         Text(tr("Sent along with the request so they know why you're asking."))
+                            .font(.footnote).foregroundStyle(Ink.faint)
                     }
-                    Section {
+                    .demoraSurface()
+                    VStack(alignment: .leading, spacing: 12) {
                         Button(sending ? tr("Sending…") : tr("Send request")) {
                             Task { await send() }
                         }
+                        .buttonStyle(DemoraPrimaryButtonStyle())
                         .disabled(selected.isEmpty || sending)
                         if let u = usage, contacts.contains(where: \.isEmail) {
                             EmailUsageBars(usage: u)
                         }
                     }
+                    .demoraSurface()
                 } else {
                     if emailSent {
-                        Section {
+                        VStack(alignment: .leading, spacing: 12) {
+                            DemoraSectionTitle(title: tr("Email code"))
                             TextField(tr("6-digit code"), text: $codeInput)
                                 .keyboardType(.numberPad)
                                 .font(.title2.monospaced())
@@ -1772,18 +1964,17 @@ struct ContactGateView: View {
                                 Task { await verifyCode() }
                             }
                             .disabled(codeInput.count != 6 || verifying)
-                        } header: {
-                            Text(tr("Email code"))
-                        } footer: {
                             Text(tr("Your contact received a code by email. Enter it here. It expires in 15 minutes."))
+                                .font(.footnote).foregroundStyle(Ink.faint)
                         }
+                        .demoraSurface()
                     }
                     if latchSent {
-                        Section {
+                        VStack(alignment: .leading, spacing: 12) {
                             if deniedDetected {
                                 Label(tr("Your request was denied."),
                                       systemImage: "hand.raised")
-                                    .foregroundStyle(.red)
+                                    .foregroundStyle(Ink.danger)
                             } else {
                                 HStack {
                                     ProgressView()
@@ -1791,27 +1982,35 @@ struct ContactGateView: View {
                                         .foregroundStyle(.secondary)
                                 }
                             }
-                        } footer: {
                             if !deniedDetected {
                                 Text(tr("Checks automatically every few seconds. The request expires after 1 hour."))
+                                    .font(.footnote).foregroundStyle(Ink.faint)
                             }
                         }
+                        .demoraSurface()
                     }
-                    Section {
-                        Button(tr("Send a new request…")) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Button(extraContext == nil ? tr("Send a new request…")
+                               : tr("Cancel and start again")) {
                             Task { await startOver() }
                         }
-                    } footer: {
-                        Text(tr("Cancels this request and lets you pick contacts again."))
+                        Text(extraContext == nil
+                             ? tr("Cancels this request and lets you pick contacts again.")
+                             : tr("Cancel this request, then reopen extra time to choose contacts again."))
+                            .font(.footnote).foregroundStyle(Ink.faint)
                     }
+                    .demoraSurface()
                 }
                 if let error {
-                    Section {
-                        Text(error).font(.footnote).foregroundStyle(.red)
-                    }
+                    Text(error).font(.footnote).foregroundStyle(Ink.danger)
+                        .demoraSurface()
                 }
+                }
+                .padding(20)
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity)
             }
-            .paper()
+            .background(Ink.paper.ignoresSafeArea())
             .casedNavigationTitle(tr("Ask a contact"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1843,7 +2042,27 @@ struct ContactGateView: View {
         sending = true
         defer { sending = false }
         error = nil
+        if extraContext != nil && !model.state.overrides.contactsEnabled {
+            error = tr("Trusted-contact approvals are turned off.")
+            return
+        }
+        if let extraContext {
+            guard extraContext.day == SharedStore.dayKey(for: TimeGuard.now()),
+                  let limit = SharedStore.loadState().limits.first(where: {
+                      $0.id == extraContext.limitID
+                  }),
+                  let steps = limit.extraTime?.effectiveSteps,
+                  steps.indices.contains(extraContext.stepIndex),
+                  steps[extraContext.stepIndex] == extraContext.step,
+                  case .ready(let remaining) = LimitFeatures.extraTimeState(for: limit),
+                  extraContext.stepIndex == steps.count - remaining,
+                  ContactsRelay.pendingExtraRequest(for: extraContext.limitID) == nil else {
+                error = tr("This extra-time use is no longer available.")
+                return
+            }
+        }
         let requestId = reqId
+        let recipients = selectedContacts
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         let fullSummary = trimmed.isEmpty
             ? combinedSummary
@@ -1851,11 +2070,11 @@ struct ContactGateView: View {
         var emailOK = false
         var codesOK = false
         do {
-            let emails: [String] = selectedContacts.compactMap {
+            let emails: [String] = recipients.compactMap {
                 if case .email(let address) = $0.kind { return address }
                 return nil
             }
-            let codes: [String] = selectedContacts.compactMap {
+            let codes: [String] = recipients.compactMap {
                 if case .latchUser(let code) = $0.kind { return code }
                 return nil
             }
@@ -1890,9 +2109,22 @@ struct ContactGateView: View {
         // Record whatever actually went out — even on a partial failure — so
         // Home's "Awaiting approval" list matches reality.
         if emailOK || codesOK {
-            ContactsRelay.recordOutgoing(requestId: requestId,
-                                         changeIds: changes.map(\.id),
-                                         email: emailOK, relay: codesOK)
+            let emailIDs = emailOK ? recipients.filter(\.isEmail).map(\.id) : []
+            let relayIDs = codesOK ? recipients.filter {
+                $0.latchUserCode != nil
+            }.map(\.id) : []
+            if let extraContext {
+                ContactsRelay.recordOutgoingExtra(extraContext,
+                                                  email: emailOK, relay: codesOK,
+                                                  emailContactIDs: emailIDs,
+                                                  relayContactIDs: relayIDs)
+            } else {
+                ContactsRelay.recordOutgoing(requestId: requestId,
+                                             changeIds: changes.map(\.id),
+                                             email: emailOK, relay: codesOK,
+                                             emailContactIDs: emailIDs,
+                                             relayContactIDs: relayIDs)
+            }
             sent = true
         }
     }
@@ -1947,6 +2179,7 @@ struct ContactGateView: View {
         deniedDetected = false
         error = nil
         codeInput = ""
+        if extraContext != nil { dismiss() }
     }
 
     @MainActor
@@ -1954,21 +2187,38 @@ struct ContactGateView: View {
         pollTask?.cancel()
         if relayApproved {
             _ = await ContactsRelay.applyKnownApproval(requestId: reqId)
-            // The relay consumer already committed the approved changes. Run
-            // the caller's completion too: its idempotent apply refreshes the
-            // model and, when this sheet is nested in OverrideGateView, closes
-            // the parent gate instead of leaving a stale pending-change screen.
+            guard requestWasApplied else {
+                error = approvalError
+                return
+            }
             await onSuccess()
         } else {
-            // Email verification has already proved the override. Wait until
-            // the serialized off-main application finishes before forgetting
-            // the request, so interruption cannot lose an approved change.
+            // Verification proves the code, but current per-contact scopes
+            // are checked again on the serialized application queue.
+            _ = await ContactsRelay.consumeVerifiedEmailRequest(requestId: reqId)
+            guard requestWasApplied else {
+                error = approvalError
+                return
+            }
             await onSuccess()
-            ContactsRelay.clearSent(reqId)
-            ContactsRelay.clearOutgoing(reqId)
-            await ContactsRelay.cleanup(requestId: reqId)
         }
         dismiss()
+    }
+
+    private var requestWasApplied: Bool {
+        if let extraContext {
+            return extraContext.day == SharedStore.dayKey(for: TimeGuard.now())
+                && LimitFeatures.extraRequestCount(for: extraContext.limitID)
+                    > extraContext.stepIndex
+        }
+        let remaining = Set(SharedStore.loadState().pending.map(\.id))
+        return !changes.isEmpty && changes.allSatisfy { !remaining.contains($0.id) }
+    }
+
+    private var approvalError: String {
+        extraContext == nil
+            ? tr("This contact can no longer approve these changes. Send a new request.")
+            : tr("This contact approval could not grant extra time. Cancel and try again.")
     }
 }
 

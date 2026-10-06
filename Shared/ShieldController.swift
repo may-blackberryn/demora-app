@@ -11,6 +11,8 @@ import FamilyControls
 
 struct ShieldController {
     static let store = ManagedSettingsStore(named: .init("latch.main"))
+    private static let dayNightSelected = ManagedSettingsStore(named: .init("latch.dayNight.selected"))
+    private static let dayNightOther = ManagedSettingsStore(named: .init("latch.dayNight.other"))
 
     /// Re-derive shields from state + blocked limit IDs. Idempotent —
     /// safe to call from the app or any extension at any time.
@@ -43,6 +45,8 @@ struct ShieldController {
 
     /// Remove every shield this store owns.
     private static func clearAll() {
+        dayNightSelected.clearAllSettings()
+        dayNightOther.clearAllSettings()
         store.shield.applications = nil
         store.shield.applicationCategories = nil
         store.shield.webDomains = nil
@@ -56,6 +60,8 @@ struct ShieldController {
     private static func apply(state: LatchState) {
         let blockedIDs = SharedStore.loadBlockedLimitIDs()
         let now = Date()
+        let featureBlockedIDs = LimitFeatures.blockedFeatureIDs(state: state, at: now)
+        let extraUnblockedIDs = LimitFeatures.extraUnblockedIDs(state: state, at: now)
 
         var apps = Set<ApplicationToken>()
         var cats = Set<ActivityCategoryToken>()
@@ -100,8 +106,50 @@ struct ShieldController {
         // 0. Limits that ran out (baseline). A 0-minute limit allows no time at
         //    all, so it's blocked all day regardless of usage.
         for limit in state.limits
-        where limit.minutesPerDay == 0 || blockedIDs.contains(limit.id) {
+        where ((limit.minutes(on: now) == 0 || blockedIDs.contains(limit.id))
+                && !extraUnblockedIDs.contains(limit.id))
+            || featureBlockedIDs.contains(limit.id) {
             block(limit.selection)
+        }
+
+        // Global wake and sleep boundaries layer above ordinary usage limits.
+        // Excluding a group here never clears its separately-spent daily limit.
+        func applyBoundary(_ scope: BoundaryBlockScope) {
+            var selection = scope.selection
+            if scope.mode == .blockGroups {
+                selection = FamilyActivitySelection()
+                for group in state.limits where scope.groupIDs.contains(group.id)
+                    && !scope.excludedLimitIDs.contains(group.id) {
+                    selection.applicationTokens.formUnion(group.selection.applicationTokens)
+                    selection.categoryTokens.formUnion(group.selection.categoryTokens)
+                    selection.webDomainTokens.formUnion(group.selection.webDomainTokens)
+                }
+            } else {
+                for group in state.limits where scope.excludedLimitIDs.contains(group.id) {
+                    if scope.mode == .blockAllExcept {
+                        selection.applicationTokens.formUnion(group.selection.applicationTokens)
+                        selection.webDomainTokens.formUnion(group.selection.webDomainTokens)
+                    } else {
+                        selection.applicationTokens.subtract(group.selection.applicationTokens)
+                        selection.categoryTokens.subtract(group.selection.categoryTokens)
+                        selection.webDomainTokens.subtract(group.selection.webDomainTokens)
+                    }
+                }
+            }
+            scope.mode == .blockAllExcept ? allExcept(selection) : block(selection)
+        }
+        switch GlobalWake.status(state: state, at: now) {
+        case .needsTap, .waiting:
+            applyBoundary(state.wakeRule.scope)
+        case .inactive, .awake:
+            break
+        }
+        if state.sleepRule.enabled,
+           windowActive(at: now,
+                        start: state.sleepRule.startMinutes,
+                        end: state.wakeRule.startHour * 60,
+                        recurrence: .weekly(state.sleepRule.weekdays)) {
+            applyBoundary(state.sleepRule.scope)
         }
 
         // 1. Recurring (schedules + free periods), oldest-added first.
@@ -133,6 +181,24 @@ struct ShieldController {
             case .unblock: freeSel(s.selection)
             case .free:    freeAll()          // a one-off free period
             }
+        }
+
+        let nightPlan = DayNightPolicy.plan(state: state, at: now) {
+            DayNightWake.status(group: $0, at: now)
+        }
+        dayNightSelected.shield.applications = nightPlan.blocked.applicationTokens.isEmpty
+            ? nil : nightPlan.blocked.applicationTokens
+        dayNightSelected.shield.webDomains = nightPlan.blocked.webDomainTokens.isEmpty
+            ? nil : nightPlan.blocked.webDomainTokens
+        dayNightSelected.shield.applicationCategories = nightPlan.blocked.categoryTokens.isEmpty
+            ? nil : .specific(nightPlan.blocked.categoryTokens, except: nightPlan.freed.applicationTokens)
+        dayNightSelected.shield.webDomainCategories = nightPlan.blocked.categoryTokens.isEmpty
+            ? nil : .specific(nightPlan.blocked.categoryTokens, except: nightPlan.freed.webDomainTokens)
+        dayNightOther.shield.applicationCategories = nightPlan.allowed.map {
+            .all(except: $0.applicationTokens)
+        }
+        dayNightOther.shield.webDomainCategories = nightPlan.allowed.map {
+            .all(except: $0.webDomainTokens)
         }
 
         // Apply to the store.

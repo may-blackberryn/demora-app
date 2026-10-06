@@ -37,7 +37,7 @@ didn't. The 06:00 sweep lands before most users pick up the phone.
 
 Registered in `reconfigureWindowMonitoring`, swept and re-registered with the other
 window activities. **Registered last**, after the schedule/exemption/planned-window
-activities: under iOS's ~20-activity cap, a dropped echo is tolerated redundancy,
+activities: under iOS's 20-activity cap, a dropped echo is tolerated redundancy,
 whereas a dropped enforcement window is real lost enforcement — so echoes must yield
 the budget first. Echo registration failures log but do **not** set
 `enforcementDegraded`.
@@ -103,7 +103,7 @@ subsystem, different failure profile, so it fails independently of layers 1–2.
 - **Threading:** the handler runs on a background queue (`register(…, using: nil)`).
   Everything it touches is thread-safe (UserDefaults, DeviceActivityCenter,
   ManagedSettings, notifications) — keep `AppModel`/`@Published` out of this path.
-- Uses the BGTaskScheduler budget, **not** the ~20-activity DeviceActivity cap — so
+- Uses the BGTaskScheduler budget, **not** the 20-activity DeviceActivity cap — so
   it doesn't compete with enforcement activities.
 - Requires `UIBackgroundModes: fetch` and `BGTaskSchedulerPermittedIdentifiers`
   (both in `Latch/Info.plist`).
@@ -116,7 +116,7 @@ subsystem, different failure profile, so it fails independently of layers 1–2.
   then no-ops).
 - **No early transitions:** warnings, echoes, and the BG task only recompute state
   from the clock; nothing unshields before its real boundary.
-- **Activity budget:** +3 fixed echo activities against iOS's ~20-activity cap, and
+- **Activity budget:** up to three fixed echo activities against iOS's 20-activity cap, and
   they register **last** so enforcement activities claim the budget first. Echo
   failures intentionally don't trip `enforcementDegraded`. The BG task is on a
   separate scheduler budget and doesn't count against the cap.
@@ -141,6 +141,44 @@ subsystem, different failure profile, so it fails independently of layers 1–2.
    `e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"latch.midnightReset"]`,
    then resume — the handler should fire and run the rollover. (Simulator never runs
    BG tasks.)
+6. Near capacity, queue a session, a split edit and wake waits. Essential
+   registrations may replace optional echoes, but must not remove healthy
+   daily usage or enforcement monitors. Test rejection at the boundary,
+   explicit reductions on an old over-budget configuration, and approval
+   ordering with the app closed.
+7. A weekday free period must not grant credit on a skipped day. Verify both
+   overnight segments, the very-late weekly fallback, DST and time-zone changes
+   on a signed device after upgrading old weekday registrations.
+
+## Capacity planning (2026-10-05)
+
+Apple documents a maximum of [20 registered activities shared by the app and
+its extensions](https://developer.apple.com/documentation/deviceactivity/deviceactivitycenter/monitoringerror/excessiveactivities).
+Future one-shots count too. Ordinary weekly windows now share daily boundary
+registrations; the stored rule's weekday predicate remains authoritative.
+Overnight windows use two segments, except very-late weekly starts that retain
+the original spanning registration to preserve the evening wake. Free-period
+callbacks reconcile actual active sources rather than blindly starting credit
+tracking on every daily callback.
+
+`MonitoringBudget` plans canonical names for windows, shared split buckets,
+current/pending sessions, delayed edits and latent wake/extra-time/free tracking.
+Admission reserves conservative unions of current and pending configurations,
+including accumulated additions and actual stale mandatory registrations. It
+does not borrow room from pending removals. New over-budget drafts are rejected
+before persistence; legacy state and previously admitted deadlines are not
+rejected or rewritten. Explicit reducing edits can still be queued, without a
+delay bypass. Due-change one-shots are stopped after verified persistence and
+before replacement tracking is armed, reducing transient registration pressure.
+
+`MonitorRegistration` is the sole registration entry point. Echoes only claim
+space left after mandatory reservations. An essential registration first asks
+Apple, and only an `excessiveActivities` error permits one retry after releasing
+enough known optional echoes. Invalid schedules or denied authorization do not
+evict echoes. No mandatory monitor or spent usage is cleared for capacity.
+Apple remains the final arbiter across processes, and all essential registration
+failures still set the degraded-enforcement warning. Stubbed tests do not prove
+callback delivery or OS registration behavior.
 
 ## Honest ceiling
 

@@ -1,7 +1,7 @@
 //
 //  OverrideGateView.swift
 //  "Apply now" flow for a pending change: pass one of the enabled
-//  override gates (math problems, password, or a trusted contact)
+//  trusted-contact approval
 //  and the change applies immediately, skipping its countdown.
 //
 
@@ -13,15 +13,19 @@ struct OverrideGateView: View {
     let changes: [PendingChange]
 
     enum Method: String, Identifiable {
-        case math, password, contacts
+        case contacts, password, phrase
         var id: String { rawValue }
     }
     @State private var method: Method?
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(changes.count == 1 ? tr("Pending change")
+                                            : tr("Pending changes"))
+                        .font(.headline)
                     if changes.count == 1, let change = changes.first {
                         Text(change.summary).font(.headline)
                         HStack {
@@ -47,32 +51,11 @@ struct OverrideGateView: View {
                         Text(String(format: tr("%d changes"), changes.count))
                             .font(.headline)
                     }
-                } header: {
-                    Text(changes.count == 1 ? tr("Pending change")
-                                            : tr("Pending changes"))
                 }
+                .demoraSurface()
 
-                Section {
-                    if model.state.overrides.mathEnabled {
-                        Button {
-                            method = .math
-                        } label: {
-                            Label(String(format: tr("Solve %d math problems (%@)"),
-                                         model.state.overrides.mathProblemCount,
-                                         model.state.overrides.mathDifficulty?.label ?? tr("Elementary")),
-                                  systemImage: "function")
-                        }
-                        .disabled(model.inTutorial)
-                    }
-                    if model.state.overrides.passwordEnabled {
-                        Button {
-                            method = .password
-                        } label: {
-                            Label(tr("Enter password"), systemImage: "key")
-                        }
-                        .tutorialHighlight(model.tutorial == .applyBoth)
-                        .disabled(model.tutorial == .applyViaContact)
-                    }
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(tr("Skip the wait")).font(.headline)
                     if model.state.overrides.contactsEnabled
                         && !model.state.overrides.contacts.isEmpty {
                         Button {
@@ -81,19 +64,42 @@ struct OverrideGateView: View {
                             Label(tr("Ask a trusted contact"),
                                   systemImage: "person.2")
                         }
-                        .tutorialHighlight(model.tutorial == .applyViaContact)
+                        .tutorialHighlight(model.tutorial == .applyBoth
+                                           || model.tutorial == .applyViaContact)
                     }
-                } header: {
-                    Text(tr("Skip the wait"))
-                } footer: {
-                    if model.tutorial == .applyViaContact {
+                    if !model.inTutorial && model.state.overrides.passwordPolicies.contains(where: {
+                        policy in changes.allSatisfy { change in
+                            guard let area = ChangeEngine.overrideCapability(for: change.action)
+                            else { return false }
+                            return policy.allowed.contains(area)
+                        }
+                    }) {
+                        Button { method = .password } label: {
+                            Label(tr("Enter a password"), systemImage: "key")
+                        }
+                    }
+                    if !model.inTutorial && model.state.overrides.phrasePolicies.contains(where: {
+                        policy in changes.allSatisfy { change in
+                            guard let area = ChangeEngine.overrideCapability(for: change.action)
+                            else { return false }
+                            return policy.allowed.contains(area)
+                        }
+                    }) {
+                        Button { method = .phrase } label: {
+                            Label(tr("Type a phrase"), systemImage: "text.cursor")
+                        }
+                    }
+                    if model.inTutorial {
                         Text(tr("This time, use your trusted contact — it'll be approved for you."))
-                    } else if model.inTutorial {
-                        Text(tr("For this tutorial, only the password works. The password is: test"))
                     }
                 }
+                .demoraSurface()
+                }
+                .padding(20)
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity)
             }
-            .paper()
+            .background(Ink.paper.ignoresSafeArea())
             .casedNavigationTitle(tr("Apply now"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -103,20 +109,22 @@ struct OverrideGateView: View {
             }
             .sheet(item: $method) { m in
                 switch m {
-                case .math:
-                    MathGateView(difficulty: model.state.overrides.mathDifficulty ?? .elementary,
-                                 count: model.state.overrides.mathProblemCount,
-                                 wrong: model.state.overrides.mathWrongBehavior,
-                                 onSuccess: succeed)
-                case .password:
-                    PasswordGateView(hash: model.state.overrides.passwordHash ?? "",
-                                     onSuccess: succeed)
                 case .contacts:
                     if model.inTutorial {
                         TutorialContactGateView(onSuccess: succeed)
                     } else if !changes.isEmpty {
                         ContactGateView(changes: changes,
                                         onSuccess: succeedFromContact)
+                    }
+                case .password:
+                    PasswordChangeGate(changes: changes) {
+                        method = nil
+                        dismiss()
+                    }
+                case .phrase:
+                    PhraseChangeGate(changes: changes) {
+                        method = nil
+                        dismiss()
                     }
                 }
             }
@@ -130,9 +138,147 @@ struct OverrideGateView: View {
     }
 
     private func succeedFromContact() async {
-        await model.applyNowAndWait(changes)
+        model.refreshAfterExternalApply()
         method = nil
         dismiss()
+    }
+}
+
+struct PhraseChangeGate: View {
+    let changes: [PendingChange]
+    let onSuccess: () -> Void
+    @EnvironmentObject private var model: AppModel
+    @State private var selectedID: UUID?
+    @State private var attemptID = UUID()
+    @State private var failed = false
+
+    private var eligible: [PhrasePolicy] {
+        model.state.overrides.phrasePolicies.filter { policy in
+            changes.allSatisfy { change in
+                guard let area = ChangeEngine.overrideCapability(for: change.action)
+                else { return false }
+                return policy.allowed.contains(area)
+            }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(tr("Choose a phrase that permits every requested change."))
+                    ForEach(eligible) { policy in
+                        Button {
+                            selectedID = policy.id
+                            attemptID = UUID()
+                            failed = false
+                        } label: {
+                            Label(policy.name, systemImage: selectedID == policy.id
+                                  ? "checkmark.circle.fill" : "circle")
+                        }
+                    }
+                    if let policy = eligible.first(where: { $0.id == selectedID }) {
+                        PhraseEntry(policy: policy,
+                                    scope: .changes(changes.map(\.id).sorted {
+                                        $0.uuidString < $1.uuidString
+                                    })) { proofID in
+                            Task {
+                                let count = await ChangeEngine.applyNowWithPhraseOffMain(
+                                    changeIDs: changes.map(\.id), policyID: policy.id,
+                                    proofID: proofID)
+                                model.refreshAfterExternalApply()
+                                if count == changes.count {
+                                    onSuccess()
+                                } else {
+                                    failed = true
+                                    attemptID = UUID()
+                                }
+                            }
+                        }
+                        .id(attemptID)
+                    }
+                    if failed {
+                        Text(tr("This change is no longer available. Please try again."))
+                            .font(.footnote).foregroundStyle(.red)
+                    }
+                }
+                .demoraSurface().padding(20)
+            }
+            .background(Ink.paper.ignoresSafeArea())
+            .casedNavigationTitle(tr("Phrase override"))
+            .onAppear { selectedID = eligible.first?.id }
+        }
+    }
+}
+
+struct PasswordChangeGate: View {
+    let changes: [PendingChange]
+    let onSuccess: () -> Void
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedID: UUID?
+    @State private var password = ""
+    @State private var working = false
+    @State private var failed = false
+
+    private var eligible: [PasswordPolicy] {
+        model.state.overrides.passwordPolicies.filter { policy in
+            changes.allSatisfy { change in
+                guard let area = ChangeEngine.overrideCapability(for: change.action)
+                else { return false }
+                return policy.allowed.contains(area)
+            }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(tr("Choose a password that permits every requested change."))
+                    ForEach(eligible) { policy in
+                        Button {
+                            selectedID = policy.id
+                            password = ""
+                        } label: {
+                            Label(policy.name, systemImage: selectedID == policy.id
+                                  ? "checkmark.circle.fill" : "circle")
+                        }
+                    }
+                    SecureField(tr("Password"), text: $password)
+                        .textContentType(.password)
+                    if failed {
+                        Text(tr("Wrong password or this change is no longer available."))
+                            .font(.footnote).foregroundStyle(.red)
+                    }
+                    Button(working ? tr("Checking…") : tr("Apply now")) {
+                        guard let selectedID, !working else { return }
+                        working = true
+                        let hash = AppModel.hash(password)
+                        Task {
+                            let count = await ChangeEngine.applyNowWithPasswordOffMain(
+                                changeIDs: changes.map(\.id), policyID: selectedID,
+                                candidateHash: hash)
+                            password = ""
+                            working = false
+                            model.refreshAfterExternalApply()
+                            if count == changes.count {
+                                dismiss()
+                                onSuccess()
+                            } else {
+                                failed = true
+                            }
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(selectedID == nil || password.isEmpty || working)
+                }
+                .demoraSurface().padding(20)
+            }
+            .background(Ink.paper.ignoresSafeArea())
+            .casedNavigationTitle(tr("Password override"))
+            .onAppear { selectedID = eligible.first?.id }
+        }
     }
 }
 

@@ -6,13 +6,11 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 enum SettingsRoute: Hashable {
-    case appearance, rules, delays, overrides, help
+    case appearance, rules, delays, overrides, notifications, help, fineTuneOverrides
 }
-
-let gridCols = [GridItem(.flexible(), spacing: 14),
-                GridItem(.flexible(), spacing: 14)]
 
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
@@ -20,25 +18,44 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack(path: $model.settingsPath) {
             ScrollView {
-                VStack(spacing: 14) {
-                    LazyVGrid(columns: gridCols, spacing: 14) {
+                VStack(alignment: .leading, spacing: 20) {
+                    DemoraPageTitle(title: tr("Settings"))
+                    VStack(alignment: .leading, spacing: 0) {
                         NavigationLink(value: SettingsRoute.appearance) {
                             GridCard(symbol: "textformat.size",
                                      title: tr("Appearance"),
                                      subtitle: tr("language, theme, case"))
                         }
-                        NavigationLink(value: SettingsRoute.rules) {
-                            GridCard(symbol: "slider.horizontal.3", title: tr("Rules"),
-                                     subtitle: tr("delays, overrides, blocking"),
-                                     showsDot: model.incomingInviteCount > 0)
+                        if model.inTutorial {
+                            NavigationLink(value: SettingsRoute.rules) {
+                                GridCard(symbol: "slider.horizontal.3", title: tr("Rules"),
+                                         subtitle: tr("delays, overrides, blocking"))
+                            }
+                            .tutorialHighlight(model.tutorial == .addContact
+                                               && model.tutorialScreen == "settings")
                         }
-                        .tutorialHighlight(model.tutorial == .addContact
-                                           && model.tutorialScreen == "settings")
+                        NavigationLink(value: SettingsRoute.notifications) {
+                            GridCard(symbol: "bell", title: tr("Notifications"),
+                                     subtitle: tr("limit and free-period alerts"))
+                        }
                         NavigationLink(value: SettingsRoute.help) {
                             GridCard(symbol: "questionmark.circle", title: tr("Help"),
                                      subtitle: tr("guide, contact, more"))
                         }
+                        if !model.inTutorial {
+                            NavigationLink(value: SettingsRoute.fineTuneOverrides) {
+                                GridCard(symbol: "slider.horizontal.3",
+                                         title: tr("Fine-tune overrides"),
+                                         subtitle: tr("trusted contacts and methods"))
+                            }
+                        }
                         #if DEBUG
+                        if !model.inTutorial {
+                            NavigationLink { DeveloperDemosView() } label: {
+                                GridCard(symbol: "play.rectangle", title: "Setup demos (debug)",
+                                         subtitle: "new user + migration · nothing saves")
+                            }
+                        }
                         Button { model.debugFullReset() } label: {
                             GridCard(symbol: "trash", title: "Reset app (debug)",
                                      subtitle: "wipe + onboarding")
@@ -47,12 +64,13 @@ struct SettingsView: View {
                         #endif
                     }
                 }
-                .padding(20)
+                .padding(.horizontal, 26)
+                .padding(.vertical, 24)
                 .frame(maxWidth: 640)
                 .frame(maxWidth: .infinity)
             }
             .background(Ink.paper.ignoresSafeArea())
-            .casedNavigationTitle(tr("Settings"))
+            .toolbar(.hidden, for: .navigationBar)
             .onAppear {
                 if model.inTutorial && model.selectedTab == 3 {
                     model.tutorialScreen = "settings"
@@ -60,11 +78,14 @@ struct SettingsView: View {
             }
             .navigationDestination(for: SettingsRoute.self) { route in
                 switch route {
-                case .appearance:  AppearanceGridView()
-                case .rules:       RulesGridView()
-                case .delays:      DelaysGridView()
-                case .overrides:   OverridesGridView()
-                case .help:        HelpHubView()
+                case .appearance:  AppearanceGridView().toolbar(.visible, for: .navigationBar)
+                case .rules:       RulesGridView().toolbar(.visible, for: .navigationBar)
+                case .delays:      DelaysGridView().toolbar(.visible, for: .navigationBar)
+                case .overrides:   OverridesGridView().toolbar(.visible, for: .navigationBar)
+                case .notifications: NotificationPreferencesView().toolbar(.visible, for: .navigationBar)
+                case .help:        HelpHubView().toolbar(.visible, for: .navigationBar)
+                case .fineTuneOverrides:
+                    FineTuneOverridesView().toolbar(.visible, for: .navigationBar)
                 }
             }
         }
@@ -72,13 +93,67 @@ struct SettingsView: View {
 
     private var overridesSubtitle: String {
         let o = model.state.overrides
-        var n = 0
-        if o.mathEnabled { n += 1 }
-        if o.passwordEnabled { n += 1 }
-        if o.contactsEnabled { n += 1 }
-        return n == 0 ? tr("none on") : String(format: tr("%d on"), n)
+        return o.contactsEnabled ? tr("trusted contacts on") : tr("none on")
     }
 
+}
+
+private struct NotificationPreferencesView: View {
+    @AppStorage("latch.notifications.limitFiveMinutes.v1", store: SharedStore.defaults)
+    private var limitWarnings = true
+    @AppStorage("latch.notifications.freeBoundary.v1", store: SharedStore.defaults)
+    private var freeWarnings = false
+    @State private var notificationsAllowed = true
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                DemoraPageTitle(title: tr("Notifications"))
+                VStack(alignment: .leading, spacing: 12) {
+                Toggle(tr("5 minutes left for a limit"), isOn: $limitWarnings)
+                Text(tr("Only for limits longer than 5 minutes. No alert is sent during a free period."))
+                    .font(.footnote).foregroundStyle(Ink.faint)
+            }
+                .demoraSurface()
+                VStack(alignment: .leading, spacing: 12) {
+                Toggle(tr("Free period starts or ends in 5 minutes"),
+                       isOn: $freeWarnings)
+                Text(tr("Optional reminders for scheduled free periods and free-session endings."))
+                    .font(.footnote).foregroundStyle(Ink.faint)
+            }
+                .demoraSurface()
+            if !notificationsAllowed {
+                Text(tr("iOS notifications for Demora are off. Enable them in iOS Settings to receive alerts."))
+                    .font(.footnote).foregroundStyle(Ink.danger)
+                    .demoraSurface()
+            }
+            }
+            .padding(20)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
+        }
+        .background(Ink.paper.ignoresSafeArea())
+        .casedNavigationTitle(tr("Notifications"))
+        .onAppear { Task { await refreshPermission() } }
+        .onChange(of: limitWarnings) { enabled in
+            if enabled { Task { await refreshPermission(requestIfPossible: true) } }
+        }
+        .onChange(of: freeWarnings) { _ in
+            DemoraNotifications.rescheduleFreeBoundaries(state: SharedStore.loadState())
+            if freeWarnings { Task { await refreshPermission(requestIfPossible: true) } }
+        }
+    }
+
+    private func refreshPermission(requestIfPossible: Bool = false) async {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        if requestIfPossible && settings.authorizationStatus == .notDetermined {
+            _ = try? await center.requestAuthorization(options: [.alert, .sound])
+        }
+        let current = await center.notificationSettings()
+        notificationsAllowed = current.authorizationStatus == .authorized
+            || current.authorizationStatus == .provisional
+    }
 }
 
 // MARK: - Help hub
@@ -86,7 +161,7 @@ struct SettingsView: View {
 struct HelpHubView: View {
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: gridCols, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 NavigationLink { GuideView() } label: {
                     GridCard(symbol: "book", title: tr("Guide"),
                              subtitle: tr("how each part works"))
@@ -106,10 +181,6 @@ struct HelpHubView: View {
                 NavigationLink { PreventDisablingGateView() } label: {
                     GridCard(symbol: "lock.shield", title: tr("Prevent disabling"),
                              subtitle: tr("lock it with a friend"))
-                }
-                NavigationLink { BetaTestersView() } label: {
-                    GridCard(symbol: "heart", title: tr("Beta testers"),
-                             subtitle: tr("thank you"))
                 }
             }
             .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
@@ -164,7 +235,7 @@ struct LimitationsView: View {
 struct SoftwareRoadmapView: View {
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: gridCols, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 Link(destination: URL(string: "https://trello.com/b/0TKqYTdt/demora")!) {
                     GridCard(symbol: "map", title: tr("Feature roadmap"),
                              subtitle: tr("links to Trello"))
@@ -198,7 +269,7 @@ struct GuideView: View {
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: gridCols, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 ForEach(topics) { topic in
                     NavigationLink { GuideTopicView(topic: topic) } label: {
                         GridCard(symbol: topic.symbol, title: topic.title,
@@ -237,7 +308,9 @@ struct GuideView: View {
             GuideTopic(
                 id: "limits", symbol: "apps.iphone", title: tr("Limits"),
                 summary: tr("daily app budgets"),
-                body: tr("A limit is a daily time budget for a set of apps or whole categories. When the minutes run out, those apps are blocked for the rest of the day and unlock again at midnight.\n\nThe Limits tab shows today's real usage for each limit, read straight from Screen Time, and tapping a limit reveals exactly which apps and categories it covers. Because usage is measured by iOS, time spent before you created the limit still counts toward it that day. Raising or removing a limit is a less-strict change; adding one or lowering its minutes is stricter.")),
+                body: tr("A limit is a daily usage budget for selected apps or categories. When it runs out, those apps are blocked until midnight.")
+                    + "\n\n"
+                    + tr("Home shows today's Screen Time usage. Limits & Blocks lists your configured limits; tap one to see its apps and categories. Usage from before you created a limit still counts that day. Raising or removing a limit is less strict; adding one or lowering its minutes is stricter.")),
             GuideTopic(
                 id: "schedules", symbol: "calendar", title: tr("Schedules"),
                 summary: tr("recurring, planned, sessions"),
@@ -245,7 +318,7 @@ struct GuideView: View {
             GuideTopic(
                 id: "overrides", symbol: "key", title: tr("Overrides"),
                 summary: tr("escape hatches"),
-                body: tr("Overrides are optional escape hatches that let you skip a pending change's countdown. There are three: solve a set of math problems, enter a password, or ask a trusted contact to approve. They're all off by default, so out of the box your delays are absolute.\n\nTurning an override on, or making it easier, counts as a less-strict change and waits out that delay. Turning one off, or making it harder, is stricter — so you can't instantly weaken your own safety net.")),
+                body: tr("A trusted contact can approve skipping a pending change's countdown. This is optional and off by default. Turning it on or adding a contact waits through your less-strict delay; turning it off is stricter.")),
             GuideTopic(
                 id: "contacts", symbol: "person.2", title: tr("Trusted contacts"),
                 summary: tr("approval by a person"),
@@ -259,13 +332,14 @@ struct GuideView: View {
 }
 
 struct GuideTopicView: View {
+    @AppAccent private var accent
     let topic: GuideTopic
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Image(systemName: topic.symbol)
-                    .font(.largeTitle).foregroundStyle(Ink.accent)
+                    .font(.largeTitle).foregroundStyle(accent)
                 Text(topic.body)
                     .font(.body).foregroundStyle(Ink.ink)
                     .fixedSize(horizontal: false, vertical: true)
@@ -283,7 +357,7 @@ struct GuideTopicView: View {
 struct ContactView: View {
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: gridCols, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 mailCard(symbol: "ladybug", title: tr("Report a bug"),
                          email: "bugs@getdemora.app")
                 mailCard(symbol: "lightbulb", title: tr("Request a feature"),
@@ -320,12 +394,12 @@ struct AppearanceGridView: View {
     @AppStorage("appearance") private var appearanceRaw = Appearance.system.rawValue
     @AppStorage("textCasing") private var textCasingRaw = TextCasing.lower.rawValue
     @AppStorage("weekStartMonday") private var weekStartMonday = false
-    @AppStorage("home.showDelays") private var showDelays = true
-    @AppStorage("home.showOverrides") private var showOverrides = true
+    @AppStorage("latch.accentColor", store: SharedStore.defaults)
+    private var accentColorRaw = "blue"
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: gridCols, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 NavigationLink {
                     LanguagePickerView()
                 } label: {
@@ -355,18 +429,11 @@ struct AppearanceGridView: View {
                              subtitle: weekStartMonday ? tr("Monday") : tr("Sunday"))
                 }
                 Button {
-                    showDelays.toggle()
+                    accentColorRaw = accentColorRaw == "red" ? "blue" : "red"
                 } label: {
-                    GridCard(symbol: showDelays ? "eye" : "eye.slash",
-                             title: tr("Home delays"),
-                             subtitle: showDelays ? tr("shown") : tr("hidden"))
-                }
-                Button {
-                    showOverrides.toggle()
-                } label: {
-                    GridCard(symbol: showOverrides ? "eye" : "eye.slash",
-                             title: tr("Home overrides"),
-                             subtitle: showOverrides ? tr("shown") : tr("hidden"))
+                    GridCard(symbol: "paintpalette", title: tr("App color"),
+                             subtitle: accentColorRaw == "red"
+                                ? tr("Red") : tr("Blue"))
                 }
             }
             .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
@@ -385,7 +452,7 @@ struct LanguagePickerView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                LazyVGrid(columns: gridCols, spacing: 14) {
+                VStack(alignment: .leading, spacing: 0) {
                     ForEach(AppLanguage.allCases) { language in
                         Button {
                             selectedLanguage = language
@@ -431,21 +498,259 @@ struct DelaysGridView: View {
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: gridCols, spacing: 14) {
-                NavigationLink { DelayEditorView(kind: .strict) } label: {
-                    GridCard(symbol: strictLockSymbol,
-                             title: tr("More strict"),
-                             subtitle: model.state.strictDelay.shortDelayLabel)
-                }
-                NavigationLink { DelayEditorView(kind: .lenient) } label: {
-                    GridCard(symbol: "lock.open", title: tr("Less strict"),
-                             subtitle: model.state.lenientDelay.shortDelayLabel)
-                }
-            }
+            DelayPolicyNavigationRows()
             .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
         }
         .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(tr("Delays"))
+    }
+}
+
+/// First-class destination from the redesigned bottom navigation. Existing
+/// delay and contact editors keep their queued-change semantics unchanged.
+struct DelaysOverridesTabView: View {
+    @AppAccent private var accent
+    @EnvironmentObject var model: AppModel
+    @State private var showAddContact = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        DemoraPageTitle(title: tr("Delays & overrides"))
+                        Text(tr("Your rules can change—just not in the moment."))
+                            .font(.subheadline).foregroundStyle(Ink.faint)
+                    }
+                    VStack(alignment: .leading, spacing: 12) {
+                        DemoraSectionTitle(title: tr("Delays"), symbol: "hourglass")
+                        DelayPolicyNavigationRows()
+                    }
+                    VStack(alignment: .leading, spacing: 12) {
+                        DemoraSectionTitle(title: tr("Overrides"), symbol: "person.2")
+                        HStack {
+                            Text(tr("Trusted contacts"))
+                                .font(.system(.title3, design: .serif).weight(.semibold))
+                            Spacer()
+                            NavigationLink(tr("See all")) {
+                                ContactsDetailView()
+                                    .toolbar(.visible, for: .navigationBar)
+                            }
+                        }
+                        ForEach(model.state.overrides.contacts.prefix(2)) { contact in
+                            TrustedContactApprovalRow(contact: contact)
+                        }
+                        Button { showAddContact = true } label: {
+                            Label(tr("Add contact…"),
+                                  systemImage: "person.crop.circle.badge.plus")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(accent)
+                        .frame(minHeight: 44)
+                        NavigationLink {
+                            ContactsOverrideEditor()
+                                .toolbar(.visible, for: .navigationBar)
+                        } label: {
+                            GridCard(symbol: "person.2", title: tr("Contact settings"),
+                                     subtitle: model.state.overrides.contactsEnabled
+                                        ? tr("On") : tr("Off"),
+                                     showsDot: model.incomingInviteCount > 0)
+                        }
+                        NavigationLink {
+                            ExtraOverridesView()
+                                .toolbar(.visible, for: .navigationBar)
+                        } label: {
+                            GridCard(symbol: "key.horizontal",
+                                     title: tr("Extra overrides"),
+                                     subtitle: tr("passwords and phrases"))
+                        }
+                        NavigationLink {
+                            FineTuneOverridesView()
+                                .toolbar(.visible, for: .navigationBar)
+                        } label: {
+                            GridCard(symbol: "slider.horizontal.3",
+                                     title: tr("Fine-tune overrides"),
+                                     subtitle: tr("methods and permissions"))
+                        }
+                    }
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 24)
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+            .background(Ink.paper.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $showAddContact) { AddContactView() }
+        }
+    }
+}
+
+struct ExtraOverridesView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                NavigationLink { PasswordPoliciesView() } label: {
+                    GridCard(symbol: "key", title: tr("Passwords"),
+                             subtitle: tr("multiple passwords, separate permissions"))
+                }
+                NavigationLink { PhrasePoliciesView() } label: {
+                    GridCard(symbol: "text.cursor", title: tr("Phrases"),
+                             subtitle: tr("custom or random words, separate permissions"))
+                }
+            }
+            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .background(Ink.paper.ignoresSafeArea())
+        .casedNavigationTitle(tr("Extra overrides"))
+    }
+}
+
+struct FineTuneOverridesView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                NavigationLink { ContactsDetailView() } label: {
+                    GridCard(symbol: "person.2", title: tr("Trusted contacts"),
+                             subtitle: tr("Approval permissions"))
+                }
+                NavigationLink { PasswordPoliciesView() } label: {
+                    GridCard(symbol: "key", title: tr("Passwords"),
+                             subtitle: tr("separate permissions for each password"))
+                }
+                NavigationLink { PhrasePoliciesView() } label: {
+                    GridCard(symbol: "text.cursor", title: tr("Phrases"),
+                             subtitle: tr("separate permissions for each phrase"))
+                }
+            }
+            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .background(Ink.paper.ignoresSafeArea())
+        .casedNavigationTitle(tr("Fine-tune overrides"))
+    }
+}
+
+struct PasswordPoliciesView: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(tr("Each password can unlock only the changes you choose. Adding or changing one waits through your less-strict delay."))
+                    .font(.subheadline).foregroundStyle(.secondary)
+                ForEach(model.state.overrides.passwordPolicies) { policy in
+                    NavigationLink { PasswordPolicyEditor(existing: policy) } label: {
+                        GridCard(symbol: "key", title: policy.name,
+                                 subtitle: policy.allowed.map(\.label).sorted().joined(separator: " · "))
+                    }
+                }
+                NavigationLink { PasswordPolicyEditor(existing: nil) } label: {
+                    Label(tr("Add password"), systemImage: "plus.circle")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .demoraSurface()
+                }
+            }
+            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .background(Ink.paper.ignoresSafeArea())
+        .casedNavigationTitle(tr("Passwords"))
+    }
+}
+
+struct PasswordPolicyEditor: View {
+    let existing: PasswordPolicy?
+    /// Initial setup stages only a hash, never a plaintext password or a
+    /// pending change. Ordinary policy edits keep the existing delay path.
+    var onStage: ((PasswordPolicy) -> Void)? = nil
+    var isDemo = false
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var draftID = UUID()
+    @State private var password = ""
+    @State private var confirm = ""
+    @State private var current = ""
+    @State private var instantError = false
+    @State private var allowed: Set<OverrideCapability> = []
+    @State private var loaded = false
+
+    private var policy: PasswordPolicy {
+        PasswordPolicy(id: existing?.id ?? draftID, name: name,
+                       hash: password.isEmpty ? (existing?.hash ?? "")
+                           : AppModel.hash(password), allowed: allowed)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                #if DEBUG
+                if isDemo { DeveloperDemoNotice() }
+                #endif
+                TextField(tr("Name"), text: $name)
+                SecureField(existing == nil ? tr("Password") : tr("New password (leave blank to keep)"),
+                            text: $password)
+                SecureField(tr("Confirm password"), text: $confirm)
+                if let existing, onStage == nil {
+                    SecureField(tr("Current password (for an immediate password-only change)"),
+                                text: $current)
+                    Button(tr("Change password now")) {
+                        if model.updatePasswordPolicySecretNow(id: existing.id,
+                                                               current: current,
+                                                               newPassword: password) {
+                            dismiss()
+                        } else {
+                            instantError = true
+                        }
+                    }
+                    .disabled(current.isEmpty || password.isEmpty || password != confirm)
+                    if instantError {
+                        Text(tr("The current password is wrong or a change is already pending."))
+                            .font(.footnote).foregroundStyle(.red)
+                    }
+                }
+                Text(tr("Allowed uses")).font(.headline)
+                ForEach(OverrideCapability.allCases) { area in
+                    Toggle(area.label, isOn: Binding(
+                        get: { allowed.contains(area) },
+                        set: { enabled in
+                            if enabled { allowed.insert(area) }
+                            else { allowed.remove(area) }
+                        }))
+                }
+                Button(onStage == nil ? tr("Queue change") : tr("Save")) {
+                    if let onStage {
+                        onStage(policy)
+                        dismiss()
+                    } else if model.queue(.upsertPasswordPolicy(policy)) != nil { dismiss() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                          || allowed.isEmpty || (existing == nil && password.isEmpty)
+                          || password != confirm || policy == existing)
+                if let existing, onStage == nil {
+                    Button(tr("Remove password"), role: .destructive) {
+                        if model.queue(.removePasswordPolicy(id: existing.id)) != nil {
+                            dismiss()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+            .demoraSurface()
+            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
+        }
+        .background(Ink.paper.ignoresSafeArea())
+        .casedNavigationTitle(existing == nil ? tr("Add password") : tr("Edit password"))
+        .onAppear {
+            guard !loaded else { return }
+            loaded = true
+            name = existing?.name ?? ""
+            allowed = existing?.allowed ?? []
+        }
     }
 }
 
@@ -457,18 +762,7 @@ struct OverridesGridView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
-                LazyVGrid(columns: gridCols, spacing: 14) {
-                    NavigationLink { MathOverrideEditor() } label: {
-                        GridCard(symbol: "function", title: tr("Math problems"),
-                                 subtitle: model.state.overrides.mathEnabled
-                                    ? (model.state.overrides.mathDifficulty?.label ?? tr("On"))
-                                    : tr("Off"))
-                    }
-                    NavigationLink { PasswordOverrideEditor() } label: {
-                        GridCard(symbol: "key", title: tr("Password"),
-                                 subtitle: model.state.overrides.passwordEnabled
-                                    ? tr("On") : tr("Off"))
-                    }
+                VStack(alignment: .leading, spacing: 0) {
                     NavigationLink { ContactsOverrideEditor() } label: {
                         GridCard(symbol: "person.2", title: tr("Trusted contacts"),
                                  subtitle: model.state.overrides.contactsEnabled
@@ -479,7 +773,7 @@ struct OverridesGridView: View {
                     .tutorialHighlight(model.tutorial == .addContact
                                        && model.tutorialScreen == "overrides")
                 }
-                Text(tr("Overrides skip a pending change's countdown. Enabling or weakening one is a less-strict change; disabling or strengthening one is stricter. All edits here go through the matching delay."))
+                Text(tr("A trusted contact can approve skipping a pending change's countdown. Turning this on waits through your less-strict delay."))
                     .font(.footnote).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -498,16 +792,12 @@ struct RulesGridView: View {
 
     private var overridesSubtitle: String {
         let o = model.state.overrides
-        var n = 0
-        if o.mathEnabled { n += 1 }
-        if o.passwordEnabled { n += 1 }
-        if o.contactsEnabled { n += 1 }
-        return n == 0 ? tr("all off") : String(format: tr("%d on"), n)
+        return o.contactsEnabled ? tr("trusted contacts on") : tr("all off")
     }
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: gridCols, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 NavigationLink { DelaysGridView() } label: {
                     GridCard(symbol: "hourglass", title: tr("Delays"),
                              subtitle: String(format: tr("%@ · %@"),
@@ -537,12 +827,26 @@ struct RulesGridView: View {
 // MARK: - General blocking grid
 
 struct GeneralBlockingView: View {
-    @EnvironmentObject var model: AppModel
-
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
-                LazyVGrid(columns: gridCols, spacing: 14) {
+                GeneralBlockingCards()
+                Text(tr("Stop apps from being deleted, limit adult websites, or block specific sites by domain. Every change here goes through your delays."))
+                    .font(.footnote).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
+        }
+        .background(Ink.paper.ignoresSafeArea())
+        .casedNavigationTitle(tr("General blocking"))
+    }
+}
+
+struct GeneralBlockingCards: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
                     NavigationLink {
                         BlockToggleEditor(
                             navTitle: tr("App deletion"),
@@ -572,21 +876,15 @@ struct GeneralBlockingView: View {
                                     : String(format: tr("%d sites"),
                                              model.state.blockedDomains.count))
                     }
-                }
-                Text(tr("Stop apps from being deleted, limit adult websites, or block specific sites by domain. Every change here goes through your delays."))
-                    .font(.footnote).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
         }
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("General blocking"))
+        .buttonStyle(.plain)
     }
 }
 
 /// A queued on/off blocking toggle (app deletion, adult websites). Reads its
 /// value live from state so the status reflects the latest applied change.
 struct BlockToggleEditor: View {
+    @AppAccent private var accent
     @EnvironmentObject var model: AppModel
     let navTitle: String
     let title: String
@@ -598,25 +896,30 @@ struct BlockToggleEditor: View {
         let on = isOn(model.state)
         let action = makeAction(!on)
         let (dir, delay) = model.preview(action)
-        Form {
-            Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
                 HStack {
                     Text(title)
                     Spacer()
-                    Text(on ? tr("On") : tr("Off")).foregroundStyle(.secondary)
+                    Text(on ? tr("On") : tr("Off"))
+                        .foregroundStyle(on ? accent : Ink.faint)
                 }
+                .font(.headline)
                 Button(on ? tr("Queue: turn off") : tr("Queue: turn on")) {
                     model.queue(action)
                 }
+                .buttonStyle(.borderedProminent)
                 Label(String(format: tr("%@ — takes effect in %@"),
                              dir.label, delay.shortDelayLabel),
                       systemImage: "clock")
-                    .font(.footnote).foregroundStyle(.secondary)
-            } footer: {
+                    .font(.footnote).foregroundStyle(Ink.faint)
                 Text(footer)
+                    .font(.footnote).foregroundStyle(Ink.faint)
             }
+            .demoraSurface()
+            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
         }
-        .paper()
+        .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(navTitle)
     }
 }
@@ -636,8 +939,9 @@ struct WebsiteBlockerEditor: View {
     }
 
     var body: some View {
-        Form {
-            Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(tr("Blocked sites")).font(.headline)
                 ForEach(blockedDomains, id: \.self) { domain in
                     HStack {
                         Text(domain)
@@ -648,25 +952,28 @@ struct WebsiteBlockerEditor: View {
                         .font(.footnote)
                         .buttonStyle(.borderless)
                     }
+                    .demoraSurface()
                 }
                 HStack {
                     TextField(tr("e.g. reddit.com"), text: $newDomain)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
+                        .textFieldStyle(.roundedBorder)
                     Button(tr("Add")) {
                         model.queue(.addBlockedDomain(newDomain))
                         newDomain = ""
                     }
                     .disabled(!canAdd)
+                    .buttonStyle(.borderedProminent)
                 }
-            } header: {
-                Text(tr("Blocked sites"))
-            } footer: {
+                .demoraSurface()
                 Text(tr("Block specific websites by typing their domain — no need for Apple's site picker, which often comes up empty. Note: blocking sites also turns on Apple's adult-content filter. Adding a site is gated by your delays; removing one waits the longer delay."))
+                    .font(.footnote).foregroundStyle(Ink.faint)
             }
+            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
         }
-        .paper()
+        .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(tr("Website blocker"))
     }
 }
@@ -676,45 +983,7 @@ struct WebsiteBlockerEditor: View {
 struct DelayEditorView: View {
     enum Kind { case strict, lenient }
     let kind: Kind
-
-    @EnvironmentObject var model: AppModel
-    @Environment(\.dismiss) private var dismiss
-    @State private var seconds: TimeInterval = 0
-
-    private var current: TimeInterval {
-        kind == .strict ? model.state.strictDelay : model.state.lenientDelay
-    }
-    private var action: ChangeAction {
-        kind == .strict ? .setStrictDelay(seconds) : .setLenientDelay(seconds)
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                DelayPicker(title: kind == .strict
-                            ? tr("More-strict delay") : tr("Less-strict delay"),
-                            seconds: $seconds)
-            } footer: {
-                Text(String(format: tr("Current: %@"), current.shortDelayLabel))
-            }
-            if seconds != current && seconds > 0 {
-                Section {
-                    let (dir, delay) = model.preview(action)
-                    Label(String(format: tr("%@ — takes effect in %@"),
-                                 dir.label, delay.shortDelayLabel),
-                          systemImage: "clock")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Button(tr("Queue change")) {
-                        model.queue(action)
-                        dismiss()
-                    }
-                }
-            }
-        }
-        .paper()
-        .casedNavigationTitle(tr("Delay"))
-        .onAppear { seconds = current }
-    }
+    var body: some View { DelayPolicySettingsView() }
 }
 
 // MARK: - Override editors

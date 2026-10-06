@@ -18,6 +18,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     override func intervalDidStart(for activity: DeviceActivityName) {
         super.intervalDidStart(for: activity)
         let raw = activity.rawValue
+        DayNightWake.receivedActivity(raw)
         if raw == LatchConstants.dailyActivityName {
             // This callback fires both at real midnight AND whenever the daily
             // monitor is restarted mid-day to apply reduced thresholds. Only a
@@ -26,31 +27,38 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
             let today = SharedStore.dayKey(for: TimeGuard.now())
             if SharedStore.lastResetDay != today {
                 ShieldController.clearForNewDay()           // clears blocks + usage
+                LimitFeatures.resetForNewDay()
                 SharedStore.lastResetDay = today
                 // Restore full budgets for the new day. The restart this causes
                 // re-fires this callback, but lastResetDay now equals today, so
                 // it falls through without wiping anything (no loop).
                 ChangeEngine.reconfigureDailyMonitoring(state: SharedStore.loadState())
+                LimitFeatures.reconfigureSplitMonitoring(state: SharedStore.loadState())
+                LimitFeatures.reconcile(state: SharedStore.loadState())
             }
             // Otherwise: a mid-day restart. The restart that triggered this
             // already set the correct thresholds, so we leave usage/blocks alone.
         }
-        if raw.hasPrefix("echo-") {
-            // Post-midnight echo (00:05 / 01:00 / 06:00): retry the day
-            // rollover in case the midnight callback was dropped. Day-key
-            // gated, so it's a no-op when midnight already worked.
-            ChangeEngine.rolloverIfNewDay()
-        }
+        // Every background wake can repair a missed midnight callback before
+        // deriving weekday budgets and split/wake/pacing shields.
+        ChangeEngine.rolloverIfNewDay()
+        // The echo activities arrive here too; the guarded rollover above
+        // is their retry path if midnight's daily callback was dropped.
         if raw.hasPrefix("exempt-") {
             // Free period begins: start measuring per-limit usage inside the
             // window so it can be credited back when the window ends.
-            ChangeEngine.exemptWindowStarted()
+            // Consolidated weekday monitors also fire on skipped days. Only
+            // actual active free sources may start or keep usage accounting.
+            ChangeEngine.reconcileFreeWindow()
         }
         if raw.hasPrefix("planned-"),
            let id = UUID(uuidString: String(raw.dropFirst(8))),
            SharedStore.loadState().planned
                .first(where: { $0.id == id })?.kind == .free {
-            ChangeEngine.exemptWindowStarted()
+            ChangeEngine.reconcileFreeWindow()
+        }
+        if LimitFeatures.isFeatureActivity(raw) {
+            LimitFeatures.receivedFeatureActivity(raw)
         }
         // Covers one-shot apply activities and schedule/session windows too.
         ChangeEngine.applyDueChanges()
@@ -58,19 +66,26 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         // free-window marker. Reconcile immediately so a free period spanning
         // midnight resumes its protection before any threshold can block.
         ChangeEngine.reconcileFreeWindow()
+        DayNightWake.reconcile(state: SharedStore.loadState())
         ShieldController.refresh()
     }
 
     override func intervalDidEnd(for activity: DeviceActivityName) {
         super.intervalDidEnd(for: activity)
         let raw = activity.rawValue
+        DayNightWake.receivedActivity(raw)
+        ChangeEngine.rolloverIfNewDay()
         if raw.hasPrefix("session-") {
             ChangeEngine.pruneExpiredSessions()
         }
         if raw.hasPrefix("planned-") {
             ChangeEngine.prunePastPlanned()
         }
+        if LimitFeatures.isFeatureActivity(raw) {
+            LimitFeatures.receivedFeatureActivity(raw)
+        }
         ChangeEngine.applyDueChanges()
+        DayNightWake.reconcile(state: SharedStore.loadState())
         // End tracking only when no free source remains active. This also
         // handles overlapping recurring, planned, and session free periods.
         ChangeEngine.reconcileFreeWindow()
@@ -89,6 +104,16 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     override func intervalWillEndWarning(for activity: DeviceActivityName) {
         super.intervalWillEndWarning(for: activity)
         ChangeEngine.housekeeping()
+    }
+
+    override func eventWillReachThresholdWarning(_ event: DeviceActivityEvent.Name,
+                                                 activity: DeviceActivityName) {
+        super.eventWillReachThresholdWarning(event, activity: activity)
+        guard activity.rawValue == LatchConstants.dailyActivityName,
+              event.rawValue.hasPrefix("limit-"),
+              let id = UUID(uuidString: String(event.rawValue.dropFirst(6)))
+        else { return }
+        DemoraNotifications.limitAlmostSpent(id: id)
     }
 
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name,
@@ -127,6 +152,13 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
             // Arm the 00:10 fallback notification: if no reset runs by then,
             // the user gets a tap-to-fix nudge instead of stale shields.
             ChangeEngine.scheduleResetNudge()
+        } else if raw.hasPrefix("extra:") {
+            LimitFeatures.receivedExtraThreshold(raw)
+        } else if raw.hasPrefix("part-early-") || raw.hasPrefix("part-middle-")
+                    || raw.hasPrefix("part-late-") {
+            LimitFeatures.receivedSplitThreshold(raw)
+        } else if raw.hasPrefix("pace-") {
+            LimitFeatures.receivedPaceThreshold(raw)
         } else if raw.hasPrefix("fw-") {
             // Silent free-window checkpoint — per-limit usage inside the window.
             ChangeEngine.recordFreeWindowCheckpoint(eventName: raw)
