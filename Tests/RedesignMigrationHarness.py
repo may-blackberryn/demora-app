@@ -510,6 +510,62 @@ scenario("math replacement failed save leaves original grant available") {
     check(SharedStore.canReplaceLegacyMath && SharedStore.loadState().overrides.phrasePolicies.isEmpty,
           "failed save consumed grant")
 }
+scenario("healthy repeated state reads never publish preferences writes") {
+    let original = try legacyRaw()
+    SharedStore.defaults.set(original, forKey: stateKey)
+    SharedStore.defaults.writes = []
+    for _ in 0..<200 {
+        let state = SharedStore.loadState()
+        check(state.isSetUp && state.limits == [limit], "read changed saved rules")
+    }
+    check(SharedStore.defaults.writes.isEmpty, "healthy reads caused render-invalidating writes")
+    SharedStore.defaults.set(false, forKey: recoveryKey)
+    SharedStore.defaults.writes = []
+    for _ in 0..<200 { _ = SharedStore.loadState() }
+    check(SharedStore.defaults.writes.isEmpty, "already-false recovery flag was rewritten")
+    check(SharedStore.defaults.data(forKey: stateKey) == original, "reads rewrote raw state")
+}
+scenario("repaired state clears recovery exactly once") {
+    SharedStore.defaults.set(try legacyRaw(), forKey: stateKey)
+    let preserved = Data("recoverable old bytes".utf8)
+    SharedStore.defaults.set(preserved, forKey: stateKey + ".corrupt")
+    SharedStore.defaults.set(true, forKey: recoveryKey)
+    SharedStore.defaults.set(true, forKey: "latch.redesign2.migrationUnverified")
+    SharedStore.defaults.writes = []
+    for _ in 0..<200 { _ = SharedStore.loadState() }
+    check(SharedStore.defaults.writes == [recoveryKey], "repaired flag wasn't a one-time transition")
+    check(!SharedStore.defaults.bool(forKey: recoveryKey), "repaired decode flag stayed on")
+    check(SharedStore.stateRecoveryNeeded, "decode success cleared unverified migration safeguard")
+    check(SharedStore.defaults.data(forKey: stateKey + ".corrupt") == preserved, "recovery backup removed")
+}
+scenario("repeated corrupt reads preserve bytes without repeated writes") {
+    let raw = Data("unreadable JSON".utf8)
+    SharedStore.defaults.set(raw, forKey: stateKey)
+    SharedStore.defaults.writes = []
+    for _ in 0..<200 { check(!SharedStore.loadState().isSetUp, "corrupt read didn't fail closed") }
+    check(SharedStore.defaults.writes == [stateKey + ".corrupt", recoveryKey], "corrupt reads caused an update loop")
+    check(SharedStore.defaults.data(forKey: stateKey) == raw && SharedStore.stateRecoveryNeeded,
+          "corrupt original or recovery safeguard lost")
+    SharedStore.defaults.set(Data("different bad bytes".utf8), forKey: stateKey)
+    SharedStore.defaults.writes = []
+    _ = SharedStore.loadState()
+    check(SharedStore.defaults.writes == [stateKey + ".corrupt"], "new corrupt bytes weren't preserved once")
+    check(SharedStore.defaults.data(forKey: stateKey + ".corrupt") == Data("different bad bytes".utf8), "new raw backup missing")
+}
+scenario("welcome eligibility reads model snapshots without writes") {
+    SharedStore.defaults.set(try legacyRaw(), forKey: stateKey)
+    check(SharedStore.prepareRedesignMigration(), "migration failed")
+    let state = SharedStore.loadState()
+    SharedStore.defaults.writes = []
+    for _ in 0..<200 {
+        check(SharedStore.canSetUpInitialDayNight(in: SharedStore.defaults, state: state), "day/night offer lost")
+        check(SharedStore.canReplaceLegacyMath(in: SharedStore.defaults, state: state), "math offer lost")
+    }
+    check(SharedStore.defaults.writes.isEmpty, "eligibility read caused writes")
+    SharedStore.defaults.set(true, forKey: SharedStore.redesignWelcomeKey)
+    check(!SharedStore.canSetUpInitialDayNight(in: SharedStore.defaults, state: state), "completed welcome reopened day/night")
+    check(!SharedStore.canReplaceLegacyMath(in: SharedStore.defaults, state: state), "completed welcome reopened math waiver")
+}
 scenario("initial day/night commit prevents stale waiver reopening") {
     SharedStore.defaults.set(try legacyRaw(), forKey: stateKey)
     check(SharedStore.prepareRedesignMigration(), "migration failed")

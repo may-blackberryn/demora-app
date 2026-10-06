@@ -53,6 +53,10 @@ Features:
   It cannot change legacy gates, usage or pending deadlines, and its persisted
   completion flag rejects stale snapshots that would reopen the allowance.
   Skipping or completing the welcome closes the offer; later edits are delayed.
+  Welcome rendering uses the published model snapshot rather than decoding the
+  saved blob in view getters. Actual commits still revalidate persisted state.
+  Healthy state reads do not write preferences, and repeated unreadable reads
+  preserve recovery bytes without rewriting the same flags each time.
 
 - Per-app daily time limits enforced through `DeviceActivity` usage thresholds; apps are shielded via `ManagedSettings` until midnight once the budget runs out.
 - The apps, categories, and websites in an existing limit can be edited. Any

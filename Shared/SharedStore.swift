@@ -123,7 +123,9 @@ struct SharedStore {
         guard let raw = defaults.data(forKey: LatchConstants.stateKey) else { return true }
         do {
             let state = try JSONDecoder().decode(LatchState.self, from: raw)
-            defaults.set(false, forKey: "latch.stateRecoveryNeeded")
+            if defaults.bool(forKey: "latch.stateRecoveryNeeded") {
+                defaults.set(false, forKey: "latch.stateRecoveryNeeded")
+            }
             guard state.isSetUp else { return true }
             // Capture before tolerant decoding retires the old switches. An
             // existing redesign backup also supports installations that ran
@@ -201,16 +203,27 @@ struct SharedStore {
         }
         do {
             let state = try JSONDecoder().decode(LatchState.self, from: data)
-            defaults.set(false, forKey: "latch.stateRecoveryNeeded")
+            // Healthy reads must not publish preferences changes. SwiftUI
+            // observes this suite, so writing even an unchanged false value
+            // from a view's read path can keep invalidating its render graph.
+            // A genuinely repaired blob still clears recovery once.
+            if defaults.bool(forKey: "latch.stateRecoveryNeeded") {
+                defaults.set(false, forKey: "latch.stateRecoveryNeeded")
+            }
             return state
         } catch {
             // Don't silently wipe a user's setup: log, and stash the unreadable
             // bytes so they're recoverable rather than overwritten by the blank
             // state we're forced to return.
-            NSLog("Demora: state decode failed (%@). Preserved raw blob.",
-                  String(describing: error))
-            defaults.set(data, forKey: LatchConstants.stateKey + ".corrupt")
-            defaults.set(true, forKey: "latch.stateRecoveryNeeded")
+            let corruptKey = LatchConstants.stateKey + ".corrupt"
+            if defaults.data(forKey: corruptKey) != data {
+                NSLog("Demora: state decode failed (%@). Preserved raw blob.",
+                      String(describing: error))
+                defaults.set(data, forKey: corruptKey)
+            }
+            if !defaults.bool(forKey: "latch.stateRecoveryNeeded") {
+                defaults.set(true, forKey: "latch.stateRecoveryNeeded")
+            }
             return LatchState()
         }
     }

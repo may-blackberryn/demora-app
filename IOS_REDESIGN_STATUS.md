@@ -490,3 +490,34 @@ App Store copy until those paths are enforced and tested.
   hit Xcode's build-database lock; rerunning sequentially passed. No installation,
   commit, push or deployment was performed. Still check compact/large-text
   layout and real email/in-app invitation confirmation on a signed device.
+
+## Release name and welcome-render hang patch (2026-10-06)
+
+- Restored the Release display name to `demora`; Debug remains `dev demora`.
+  All five targets retain their separate debug/production bundle IDs,
+  entitlement files and App Groups. The user's existing build-number change
+  to 67 is preserved. Built Info.plists confirm `may.latch.dev` / `dev demora`
+  for Debug and `may.latch` / `demora` for Release, both version 2.0.0 build 67.
+- Two supplied production build-1 reports show watchdog termination on exit
+  after an unresponsive UI. The matching archive dSYM places one main-thread
+  stack in JSON decoding through `SharedStore.loadState` and welcome-screen
+  eligibility/rendering; the other is in SwiftUI's render graph. The user also
+  observed Continue not responding on the first launch, followed by crashes
+  on reopen. These support a render-feedback-loop diagnosis, but do not prove
+  that the new signed build resolves every launch issue.
+- Welcome offer getters now use AppModel's published state, not full saved-blob
+  decoding during rendering. Actual math replacement and day/night commits
+  still revalidate persisted state. Healthy state reads no longer rewrite an
+  already-false recovery flag; repeated corrupt reads preserve unchanged raw
+  bytes without repeating preference writes. Recovery transitions, migration
+  guards, saved rules, deadlines and one-shot allowances remain intact.
+- `RedesignMigrationHarness.py` passed 71 scenarios, including repeated
+  healthy/corrupt reads, one-time recovery transitions and read-only welcome
+  eligibility. `DeveloperDemosHarness.py` passed 200 randomized cases.
+  `ReleaseIsolationHarness.py` passed name/ID/group/entitlement, archive-config
+  and snapshot-only welcome source checks. `git diff --check` passed.
+- Sequential unsigned arm64 Debug and Release builds succeeded. Debug emitted
+  only an App Intents metadata-extraction-skipped tool warning; Release had no
+  warnings. No signed installation, commit, push or deployment was performed.
+  A new TestFlight archive must still be tested over the affected installation,
+  without deleting its data, through Continue, welcome completion and relaunch.

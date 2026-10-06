@@ -31,7 +31,11 @@ struct RedesignWelcomeView: View {
         #if DEBUG
         if demoState != nil { return demoDayNightOffer }
         #endif
-        return SharedStore.canSetUpInitialDayNight
+        // Presentation uses the already-published model snapshot. Never
+        // decode/write the shared blob while SwiftUI computes this body.
+        // The actual save revalidates the latest persisted state under lock.
+        return SharedStore.canSetUpInitialDayNight(in: SharedStore.defaults,
+                                                  state: displayedState)
     }
 
     private var offersMathReplacement: Bool {
@@ -39,7 +43,8 @@ struct RedesignWelcomeView: View {
         #if DEBUG
         if demoState != nil { return demoMathOffer }
         #endif
-        return SharedStore.canReplaceLegacyMath
+        return SharedStore.canReplaceLegacyMath(in: SharedStore.defaults,
+                                                state: displayedState)
     }
 
     private var displayedState: LatchState {
