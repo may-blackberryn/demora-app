@@ -521,3 +521,144 @@ App Store copy until those paths are enforced and tested.
   warnings. No signed installation, commit, push or deployment was performed.
   A new TestFlight archive must still be tested over the affected installation,
   without deleting its data, through Continue, welcome completion and relaunch.
+
+## Wake ceilings, compact Home and schedule priorities (2026-10-06)
+
+- Added optional latest wake-up times to named day/night groups, legacy limit
+  gates and preserved general wake rules, with weekday overrides. Existing
+  saved rules default to no ceiling. The ceiling is a local calendar boundary;
+  elapsed waits still use TimeGuard. It ends only wake blocking, not sleep,
+  spent daily limits, split/extra-time accounting or unrelated rules. Same-day
+  waits survive start/weekday/cap edits. Caps end at the first occurrence of a
+  repeated DST time and do not re-lock in its second occurrence. Configurable
+  ceilings stop at 23:30 to leave room for Apple's minimum monitoring interval.
+  Shared deduplicated boundary admission includes caps; obsolete wake-release
+  monitoring is retired without restarting healthy daily usage monitoring.
+- Home now has a centered shared Wake up action and named/accessibility-aware
+  day-clock lines for block, unblock/free and wake waits. Untapped gates are
+  awaiting a tap, not predicted future unlocks. Status reads are event-side
+  snapshots, never persistence/clock-repair calls from SwiftUI's body.
+- The usage report is top-aligned, with reduced row-edge padding, a bounded
+  compact viewport, internal scrolling and optional expansion. Refresh changes
+  the filter without tearing down report identity. Apple's blank-report issue
+  is not claimed fixed; no unsupported readiness/height/usage export is used.
+  Now & Next deduplicates recurring blocking/free schedules to their next
+  upcoming occurrence in its rolling week; Calendar retains full recurrences.
+- Schedules → Schedule conflicts projects a bounded week of potential overlaps.
+  Opaque category membership and untapped wake windows are explicitly uncertain.
+  The pure precedence core is shared with actual-time shield composition:
+  wake/sleep → recurring → planned → sessions, followed by promoted rules in
+  promotion order. Promote/restore edits always use the less-strict delay and
+  serialize the ordered collection. Removed rules cannot be resurrected.
+  All-except allowlists still respect independent specific/spent-limit blocks.
+- Category exceptions are composed independently, preventing a promoted
+  category from revoking another category's unrelated unblock exception.
+  Rendering uses at most 46 named category cohorts plus the three legacy
+  stores. Latest state/runtime reads and all shield writes coordinate together;
+  a restrictive category bridge protects interrupted cohort replacements.
+  A monotonic manifest is verified before growth, including failed-write retry
+  cases. Overflow/failures retain blocks conservatively and report degradation.
+  An interrupted bridge may overblock until the next complete refresh. Debug
+  reset retains only cleanup metadata, not tokens/configuration/usage.
+- Migration offers the existing three-mode delayed policy editor, not a free
+  policy-change allowance. Skipping keeps existing waits; current pending
+  deadlines remain intact. The developer preview edits only an isolated draft.
+  New UI copy was added to all seven translation tables.
+- Verification: DayNight harness passed 38 scenarios / 292 assertions; wake
+  runtime passed 121 assertions, including 45 DST and 28 global-edit checks.
+  Precedence/plan passed 72 + 75 assertions; actual shield-renderer adapter
+  passed 109 assertions, including independent category exceptions, bridge
+  transitions, failed-manifest retry, coordination and debug cleanup. Selection,
+  delay-policy, overdue-grant and latency/scope tests passed; migration passed
+  71 scenarios; monitoring budget passed 35 scenarios / 178 assertions;
+  developer demos passed 200 randomized cases. Home projection/source guards,
+  six migration-presentation tests, shared wake editor/localization checks and
+  release-isolation checks passed. Final read-only review found no remaining
+  material findings in the repaired renderer. Platform adapters do not prove
+  Apple's real XPC, disk durability, cross-process locking or callback delivery.
+- Final sequential unsigned arm64 Debug and Release device builds succeeded
+  with no warnings in their final logs; `git diff --check` passed. Built names
+  and identifiers remain `dev demora` / `may.latch.dev` versus `demora` /
+  `may.latch`. Version/build numbering remains 2.0.0 / 67. Nothing was installed,
+  committed, pushed or deployed. Still test background ceilings, priority
+  transitions (including category selections), interruption recovery, compact
+  and large-text report rendering, and migration edits on a signed device.
+
+## Practical guide and usage trends — 2026-10-06
+
+- Limits & blocks now has a visible full-width New limit action with a 48-point
+  minimum height. Home's Select/Done action is in Pending changes; selection
+  is pruned as queued changes disappear, preventing stale bulk-action counts.
+- The obsolete Replay walkthrough entry and its alert are removed. The legacy
+  tutorial/restoration engine is retained for interrupted saved replays. Guide
+  now has nine practical topics: delays, limits, day/night, sessions, overlaps,
+  overrides, usage, troubleshooting, and notifications/widgets/privacy. Paths
+  match current surfaces; wording does not promise unbypassable enforcement.
+- Home → Usage & trends adds a separate report scene with 28 completed local
+  calendar days plus today. Segment-level screen-on duration is aggregated once
+  per opaque source/day. Newer snapshots replace older ones, not add to them;
+  invalid intervals and incomplete coverage never generate a trend. Today stays
+  outside the completed-week comparison. Empty data has a concise report state,
+  not fabricated zeros or a long empty chart. Calendar arithmetic covers DST.
+  The filter uses the current wall clock, including backwards corrections;
+  asynchronous lastUpdatedDate validation uses the end of enumeration.
+- The optional starting estimate is hours/minutes per week plus a date. Real
+  setup saves it only after successful setup, and migration saves on completion;
+  developer previews never persist it. Home allows editing/removal. It is a
+  manual estimate, never a rule or measured history, and its separately labelled
+  complete-week comparison is not proof of savings caused by Demora.
+- Actual usage remains inside DeviceActivityReport. No raw-usage persistence,
+  readiness/height handshake, network, analytics, host export, extra monitoring
+  activity or enforcement reconfiguration was added. Device-model filtering may
+  include other same-kind iCloud devices, disclosed in UI/Guide. History is only
+  what iOS provides, not a permanent archive. Debug/production report contexts
+  and App Groups remain separate. The local report translations are generated
+  from app catalogs, preserving existing translations.
+- Verification: 74 actual Foundation algorithm checks; seven Guide tests;
+  host estimate/navigation/demo guards including clock-rollback regression;
+  78 host/Guide and 30 report keys in all seven translation tables with unique
+  keys, matching placeholders and a read-only helper; release-isolation and
+  onboarding guards; 200 randomized developer-demo cases; 71 migration scenarios
+  and six migration-delay presentation tests passed. Read-only review identified
+  the clock-rollback filter issue, repaired and regression-tested; no other
+  privacy/correctness findings were reported. No real usage/preferences queries
+  were used in these tests. Signed-device history delivery, appearance, large
+  text and VoiceOver remain manual acceptance checks.
+- Final sequential unsigned arm64 Debug and Release device builds passed with
+  stable Xcode 27.0. The only warning was Apple's skipped AppIntents metadata
+  extraction for a target without that dependency; no Swift errors/warnings.
+  `git diff --check` passed. Names/IDs/App Groups remain debug/prod separated;
+  version/build remain 2.0.0 / 67. Nothing was installed, committed, pushed or
+  deployed. Increment the build number before another TestFlight upload if 67
+  has already been used.
+
+## Usage dashboard visual redesign — 2026-10-07
+
+- Replaced the Usage & trends list with a chart-first dashboard: daily/weekly
+  controls, a large serif selected-period total, tappable bars, earlier-day
+  navigation and a focused comparison panel. Historical weekly selections use
+  their own preceding week; the oldest available week has no invented trend.
+  Complete weeks also show a daily average. Blue/red accents and light/dark
+  paper palettes follow Appearance. Zero, missing and partial values retain
+  distinct rendering, and incomplete periods never produce a comparison.
+- The report owns its vertical scrolling; the host no longer has a fixed
+  620-point report or nested outer scroll. Longer history/privacy explanations
+  move to Usage details, with a compact edit-estimate action outside the report.
+  Narrow/large-text charts retain 44/64-point targets and scroll the selected
+  bar into view. Scale labels stay fixed while bars scroll. Reduced Motion and
+  accessibility selection/value labels are respected.
+- Actual usage, chart selection and rendering remain inside the report sandbox.
+  No readiness/height handshake, usage export, network, measured persistence,
+  extra monitoring, enforcement changes or new authorization flow was added.
+- Verification: 42 production display-projection checks plus dashboard source
+  guards; 74 usage-model checks and privacy guards; host navigation/manual-save
+  guards; 80 host/Guide and 41 report keys across seven catalogs passed. Native
+  macOS SwiftUI previews use synthetic fixtures and an isolated temporary
+  preference suite. Light, dark/red, narrow German, empty, partial and large-target
+  layouts were inspected; these do not establish real iOS report delivery or
+  iOS Dynamic Type/VoiceOver behavior. Those remain signed-device checks.
+- Final sequential unsigned arm64 Debug and Release builds passed with stable
+  Xcode 27.0. The only warning was skipped AppIntents metadata extraction for
+  a target without that dependency; no Swift errors/warnings. `git diff --check`
+  passed. Debug/production identities and version/build 2.0.0 / 67 are unchanged.
+  Nothing was installed, committed, pushed or deployed.

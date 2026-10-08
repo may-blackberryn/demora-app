@@ -25,6 +25,9 @@ struct LatchReportExtension: DeviceActivityReportExtension {
         LimitsUsageReport { rows in
             LimitsUsageView(rows: rows)
         }
+        UsageInsightsReport { configuration in
+            UsageInsightsView(configuration: configuration)
+        }
     }
 }
 

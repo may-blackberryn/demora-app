@@ -6,7 +6,7 @@
 
 import Foundation
 
-struct SharedStore {
+struct SharedStore {  
     static let defaults = UserDefaults(suiteName: LatchConstants.appGroupID)!
     static let redesignMigrationKey = "latch.redesign2.migrated"
     static let redesignWelcomeKey = "latch.redesign2.welcomeSeen"
@@ -304,11 +304,12 @@ struct SharedStore {
     static func clearBackup() { defaults.removeObject(forKey: backupKey) }
 
     #if DEBUG
-    /// Debug only: wipe every Demora key in the App Group, returning the app to
-    /// a fresh-install state (so we don't have to delete and reinstall to test
-    /// onboarding).
+    /// Debug only: wipe Demora configuration in the App Group, returning the
+    /// app to fresh setup. Retain only the named-shield cleanup manifest so the
+    /// next refresh can retire settings from the old debug configuration.
     static func debugWipeAll() {
-        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("latch.") {
+        for key in defaults.dictionaryRepresentation().keys
+        where key.hasPrefix("latch.") && !key.hasPrefix("latch.scheduleCategoryStores.") {
             defaults.removeObject(forKey: key)
         }
     }

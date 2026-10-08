@@ -239,14 +239,18 @@ struct SchedulesView: View {
                                              ? tr("Apps that stay usable") : tr("Apps to block")),
                                        selection: w.kind == .free ? nil : w.selection)))
         }
-        for offset in 0..<7 {
+        var nextRecurringIDs = Set<UUID>()
+        var nextFreeIDs = Set<UUID>()
+        for offset in 0...7 {
             guard let day = cal.date(byAdding: .day, value: offset,
                                      to: cal.startOfDay(for: now)) else { continue }
             for sch in model.state.schedules where sch.recurrence.matches(dayOf: day) {
+                guard !nextRecurringIDs.contains(sch.id) else { continue }
                 guard let start = cal.date(bySettingHour: sch.startMinutes / 60,
                                            minute: sch.startMinutes % 60,
                                            second: 0, of: day),
                       start > now, start < weekEnd else { continue }
+                nextRecurringIDs.insert(sch.id)
                 let detail = "\(start.formatted(date: .abbreviated, time: .shortened))–\(minutesLabel(sch.endMinutes))"
                 dated.append((start,
                               OverviewItem(id: "usch-\(sch.id)-\(offset)",
@@ -258,10 +262,12 @@ struct SchedulesView: View {
                                            selection: sch.selection, scheduleID: sch.id)))
             }
             for ex in model.state.exemptions where ex.recurrence.matches(dayOf: day) {
+                guard !nextFreeIDs.contains(ex.id) else { continue }
                 guard let start = cal.date(bySettingHour: ex.startMinutes / 60,
                                            minute: ex.startMinutes % 60,
                                            second: 0, of: day),
                       start > now, start < weekEnd else { continue }
+                nextFreeIDs.insert(ex.id)
                 let detail = "\(start.formatted(date: .abbreviated, time: .shortened))–\(minutesLabel(ex.endMinutes))"
                 dated.append((start,
                               OverviewItem(id: "uex-\(ex.id)-\(offset)",
@@ -273,7 +279,7 @@ struct SchedulesView: View {
         return dated.sorted { $0.0 < $1.0 }.map { $0.1 }
     }
 
-    // MARK: Three destinations on the same Schedules page (not inner tabs)
+    // MARK: Destinations on the same Schedules page (not inner tabs)
 
     private var scheduleDestinations: some View {
         VStack(spacing: 0) {
@@ -291,6 +297,12 @@ struct SchedulesView: View {
                          subtitle: tr("Wake up") + " · " + tr("Sleep"))
             }
             calendarIndex
+            NavigationLink {
+                ScheduleConflictsView().toolbar(.visible, for: .navigationBar)
+            } label: {
+                GridCard(symbol: "arrow.triangle.branch", title: tr("Schedule conflicts"),
+                         subtitle: tr("See overlapping rules"))
+            }
         }
         .buttonStyle(.plain)
     }

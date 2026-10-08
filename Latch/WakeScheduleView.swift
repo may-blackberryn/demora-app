@@ -19,7 +19,8 @@ struct WakeScheduleView: View {
                             GridCard(symbol: "sun.max", title: limit.name,
                                      subtitle: limit.wakeDelayMinutes.map {
                                          let timing = (limit.wakeSchedule ?? LimitWakeSchedule()).timing(on: Date(), defaultWait: $0)
-                                         return String(format: tr("Wake from %@ · wait %d minutes after tap"), minutesLabel(timing.startMinutes), timing.waitMinutes)
+                                         let start = String(format: tr("Wake from %@ · wait %d minutes after tap"), minutesLabel(timing.startMinutes), timing.waitMinutes)
+                                         return timing.latestMinutes.map { start + " · " + String(format: tr("Latest wake-up: %@"), minutesLabel($0)) } ?? start
                                      } ?? tr("Off"))
                         }
                         if limit.wakeDelayMinutes != nil {
@@ -103,9 +104,10 @@ private struct GroupWakeDelayEditor: View {
                 Toggle(tr("Require wake-up tap"), isOn: $enabled)
                 if enabled {
                     WakeTimingEditor(startMinutes: $schedule.startMinutes, waitMinutes: $minutes,
-                                     weekdays: $schedule.weekdays, dayTimings: $schedule.dayTimings)
+                                     weekdays: $schedule.weekdays, dayTimings: $schedule.dayTimings,
+                                     latestMinutes: $schedule.latestMinutes)
                 }
-                Text(tr("The current day's wake-up countdown stays unchanged. A new wait applies to the next tap. Turning this off still waits through your less-strict delay."))
+                Text(tr("A new wait applies to the next tap. A latest wake-up time can end today's gate once this delayed change applies. Turning this off still follows your less-strict delay."))
                     .font(.footnote).foregroundStyle(Ink.faint)
                 Text(tr("Usage already spent, split budgets and extra-time grants are not reset by this change."))
                     .font(.footnote).foregroundStyle(Ink.faint)

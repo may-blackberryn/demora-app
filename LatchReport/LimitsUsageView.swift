@@ -44,7 +44,17 @@ struct LimitsUsageView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        // The host owns a bounded viewport, not an estimated per-row height.
+        // Scroll entirely inside the report sandbox; no usage/readiness/height
+        // payload is written to the App Group or sent back to the host.
+        ScrollView { reportContent }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .serifIfAvailable()
+            .environment(\.colorScheme, scheme)
+    }
+
+    private var reportContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
             if rows.isEmpty {
                 Text("No limits yet")
                     .font(.subheadline).foregroundStyle(.secondary)
@@ -92,8 +102,7 @@ struct LimitsUsageView: View {
             }
         }
         .padding(.vertical, 4)
-        .serifIfAvailable()
-        .environment(\.colorScheme, scheme)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
 

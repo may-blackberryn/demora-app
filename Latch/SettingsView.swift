@@ -261,12 +261,15 @@ struct GuideTopic: Identifiable {
     let symbol: String
     let title: String
     let summary: String
+    let sections: [GuideSection]
+}
+
+struct GuideSection {
+    let title: String
     let body: String
 }
 
 struct GuideView: View {
-    @EnvironmentObject var model: AppModel
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -276,57 +279,84 @@ struct GuideView: View {
                                  subtitle: topic.summary)
                     }
                 }
-                Button { model.replayTutorial() } label: {
-                    GridCard(symbol: "arrow.clockwise", title: tr("Replay walkthrough"),
-                             subtitle: tr("your setup stays safe"))
-                }
             }
             .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
         .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(tr("Guide"))
-        .alert(tr("Couldn't start the walkthrough"),
-               isPresented: $model.replayFailed) {
-            Button(tr("OK"), role: .cancel) { }
-        } message: {
-            Text(tr("Demora couldn't safely back up your current setup, so the replay was cancelled to protect your limits. Nothing was changed. Please try again in a moment."))
-        }
     }
 
     // Built in-body so tr() reflects the current language.
     private var topics: [GuideTopic] {
         [
             GuideTopic(
-                id: "what", symbol: "hourglass.circle", title: tr("What Demora is"),
-                summary: tr("the core idea"),
-                body: tr("Most screen-time apps lock your rules behind a password. Because you know the password, you can undo your own rules the moment you feel the urge — so they rarely stick.\n\nDemora protects your rules with time instead. Every change waits out a countdown you set in advance before it takes effect. You stay in full control of your rules, but you can't change them in a single impulsive moment. The blocking itself is enforced by iOS through Screen Time — the same system parental controls use — so it can't be quietly bypassed.")),
-            GuideTopic(
                 id: "delays", symbol: "timer", title: tr("Delays"),
-                summary: tr("the two countdowns"),
-                body: tr("Demora has two delays. The more-strict delay covers any change that tightens your rules: adding a limit, lowering its minutes, adding a schedule, or turning on the deletion lock. The less-strict delay covers changes that loosen them: raising a limit, removing a block, adding a free period, or disabling an override. The less-strict delay is usually set longer, since loosening is where temptation lives.\n\nA change doesn't apply right away — it becomes a pending change with a live countdown on the Home tab. You can cancel it any time before it lands, and when the countdown reaches zero it applies on its own, even if the app is closed.")),
+                summary: tr("choose a policy, manage pending changes"),
+                sections: [
+                    GuideSection(title: tr("Delay policy"), body: tr("Demora protects deliberate decisions with time. In Delays, choose separate waits for stricter and less-strict changes, one shared wait, or immediate tightening with a wait only for loosening. Lowering a budget tightens it; raising or removing it loosens it. Changing the policy follows your current policy, not the new one.")),
+                    GuideSection(title: tr("Pending changes"), body: tr("Home shows queued changes and their countdowns. Cancel a draft there before it applies, or use an eligible override. Current rules stay active until the change applies. Existing countdowns keep their deadlines when you edit delay settings or reopen Demora. Background application depends on iOS callbacks; open Demora if a due change has not appeared."))
+                ]),
             GuideTopic(
                 id: "limits", symbol: "apps.iphone", title: tr("Limits"),
                 summary: tr("daily app budgets"),
-                body: tr("A limit is a daily usage budget for selected apps or categories. When it runs out, those apps are blocked until midnight.")
-                    + "\n\n"
-                    + tr("Home shows today's Screen Time usage. Limits & Blocks lists your configured limits; tap one to see its apps and categories. Usage from before you created a limit still counts that day. Raising or removing a limit is less strict; adding one or lowering its minutes is stricter.")),
+                sections: [
+                    GuideSection(title: tr("Daily limit"), body: tr("In Limits & blocks, tap New limit, name a limit, choose apps, categories or websites, and set usage minutes. A group shares one allowance across its selection. Zero minutes blocks it all day. Open an existing limit to edit it. Different limits by weekday replaces the default budget on each chosen day. Daily allowances reset at midnight; on iOS 17.4 or later, earlier usage that day also counts.")),
+                    GuideSection(title: tr("Split daily budget"), body: tr("Expand Split daily budget to divide the allowance into time-of-day portions, with optional carryover of unused early minutes. New limits can use three portions; existing two-portion limits remain editable. Spending an early portion blocks until its next boundary, even if later portions have minutes left. Editing a spent limit does not give it a fresh daily allowance. Selection edits follow the less-strict delay and can discard free-period credit tied to the old selection.")),
+                    GuideSection(title: tr("Manual extra time"), body: tr("Expand Manual extra time to set up to five ordered uses, each with its own usage minutes and a wait, named password, phrase or contact approval. Request a use from the limit only after the full daily budget is spent. These are app-usage minutes, not a timed unblock session. Requests survive reopening Demora and reset at midnight. Extra time does not skip an early split portion, wake wait or unrelated block."))
+                ]),
+            GuideTopic(
+                id: "daynight", symbol: "sun.max", title: tr("Day & night"),
+                summary: tr("wake waits, latest times and sleep"),
+                sections: [
+                    GuideSection(title: tr("Day/night group"), body: tr("Open Schedules → Day & night to create up to five named groups. Check existing limits and choose extra apps, then set wake-up and sleep times and weekdays. One optional all-other-apps group automatically excludes explicitly timed groups; whole-category exceptions are not supported. Existing general wake/sleep settings and Group wake-up gates still apply alongside these groups.")),
+                    GuideSection(title: tr("Wake up"), body: tr("Set a wake-up start and wait, with optional per-weekday start and wait overrides. Tap Wake up on Home to start every eligible group's wait together; tapping again does not restart it. An optional latest wake-up time, also configurable by weekday, ends only that wake gate even without a tap or during a wait. It does not end sleep blocking or restore a spent daily budget.")),
+                    GuideSection(title: tr("Sleep"), body: tr("Sleep starts on the selected evening and ends at the following morning's wake-up start, using that morning's custom time. Group edits follow your delay policy. Wake timing edits preserve spent usage, split accounting, extra-time grants and a running wait's deadline; a new wait applies to the next tap. A delayed latest-time change can end today's gate once it applies. Turning the gate off is delay-gated too."))
+                ]),
             GuideTopic(
                 id: "schedules", symbol: "calendar", title: tr("Schedules"),
                 summary: tr("recurring, planned, sessions"),
-                body: tr("Schedules block apps by time rather than by budget, in a few shapes. Recurring schedules repeat — every day, on chosen weekdays, or on a monthly pattern. Planned windows are one-offs for a specific date, like a trip or an exam. Sessions are immediate, timed blocks or unblocks you start right now. Free periods are windows where limits don't block and usage doesn't count toward them.\n\nEach blocking schedule either blocks the apps you pick, or blocks everything except the apps you pick. When rules overlap, the most specific one wins: a session beats a planned window, which beats a recurring schedule, and within the same kind the one added most recently takes priority.")),
+                sections: [
+                    GuideSection(title: tr("Sessions"), body: tr("Open Schedules → Sessions and choose Now, Planned or Recurring. Create a block, unblock or free period. Now starts after any required delay; its duration starts when it takes effect. Planned uses a specific date. Recurring repeats daily, on weekdays or on a monthly pattern, and can cross midnight. Blocking rules can target selected apps or everything except a selection. Calendar shows occurrences; Now & Next shows the next occurrence of each repeating rule.")),
+                    GuideSection(title: tr("Free periods"), body: tr("A free period suspends daily limits within its scope, and usage during it is credited back using Screen Time checkpoints, not an exact live stopwatch. An unblock makes its selected apps usable but is not the same as free usage. Other overlapping rules can still block them. Recurring free periods live alongside recurring blocks. Edit apps on a recurring block keeps its identity and timing; the old selection stays active through the less-strict delay."))
+                ]),
+            GuideTopic(
+                id: "conflicts", symbol: "arrow.triangle.branch", title: tr("Schedule conflicts"),
+                summary: tr("overlaps, scopes and priority"),
+                sections: [
+                    GuideSection(title: tr("Potential overlaps"), body: tr("Open Schedules → Schedule conflicts to review the next week's potential overlaps. Default application order is wake/sleep → recurring → planned → sessions. Later effects apply only within their scope: an allowlist is not a global unblock, does not reset daily usage, and does not clear unrelated specific blocks. Category membership is hidden by Apple, and untapped wake windows are estimates, so some overlaps are uncertain.")),
+                    GuideSection(title: tr("Priority"), body: tr("Use Prioritize this to apply a rule after rules at default priority, or Restore default priority to undo that choice. Both actions always queue a less-strict change, even if you expect a stricter result. Among prioritized rules, the last one promoted applies last. Priority changes ordering, not a rule's app selection or your spent daily allowance."))
+                ]),
             GuideTopic(
                 id: "overrides", symbol: "key", title: tr("Overrides"),
-                summary: tr("escape hatches"),
-                body: tr("A trusted contact can approve skipping a pending change's countdown. This is optional and off by default. Turning it on or adding a contact waits through your less-strict delay; turning it off is stricter.")),
+                summary: tr("named methods and per-contact permissions"),
+                sections: [
+                    GuideSection(title: tr("Passwords & phrases"), body: tr("Open Delays → Extra overrides, or Settings → Fine-tune overrides, to manage named passwords and phrases. Each method has its own allowed uses; it cannot approve an unrelated change. Phrases can be custom or random on-device words, typed word by word with your chosen mistake allowance. Adding methods or expanding permissions waits through the less-strict delay. Knowing the current password permits an immediate secret-only change, not an immediate permissions change.")),
+                    GuideSection(title: tr("Trusted contacts"), body: tr("Choose approval permissions separately for each contact. Extra-time permission is opt-in, including for existing contacts, and a limit's extra-time step must also require contact approval. Demora-user contacts accept an invitation before approving in their app. For email approval, enter the short code in your Demora. Permission edits are delay-gated; an approval skips only the eligible request's wait, not every rule."))
+                ]),
             GuideTopic(
-                id: "contacts", symbol: "person.2", title: tr("Trusted contacts"),
-                summary: tr("approval by a person"),
-                body: tr("A trusted contact is a person who can approve skipping a countdown for you. They can approve by entering a short code sent to their email, or directly from their own copy of Demora.\n\nAnyone you add has to accept the request before they can approve anything, so no one is involved without their knowledge. You can revoke a contact at any time, and they can step down on their side too. Adding the override is a less-strict change; removing it is stricter.")),
+                id: "usage", symbol: "chart.bar", title: tr("Usage & trends"),
+                summary: tr("Screen Time reports and a personal baseline"),
+                sections: [
+                    GuideSection(title: tr("Usage reports"), body: tr("Open Home → Usage & trends for daily usage and comparisons of the past four complete seven-day periods, with today's partial day shown separately. It shows recent history provided by iOS, not a permanent archive. Missing or blank data is not zero usage; try Refresh. iCloud Screen Time sharing may include other devices of the same kind.")),
+                    GuideSection(title: tr("Weekly baseline"), body: tr("In Home → Usage & trends, tap Edit weekly estimate to add, change or remove your optional starting point. Enter hours and minutes per week, not per day; its date shows when it was recorded. This is your own estimate of usage before Demora, not a measured historical report or proof of time saved. Leaving it unset does not affect reports, rules or allowances."))
+                ]),
             GuideTopic(
-                id: "deletion", symbol: "trash.slash", title: tr("App deletion lock"),
-                summary: tr("can't uninstall to bypass"),
-                body: tr("When the deletion lock is on, deleting any app from this iPhone is blocked — including Demora itself. That closes the most obvious loophole: uninstalling the app to wipe your rules.\n\nBecause turning the lock off makes things easier to bypass, it counts as a less-strict change and waits out that delay before it takes effect.")),
+                id: "troubleshooting", symbol: "wrench.and.screwdriver", title: tr("Troubleshooting"),
+                summary: tr("permissions, blank reports and false blocks"),
+                sections: [
+                    GuideSection(title: tr("Screen Time access"), body: tr("Blocking needs Screen Time permission. You may finish setup after declining it; Demora respects denial and does not automatically redirect you to iOS Settings. If you want to enable access later, use Demora's permission prompt or open iOS Settings yourself. iOS controls authorization and background callbacks, so blocking is not an unbypassable guarantee.")),
+                    GuideSection(title: tr("Today's usage reporting"), body: tr("A blank Screen Time report does not mean no usage. Try the refresh arrow, wait for iOS to load, and check access if it stays blank. If a schedule, daily reset or due change seems late, open Demora to reconcile state. An enforcement warning means monitoring needs attention; if a new rule exceeds capacity, reduce overlapping schedules rather than assuming it was saved.")),
+                    GuideSection(title: tr("Recheck blocked limits"), body: tr("In Limits & blocks, Recheck blocked limits takes around 30 seconds and keeps current blocks in place while iOS verifies usage. Confirmed spent limits stay blocked; a failed or interrupted check changes nothing. This is not a bypass for a real spent budget, split boundary, wake wait or schedule. Safe rechecking needs iOS 17.4 or later; wait until an active free period ends before trying."))
+                ]),
+            GuideTopic(
+                id: "notifications", symbol: "bell", title: tr("Notifications & widgets"),
+                summary: tr("optional reminders and privacy"),
+                sections: [
+                    GuideSection(title: tr("Notifications"), body: tr("In Settings → Notifications, choose five-minute limit warnings and optional free-period boundary reminders. Limit warnings are only for budgets longer than five minutes and are suppressed during free periods. iOS notification permission is separate from Screen Time access, and alerts can arrive late or not at all. Now & Next and Pending Change widgets are read-only summaries; they do not apply overrides or show raw usage.")),
+                    GuideSection(title: tr("Privacy"), body: tr("App choices and usage stay on-device. Demora has no accounts, advertising or analytics. Optional contact invitations and approval requests relay the names, descriptions and notes you send through CloudKit or Cloudflare and Resend; the email provider receives the readable message and code. Time checks contact Apple's website, and email requests use App Attest verification. Widgets use a small local summary, not app-selection tokens or raw usage.")),
+                    GuideSection(title: tr("App deletion lock"), body: tr("The app deletion lock asks iOS to prevent deleting apps, including Demora. Turning it off is a less-strict change. It discourages one bypass route but does not make Screen Time permissions or the device impossible to change. Notifications and widgets are optional aids, not the enforcement mechanism."))
+                ]),
         ]
     }
 }
@@ -340,9 +370,17 @@ struct GuideTopicView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Image(systemName: topic.symbol)
                     .font(.largeTitle).foregroundStyle(accent)
-                Text(topic.body)
-                    .font(.body).foregroundStyle(Ink.ink)
-                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(topic.sections.indices, id: \.self) { index in
+                    let section = topic.sections[index]
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(section.title)
+                            .font(.headline).foregroundStyle(Ink.ink)
+                            .accessibilityAddTraits(.isHeader)
+                        Text(section.body)
+                            .font(.body).foregroundStyle(Ink.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
             .padding(20).frame(maxWidth: 640)
             .frame(maxWidth: .infinity, alignment: .leading)

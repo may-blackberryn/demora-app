@@ -35,7 +35,9 @@ Features:
   setup. Contacts remain unconfirmed and invitations follow the normal consent
   flow after setup; passwords persist only as hashes. Developer previews stage
   these choices without persistence or contact-service calls. Screen Time denial is respected; setup can
-  finish without blocking. The sample walkthrough stays available in Help.
+  finish without blocking. Help → Guide now provides practical 2.0 instructions;
+  the obsolete public Replay walkthrough entry is removed. The old tutorial
+  recovery engine remains available for safely restoring any interrupted replay.
 - Existing users get a separate four-page 2.0 introduction once
   completed. Migration keeps rule IDs, budgets, contact scopes, and pending
   deadlines, and backs up the saved blob before re-encoding. A legacy saved
@@ -57,6 +59,10 @@ Features:
   saved blob in view getters. Actual commits still revalidate persisted state.
   Healthy state reads do not write preferences, and repeated unreadable reads
   preserve recovery bytes without rewriting the same flags each time.
+  The welcome also offers the ordinary delay-policy editor: separate waits,
+  one shared wait, or immediate tightening. Changes are queued under the
+  existing policy; skipping preserves it, and pending deadlines never move.
+  The developer migration preview uses an isolated local draft instead.
 
 - Per-app daily time limits enforced through `DeviceActivity` usage thresholds; apps are shielded via `ManagedSettings` until midnight once the budget runs out.
 - The apps, categories, and websites in an existing limit can be edited. Any
@@ -73,7 +79,11 @@ Features:
   fall back to the default times. Starts range from 00:00 to 23:30 so a boundary
   registration still fits Apple's minimum interval before midnight.
   Sleep ends at the following wake start, using that morning's custom time;
-  sleep weekdays still refer to the evening when it starts.
+  sleep weekdays still refer to the evening when it starts. Wake gates can
+  optionally end by a latest local-clock time (up to 23:30), even without a tap
+  or while a wait is running. Each group and weekday can have its own ceiling;
+  older saved groups default to none. The first concrete occurrence of a
+  repeated DST ceiling ends the gate without re-locking in the repeated hour.
   One Wake up tap starts all
   eligible groups, including legacy gates; repeated taps do not reset deadlines.
   One optional all-other-apps group has its own timing and additional exclusions,
@@ -81,7 +91,7 @@ Features:
   Overlapping explicit groups use the strictest rule. Screen Time cannot express
   category-wide exceptions, so fallback/category combinations are rejected,
   including later edits to referenced limits. A released wake wait does not clear
-  a spent daily limit. New groups use separate named shield stores and shared,
+  a spent daily limit. Groups use composed named shield stores and shared,
   deduplicated boundary/release monitors; registration failures show the existing
   enforcement warning. Free periods/unblock sessions retain their explicit scope.
   Outside initial setup these changes follow Demora's delays. Physical-device
@@ -104,6 +114,31 @@ Features:
   free periods remain visible in Recurring. Now & Next and
   New session remain available on the main Schedules page. The practice
   walkthrough keeps its direct highlighted Recurring and Calendar links.
+- Home has a prominent shared Wake up action and a day-clock drawing with
+  block, unblock/free, and wake-wait lines. Untapped wake gates are shown as
+  awaiting a tap, not as a predicted unlock deadline. Today's usage uses a
+  compact, bounded scrolling report, with optional expansion. Refresh changes
+  the filter without destroying the report identity; an empty report is never
+  treated as evidence of zero use.
+- Now & Next shows only the next upcoming occurrence of each repeating rule
+  in its rolling week; the full recurrence stays available in Calendar.
+  Schedules → Schedule conflicts shows potential overlapping rules for the
+  next week. Category membership is opaque and untapped wake windows are
+  estimates, so uncertain overlaps are labeled rather than falsely resolved.
+  Default application order is wake/sleep → recurring → planned → sessions.
+  Prioritize this / Restore default priority always queues a less-strict edit;
+  the last promoted rule applies last. Effects remain scoped: an allowlist
+  alone never resets spent daily limits or clears unrelated explicit blocks.
+  Category blocks use separate cohorts for distinct app/site exception sets.
+  A promoted category revokes only its own lower exceptions. The renderer
+  reserves at most 46 named category stores plus three legacy stores, below
+  Apple's [50-store ceiling](https://developer.apple.com/videos/play/wwdc2022/110336/).
+  A monotonic cleanup manifest is published before new cohort settings;
+  all shield reads/writes coordinate across app and monitor processes. A
+  temporary restrictive bridge prevents a crash between cohort replacements
+  from dropping a category; the next successful refresh retires the bridge.
+  Pathological overflow/coordination failure preserves blocks conservatively
+  and marks enforcement degraded, never silently dropping a category.
 - A split budget can divide the daily total into three time-of-day portions,
   with two whole-hour cutoffs and optional carryover. Existing two-portion
   limits remain readable and editable.
@@ -142,6 +177,40 @@ Features:
   a free period is active. Optional five-minute free-period boundary reminders.
 - Read-only Now & Next and Pending Change home-screen widgets. They consume a
   small App Group projection, never FamilyControls tokens or raw usage.
+- Limits & blocks has a full-width New limit action; Home's Select action lives
+  in Pending changes rather than the page header. The Guide covers real 2.0
+  workflows, permissions, delays, overrides, overlaps and troubleshooting.
+- Home → Usage & trends renders 28 completed calendar days plus today through
+  a separate DeviceActivityReport scene. Its dashboard has daily/weekly modes,
+  a large selected-period total, tappable bars, earlier-day navigation and four
+  completed seven-day totals. Selecting a week compares it with its predecessor
+  when both have complete coverage; daily mode compares the latest two periods.
+  A daily average appears only for complete weeks. Warm-paper light/dark styling
+  follows the blue/red accent, and narrow or large-text charts scroll rather
+  than shrink their touch targets. Longer disclosures are in Usage details;
+  the host retains a compact manual-estimate action instead of a settings list.
+  Today is separate, absent data is not zero, and incomplete coverage suppresses
+  comparisons. Each source/day contributes only its latest daily snapshot;
+  segment-level totalActivityDuration is used rather than summing app/category
+  entries. Calendar boundaries support daylight-saving transitions.
+  The host filters iPhone or iPad model families, not a physical device identity;
+  iCloud Screen Time sharing may include other same-kind devices. iOS controls
+  available history and delivery; this is not a permanent usage archive.
+  Optional setup/migration input records a self-reported hours/minutes-per-week
+  estimate and date in the environment-specific App Group. It can be edited or
+  removed later, never changes limits, and developer previews never save it.
+  The report may compare a complete measured week with that estimate, explicitly
+  not as proof of time saved by Demora. Actual usage and even render-readiness
+  stay inside the report: no export, persistence, analytics or extra monitor.
+  The extension's translations are generated from the app catalogs with
+  `Tests/GenerateUsageLocalization.py` and checked by its localization harness.
+  `Tests/UsageDashboardHarness.py` checks the actual display projections;
+  `Tests/UsageDashboardPreview.swift` renders synthetic native SwiftUI fixtures
+  without reading real usage or changing production/developer preferences.
+  API basis (verified 2026-10-06): Apple's
+  [DeviceActivityReport sandbox](https://developer.apple.com/documentation/deviceactivity/deviceactivityreport),
+  [segment screen-on duration](https://developer.apple.com/documentation/deviceactivity/deviceactivitydata/activitysegment/totalactivityduration),
+  and [device-model filter](https://developer.apple.com/documentation/deviceactivity/deviceactivityfilter/devices-swift.struct).
 
 ## Targets
 
@@ -214,7 +283,7 @@ and local migration previews, not real-token or Screen Time enforcement tests.
   other Screen Time boundaries, callback delivery is best-effort, so a missed
   callback may be repaired only when another wake or app foreground occurs.
 - A "minutes used so far" display is provided by the `LatchReport`
-  `DeviceActivityReport` extension (shown on the Limits tab). The in-app
+  `DeviceActivityReport` extension (shown on Home). The in-app
   checkpoint counter was unreliable cross-process; the report reads real usage.
 - Free-period reminders use repeating calendar notifications for daily/weekly
   rules. Monthly and one-off reminders are queued in a bounded rolling window

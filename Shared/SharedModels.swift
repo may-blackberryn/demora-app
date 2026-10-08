@@ -405,21 +405,44 @@ struct LimitPacing: Codable, Equatable {
 struct WakeDayTiming: Codable, Equatable {
     var startMinutes = 0
     var waitMinutes = 10
-    var isValid: Bool { (0...1410).contains(startMinutes) && (0...1440).contains(waitMinutes) }
+    /// Local-clock ceiling for this gate, independent of tapping or elapsed wait.
+    /// Missing in old state means no automatic ceiling.
+    var latestMinutes: Int? = nil
+    var isValid: Bool {
+        (0...1410).contains(startMinutes) && (0...1440).contains(waitMinutes)
+            && (latestMinutes.map { $0 > startMinutes && $0 <= 1410 } ?? true)
+    }
+    func ceilingReached(on date: Date) -> Bool {
+        guard let latestMinutes else { return false }
+        let calendar = Calendar.current
+        guard let boundary = calendar.date(bySettingHour: latestMinutes / 60,
+            minute: latestMinutes % 60, second: 0, of: calendar.startOfDay(for: date),
+            matchingPolicy: .nextTime, repeatedTimePolicy: .first, direction: .forward)
+        else { return false }
+        // Once the concrete daily ceiling passes, a repeated DST hour cannot
+        // turn this gate back on. A missing spring hour uses the next valid time.
+        return date >= boundary
+    }
+    func noLooser(than old: WakeDayTiming) -> Bool {
+        startMinutes <= old.startMinutes && waitMinutes >= old.waitMinutes
+            && (latestMinutes ?? 1440) >= (old.latestMinutes ?? 1440)
+    }
 }
 
 struct LimitWakeSchedule: Codable, Equatable {
     var startMinutes = 0
     var weekdays: Set<Int> = Set(1...7)
     var dayTimings: [Int: WakeDayTiming] = [:]
+    var latestMinutes: Int? = nil
     var isValid: Bool {
         (0...1410).contains(startMinutes) && !weekdays.isEmpty
+            && (latestMinutes.map { $0 > startMinutes && $0 <= 1410 } ?? true)
             && weekdays.isSubset(of: Set(1...7))
             && dayTimings.allSatisfy { (1...7).contains($0.key) && $0.value.isValid }
     }
     func timing(on date: Date, defaultWait: Int) -> WakeDayTiming {
         dayTimings[Calendar.current.component(.weekday, from: date)]
-            ?? WakeDayTiming(startMinutes: startMinutes, waitMinutes: defaultWait)
+            ?? WakeDayTiming(startMinutes: startMinutes, waitMinutes: defaultWait, latestMinutes: latestMinutes)
     }
     func eligible(on date: Date) -> Bool {
         let c = Calendar.current.dateComponents([.weekday, .hour, .minute], from: date)
@@ -429,9 +452,9 @@ struct LimitWakeSchedule: Codable, Equatable {
     func noLooser(than old: LimitWakeSchedule, wait: Int, oldWait: Int) -> Bool {
         guard old.weekdays.isSubset(of: weekdays) else { return false }
         for day in old.weekdays {
-            let before = old.dayTimings[day] ?? WakeDayTiming(startMinutes: old.startMinutes, waitMinutes: oldWait)
-            let after = dayTimings[day] ?? WakeDayTiming(startMinutes: startMinutes, waitMinutes: wait)
-            if after.startMinutes > before.startMinutes || after.waitMinutes < before.waitMinutes { return false }
+            let before = old.dayTimings[day] ?? WakeDayTiming(startMinutes: old.startMinutes, waitMinutes: oldWait, latestMinutes: old.latestMinutes)
+            let after = dayTimings[day] ?? WakeDayTiming(startMinutes: startMinutes, waitMinutes: wait, latestMinutes: latestMinutes)
+            if !after.noLooser(than: before) { return false }
         }
         return true
     }
@@ -540,9 +563,17 @@ struct WakeBlockRule: Codable, Equatable {
     var waitMinutes = 120
     var weekdays: Set<Int> = Set(1...7)
     var scope = BoundaryBlockScope()
+    var latestMinutes: Int? = nil
+    var weekdayLatestMinutes: [Int: Int]? = nil
+
+    func latest(on date: Date) -> Int? {
+        weekdayLatestMinutes?[Calendar.current.component(.weekday, from: date)] ?? latestMinutes
+    }
 
     func isValid(in state: LatchState) -> Bool {
         [0, 3, 6, 9].contains(startHour)
+            && (latestMinutes.map { $0 > startHour * 60 && $0 <= 1410 } ?? true)
+            && (weekdayLatestMinutes?.allSatisfy { (1...7).contains($0.key) && $0.value > startHour * 60 && $0.value <= 1410 } ?? true)
             && (!enabled || ((0...1440).contains(waitMinutes)
                             && !weekdays.isEmpty && scope.isValid(in: state)))
     }
@@ -600,6 +631,7 @@ struct DayNightGroup: Codable, Equatable, Identifiable {
     /// Nil preserves the old hour-based start without rewriting it on upgrade.
     var wakeStartMinutes: Int? = nil
     var weekdayWakeTimings: [Int: WakeDayTiming] = [:]
+    var wakeLatestMinutes: Int? = nil
     var sleepStartMinutes = 22 * 60
     var weekdays: Set<Int> = Set(1...7)
     var scope = DayNightScope()
@@ -609,22 +641,23 @@ struct DayNightGroup: Codable, Equatable, Identifiable {
     var defaultWakeStart: Int { wakeStartMinutes ?? startHour * 60 }
     func wakeTiming(on date: Date) -> WakeDayTiming {
         weekdayWakeTimings[Calendar.current.component(.weekday, from: date)]
-            ?? WakeDayTiming(startMinutes: defaultWakeStart, waitMinutes: waitMinutes)
+            ?? WakeDayTiming(startMinutes: defaultWakeStart, waitMinutes: waitMinutes, latestMinutes: wakeLatestMinutes)
     }
     var timingsAreValid: Bool {
         (0...1410).contains(defaultWakeStart) && (0...1440).contains(waitMinutes)
+            && (wakeLatestMinutes.map { $0 > defaultWakeStart && $0 <= 1410 } ?? true)
             && weekdayWakeTimings.allSatisfy { (1...7).contains($0.key) && $0.value.isValid }
             && (!sleepEnabled || (defaultWakeStart != sleepStartMinutes
                 && weekdayWakeTimings.values.allSatisfy { $0.startMinutes != sleepStartMinutes }))
     }
     func timingNoLooser(than old: DayNightGroup) -> Bool {
         for day in old.weekdays {
-            let before = old.weekdayWakeTimings[day] ?? WakeDayTiming(startMinutes: old.defaultWakeStart, waitMinutes: old.waitMinutes)
-            let after = weekdayWakeTimings[day] ?? WakeDayTiming(startMinutes: defaultWakeStart, waitMinutes: waitMinutes)
+            let before = old.weekdayWakeTimings[day] ?? WakeDayTiming(startMinutes: old.defaultWakeStart, waitMinutes: old.waitMinutes, latestMinutes: old.wakeLatestMinutes)
+            let after = weekdayWakeTimings[day] ?? WakeDayTiming(startMinutes: defaultWakeStart, waitMinutes: waitMinutes, latestMinutes: wakeLatestMinutes)
             // Changing sleep's end is conservatively less strict; a later end
             // also moves the wake gate later. Never waive that tradeoff.
             if old.sleepEnabled && after.startMinutes != before.startMinutes { return false }
-            if after.startMinutes > before.startMinutes || after.waitMinutes < before.waitMinutes { return false }
+            if !after.noLooser(than: before) { return false }
         }
         return true
     }
@@ -691,6 +724,7 @@ extension DayNightGroup {
         waitMinutes = try c.decode(Int.self, forKey: .waitMinutes)
         wakeStartMinutes = try c.decodeIfPresent(Int.self, forKey: .wakeStartMinutes)
         weekdayWakeTimings = try c.decodeIfPresent([Int: WakeDayTiming].self, forKey: .weekdayWakeTimings) ?? [:]
+        wakeLatestMinutes = try c.decodeIfPresent(Int.self, forKey: .wakeLatestMinutes)
         sleepStartMinutes = try c.decode(Int.self, forKey: .sleepStartMinutes)
         weekdays = try c.decode(Set<Int>.self, forKey: .weekdays)
         scope = try c.decode(DayNightScope.self, forKey: .scope)
@@ -1048,6 +1082,8 @@ struct LatchState: Codable {
     var sleepRule = SleepBlockRule()
     var dayNightGroups: [DayNightGroup] = []
     var dayNightSetupDone = false
+    /// Promoted schedule keys, oldest promotion first. Never edited immediately.
+    var prioritizedScheduleKeys: [String] = []
     var pending: [PendingChange] = []
     var schedules: [BlockSchedule] = []
     var exemptions: [ExemptSchedule] = []
@@ -1089,6 +1125,7 @@ struct LatchState: Codable {
         sleepRule = try c.decodeIfPresent(SleepBlockRule.self, forKey: .sleepRule) ?? SleepBlockRule()
         dayNightGroups = try c.decodeIfPresent([DayNightGroup].self, forKey: .dayNightGroups) ?? []
         dayNightSetupDone = try c.decodeIfPresent(Bool.self, forKey: .dayNightSetupDone) ?? false
+        prioritizedScheduleKeys = try c.decodeIfPresent([String].self, forKey: .prioritizedScheduleKeys) ?? []
         pending = (try c.decodeIfPresent([PendingChange].self, forKey: .pending) ?? [])
             .filter { change in
                 switch change.action {
@@ -1112,6 +1149,7 @@ struct LatchState: Codable {
 // MARK: - Pending changes
 
 enum ChangeAction: Codable, Equatable {
+    case setSchedulePriority(key: String, prioritized: Bool)
     case setDelayPolicy(DelayPolicy)
     case addLimit(AppLimit)
     case updateLimitMinutes(id: UUID, minutes: Int)

@@ -166,6 +166,10 @@ enum LimitFeatures {
     static func wakeState(for limit: AppLimit, at date: Date = Date(),
                           guardedNow: Date = TimeGuard.now()) -> WakeState {
         guard limit.wakeDelayMinutes != nil else { return .notConfigured }
+        if (limit.wakeSchedule ?? LimitWakeSchedule())
+            .timing(on: date, defaultWait: limit.wakeDelayMinutes ?? 0).ceilingReached(on: date) {
+            return .awake
+        }
         if let release = entry(limit.id, at: date).wakeReleaseAt {
             return guardedNow < release ? .waiting(release) : .awake
         }
@@ -476,7 +480,7 @@ enum LimitFeatures {
     /// One runtime read for the full shield pass. Re-reading the coordinated
     /// file once per limit would make a large group expensive in the monitor
     /// extension's short callback budget.
-    static func blockedFeatureIDs(state: LatchState, at date: Date) -> Set<UUID> {
+    static func blockedFeatureIDs(state: LatchState, at date: Date, includeWake: Bool = true) -> Set<UUID> {
         guard state.limits.contains(where: {
             $0.wakeDelayMinutes != nil || $0.split != nil
                 || $0.pacing != nil || $0.extraTime != nil
@@ -491,7 +495,8 @@ enum LimitFeatures {
         for limit in state.limits {
             let value = entries[limit.id].flatMap { $0.day == day ? $0 : nil }
             let budget = limit.minutes(on: date)
-            if limit.wakeDelayMinutes != nil,
+            if includeWake, limit.wakeDelayMinutes != nil,
+               !(limit.wakeSchedule ?? LimitWakeSchedule()).timing(on: date, defaultWait: limit.wakeDelayMinutes ?? 0).ceilingReached(on: date),
                (value?.wakeReleaseAt.map { guardedNow < $0 }
                 ?? (limit.wakeSchedule ?? LimitWakeSchedule()).eligible(on: date)) {
                 blocked.insert(limit.id)
@@ -1085,9 +1090,13 @@ enum LimitFeatures {
         let running = Set(activities.map(\.rawValue)).subtracting(stale.map(\.rawValue))
         let free = ChangeEngine.isFreeWindowActive()
         for limit in state.limits {
-            if case .waiting(let release) = wakeState(for: limit),
-               !running.contains(wakeReleasePrefix + limit.id.uuidString) {
-                scheduleWake(for: limit.id, at: release)
+            let wakeName = wakeReleasePrefix + limit.id.uuidString
+            if case .waiting(let release) = wakeState(for: limit) {
+                if !running.contains(wakeName) { scheduleWake(for: limit.id, at: release) }
+            } else if running.contains(wakeName) {
+                // A calendar ceiling may release before the persisted wait.
+                // Retire only this wake monitor; usage/accounting stay intact.
+                center.stopMonitoring([DeviceActivityName(wakeName)])
             }
             if limit.extraTime != nil {
                 let value = entry(limit.id, at: now)

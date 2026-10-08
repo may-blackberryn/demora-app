@@ -35,11 +35,14 @@ struct LimitsView: View {
                             Image(systemName: "questionmark.circle")
                         }
                         .accessibilityLabel(tr("Help"))
-                        Button { showAdd = true } label: {
-                            Image(systemName: "plus")
-                        }
-                        .accessibilityLabel(tr("New limit"))
                     }
+                }
+                if !model.inTutorial {
+                    Button { showAdd = true } label: {
+                        Label(tr("New limit"), systemImage: "plus")
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                    }
+                    .buttonStyle(DemoraPrimaryButtonStyle())
                 }
                 if model.enforcementDegraded {
                     EnforcementBanner().demoraSurface()
@@ -286,85 +289,6 @@ struct LimitsView: View {
 
 }
 
-/// The Screen Time extension is shown on Home, while Limits only lists rules.
-/// Keep refresh state here so changing tabs does not couple the report to edits.
-struct HomeUsageCard: View {
-    @AppAccent private var accent
-    let limitCount: Int
-    @ScaledMetric(relativeTo: .body) private var reportRowHeight: CGFloat = 120
-    @AppStorage("appearance") private var appearanceRaw = Appearance.system.rawValue
-    @AppStorage("latch.accentColor", store: SharedStore.defaults)
-    private var accentColorRaw = "blue"
-    @AppStorage("limits.usageNoteDismissed") private var usageNoteDismissed = false
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var refreshedAt = Date()
-    @State private var reportID = 0
-    @State private var didWarmReport = false
-    @State private var showReport = true
-    @State private var reloadInFlight = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                DemoraSectionTitle(title: tr("Today's usage"),
-                                   symbol: "chart.bar.fill")
-                Spacer()
-                Button { reloadReport() } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(accent)
-                        .frame(width: 44, height: 44)
-                }
-                .accessibilityLabel(tr("Refresh"))
-            }
-            if showReport {
-                LimitsUsageReportView(refreshedAt: refreshedAt)
-                    .id(reportID)
-                    .frame(minHeight: max(132, CGFloat(limitCount) * reportRowHeight + 16))
-            } else {
-                HStack { Spacer(); ProgressView(); Spacer() }
-                    .frame(minHeight: max(132, CGFloat(limitCount) * reportRowHeight + 16))
-            }
-            if !usageNoteDismissed {
-                DismissibleNote(
-                    text: tr("Today's usage is reported by iOS Screen Time, which can be slow to load or briefly show nothing. If it looks empty, tap the refresh arrow a couple of times."),
-                    onDismiss: { usageNoteDismissed = true })
-            }
-        }
-        .demoraSurface()
-        .onAppear {
-            refreshReport()
-            if !didWarmReport {
-                didWarmReport = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { reloadReport() }
-                for delay in [1.8, 3.5] {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                        refreshReport()
-                    }
-                }
-            }
-        }
-        .onChange(of: scenePhase) { phase in
-            if phase == .active { refreshReport() }
-        }
-        .onChange(of: appearanceRaw) { _ in refreshReport() }
-        .onChange(of: accentColorRaw) { _ in refreshReport() }
-    }
-
-    private func refreshReport() { refreshedAt = Date() }
-
-    private func reloadReport() {
-        guard !reloadInFlight else { return }
-        reloadInFlight = true
-        showReport = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            reportID += 1
-            refreshedAt = Date()
-            showReport = true
-            reloadInFlight = false
-        }
-    }
-}
 
 private struct BoundaryWeekdaysEditor: View {
     @AppAccent private var accent
@@ -476,6 +400,12 @@ struct WakeBlockEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var rule = WakeBlockRule()
 
+    private func localizedWeekday(_ day: Int) -> String {
+        var calendar = Calendar.current
+        calendar.locale = AppLanguage.current.locale
+        return calendar.weekdaySymbols[day - 1]
+    }
+
     private var boundaryChangePending: Bool {
         model.state.pending.contains {
             switch $0.action {
@@ -508,9 +438,32 @@ struct WakeBlockEditor: View {
                             .font(.subheadline.weight(.semibold))
                         DurationPicker(minutes: $rule.waitMinutes,
                                        maxHours: 24, minMinutes: 0)
+                        WakeCeilingPicker(latestMinutes: $rule.latestMinutes,
+                                          startMinutes: rule.startHour * 60)
                     }
                     .demoraSurface()
                     BoundaryWeekdaysEditor(weekdays: $rule.weekdays)
+                    DisclosureGroup(tr("Customize wake-up by day")) {
+                        ForEach(rule.weekdays.sorted(), id: \.self) { day in
+                            VStack(alignment: .leading, spacing: 10) {
+                                Toggle(localizedWeekday(day), isOn: Binding(
+                                    get: { rule.weekdayLatestMinutes?[day] != nil },
+                                    set: { enabled in
+                                        if enabled {
+                                            var overrides = rule.weekdayLatestMinutes ?? [:]
+                                            overrides[day] = rule.latestMinutes ?? min(1410, max(720, rule.startHour * 60 + 30))
+                                            rule.weekdayLatestMinutes = overrides
+                                        } else { rule.weekdayLatestMinutes?.removeValue(forKey: day) }
+                                    }))
+                                if rule.weekdayLatestMinutes?[day] != nil {
+                                    WakeCeilingPicker(latestMinutes: Binding(
+                                        get: { rule.weekdayLatestMinutes?[day] },
+                                        set: { value in rule.weekdayLatestMinutes?[day] = value }),
+                                        startMinutes: rule.startHour * 60)
+                                }
+                            }.padding(.vertical, 8)
+                        }
+                    }
                     BoundaryScopeEditor(scope: $rule.scope)
                 }
                 if rule != model.state.wakeRule {

@@ -444,6 +444,7 @@ struct DayNightGroupEditor: View {
                                                   set: { draft.wakeStartMinutes = $0 }),
                              waitMinutes: $draft.waitMinutes, weekdays: $draft.weekdays,
                              dayTimings: $draft.weekdayWakeTimings,
+                             latestMinutes: $draft.wakeLatestMinutes,
                              showsWeekdays: false, showsWait: draft.wakeEnabled)
             Text(tr("Sleep blocking ends at this time, even if the wake-up tap is off."))
                 .font(.footnote).foregroundStyle(Ink.faint)
@@ -625,6 +626,9 @@ private struct DayNightGroupSummary: View {
             if group.wakeEnabled {
                 Label(String(format: tr("Wake from %@ · wait %d minutes after tap"),
                              minutesLabel(group.wakeTiming(on: Date()).startMinutes), group.wakeTiming(on: Date()).waitMinutes), systemImage: "sunrise")
+                if let latest = group.wakeTiming(on: Date()).latestMinutes {
+                    Label(String(format: tr("Latest wake-up: %@"), minutesLabel(latest)), systemImage: "clock")
+                }
             }
             if group.sleepEnabled {
                 Label(String(format: tr("Sleep %@–%@"), minutesLabel(group.sleepStartMinutes),

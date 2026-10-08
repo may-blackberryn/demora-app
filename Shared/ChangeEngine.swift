@@ -36,15 +36,18 @@ enum GlobalWake {
 
     static func status(state: LatchState, at date: Date = Date()) -> GlobalWakeStatus {
         let rule = state.wakeRule
+        guard rule.enabled else { return .inactive }
+        if WakeDayTiming(startMinutes: rule.startHour * 60, waitMinutes: rule.waitMinutes,
+                         latestMinutes: rule.latest(on: date)).ceilingReached(on: date) { return .awake }
+        if SharedStore.defaults.string(forKey: dayKey) == SharedStore.dayKey(for: date),
+           let release = SharedStore.defaults.object(forKey: releaseKey) as? Date {
+            return TimeGuard.now() < release ? .waiting(release) : .awake
+        }
         let clock = Calendar.current.dateComponents([.hour, .minute], from: date)
         let minute = (clock.hour ?? 0) * 60 + (clock.minute ?? 0)
-        guard rule.enabled, rule.weekdays.contains(Calendar.current.component(.weekday, from: date)),
+        guard rule.weekdays.contains(Calendar.current.component(.weekday, from: date)),
               minute >= rule.startHour * 60 else { return .inactive }
-        guard SharedStore.defaults.string(forKey: dayKey)
-                == SharedStore.dayKey(for: date),
-              let release = SharedStore.defaults.object(forKey: releaseKey) as? Date
-        else { return .needsTap }
-        return TimeGuard.now() < release ? .waiting(release) : .awake
+        return .needsTap
     }
 
     @discardableResult
@@ -386,7 +389,7 @@ enum ChangeEngine {
         case .addLimit, .updateLimitMinutes, .updateLimit, .configureLimit,
              .removeLimit, .setGroupWakeDelay, .setGroupWakeSchedule, .setWakeRule, .setSleepRule:
             return .limitChanges
-        case .addSchedule, .updateScheduleSelection, .removeSchedule,
+        case .setSchedulePriority, .addSchedule, .updateScheduleSelection, .removeSchedule,
              .upsertDayNightGroup, .removeDayNightGroup,
              .addExemption, .removeExemption,
              .addPlanned, .removePlanned:
@@ -464,6 +467,10 @@ enum ChangeEngine {
     ///  • disable an override / make it harder → stricter
     static func classify(_ action: ChangeAction, state: LatchState) -> ChangeDirection {
         switch action {
+        case .setSchedulePriority:
+            // Reordering can trade protection in either direction. Always
+            // honor the less-strict wait, even when promoting a block.
+            return .lenient
         case .setGroupWakeSchedule(let id, let minutes, let schedule):
             guard let minutes else { return .lenient }
             guard let old = state.limits.first(where: { $0.id == id }), let oldWait = old.wakeDelayMinutes else { return .stricter }
@@ -609,6 +616,10 @@ enum ChangeEngine {
 
     static func summary(for action: ChangeAction, state: LatchState) -> String {
         switch action {
+        case .setSchedulePriority(let key, let prioritized):
+            let rawName = SchedulePrecedence.displayName(key: key, state: state) ?? tr("Schedule")
+            let name = key == "global-wake" || key == "global-sleep" ? tr(rawName) : rawName
+            return String(format: tr(prioritized ? "Prioritize %@" : "Restore default priority for %@"), name)
         case .setGroupWakeSchedule(let id, _, _):
             let name = state.limits.first { $0.id == id }?.name ?? tr("group")
             return String(format: tr("Change wake-up schedule for %@"), name)
@@ -744,6 +755,8 @@ enum ChangeEngine {
     /// is still counting down.
     static func conflictKey(_ action: ChangeAction) -> String {
         switch action {
+        case .setSchedulePriority:
+            return "schedulePriority" // serialize edits to the ordered collection
         case .addLimit(let l):
             return "addLimit-\(l.name.lowercased())"
         case .updateLimitMinutes(let id, _), .updateLimit(let id, _, _),
@@ -922,6 +935,10 @@ enum ChangeEngine {
             guard let current = state.schedules.first(where: { $0.id == id }),
                   current.selection != selection,
                   current.acceptsSelection(selection) else { return nil }
+        }
+        if case .setSchedulePriority(let key, let prioritized) = action {
+            guard SchedulePrecedence.configuredKeys(state: state).contains(key),
+                  state.prioritizedScheduleKeys.contains(key) != prioritized else { return nil }
         }
         if case .setDelayPolicy(let policy) = action {
             guard policy.isValid, policy.normalized != state.delayPolicy.normalized else { return nil }
@@ -1267,6 +1284,11 @@ enum ChangeEngine {
 
     private static func apply(_ action: ChangeAction, to state: inout LatchState) {
         switch action {
+        case .setSchedulePriority(let key, let prioritized):
+            // A removed rule must never be resurrected by a stale promotion.
+            guard SchedulePrecedence.configuredKeys(state: state).contains(key) else { break }
+            state.prioritizedScheduleKeys.removeAll { $0 == key }
+            if prioritized { state.prioritizedScheduleKeys.append(key) }
         case .setGroupWakeSchedule(let id, let minutes, let schedule):
             guard schedule.isValid, minutes.map({ (0...1440).contains($0) }) ?? true,
                   let index = state.limits.firstIndex(where: { $0.id == id }) else { break }
@@ -1348,8 +1370,9 @@ enum ChangeEngine {
                   !state.sleepRule.enabled
                     || state.sleepRule.startMinutes != rule.startHour * 60
             else { break }
+            let wasEnabled = state.wakeRule.enabled
             state.wakeRule = rule
-            GlobalWake.clearTap()
+            if !rule.enabled || !wasEnabled { GlobalWake.clearTap() }
         case .setSleepRule(let rule):
             guard rule.isValid(in: state, wakeHour: state.wakeRule.startHour) else { break }
             state.sleepRule = rule

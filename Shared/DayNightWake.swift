@@ -21,6 +21,9 @@ enum DayNightWake {
     static func status(group: DayNightGroup, at date: Date = Date(),
                        guardedNow: Date = TimeGuard.now()) -> GlobalWakeStatus {
         guard group.wakeEnabled else { return .inactive }
+        // A deliberate, delay-gated calendar ceiling ends only this wake gate,
+        // including an already-running wait. It never clears usage or sleep.
+        if group.wakeTiming(on: date).ceilingReached(on: date) { return .awake }
         if let entries = loadEntries(), let entry = entries[group.id.uuidString],
            entry.day == cycle(group: group, at: date), entry.epoch == group.wakeEpoch {
             // Moving a start or removing today's weekday cannot shorten a wait.

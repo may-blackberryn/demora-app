@@ -1,7 +1,8 @@
 //
 //  RedesignWelcomeView.swift
 //  Existing-user welcome; rules stay intact. Eligible legacy math users can
-//  explicitly stage a one-time, delay-free phrase replacement. No access prompts.
+//  explicitly stage a one-time, delay-free phrase replacement. Delay-policy
+//  edits use the ordinary queued editor, never a migration waiver. No access prompts.
 //
 
 import SwiftUI
@@ -25,6 +26,8 @@ struct RedesignWelcomeView: View {
     @State private var dayNightSaved = false
     @State private var savingDayNight = false
     @State private var dayNightSaveError = false
+    @State private var wantsUsageEstimate = false
+    @State private var usageEstimateMinutes = 21 * 60
 
     private var offersDayNight: Bool {
         guard !dayNightSaved else { return false }
@@ -160,14 +163,38 @@ struct RedesignWelcomeView: View {
                                    detail: tr("See what's active, what's next, and which changes are waiting."))
                 DemoraWelcomeEntry(symbol: "hourglass", title: tr("Delays & overrides"),
                                    detail: tr("Your waits and trusted contacts now have their own place."))
-                DemoraWelcomeEntry(symbol: "slider.horizontal.3", title: tr("Three ways to wait"),
-                                   detail: tr("Keep separate waits, use one shared wait, or wait only when loosening rules. Your current delay mode and durations stay unchanged."))
                 DemoraWelcomeEntry(symbol: "calendar", title: tr("Limits & schedules"),
                                    detail: tr("Daily boundaries in Limits. Recurring and planned time in Schedules."))
             }
             .demoraSurface()
+            delaySetupOffer
             preservedRules
         }
+    }
+
+    private var delaySetupOffer: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            DemoraSectionTitle(title: tr("Three ways to wait"), symbol: "slider.horizontal.3")
+            Text(tr("Optional. Keep separate waits, use one shared wait, or tighten immediately and wait only when loosening rules. If you skip this, your delay settings stay unchanged."))
+                .font(.subheadline).foregroundStyle(Ink.faint)
+            Text(tr("Changing your delay mode follows your current delays. Countdowns already running keep their original deadline."))
+                .font(.footnote).foregroundStyle(Ink.faint)
+            #if DEBUG
+            if isDemo {
+                // Never expose the live model's queueing editor in a demo.
+                NavigationLink {
+                    MigrationDelayPreviewView(policy: displayedState.delayPolicy)
+                } label: {
+                    Label(tr("How changes wait"), systemImage: "hourglass")
+                }
+            } else {
+                DelayPolicyNavigationRows()
+            }
+            #else
+            DelayPolicyNavigationRows()
+            #endif
+        }
+        .demoraSurface()
     }
 
     private var preservedRules: some View {
@@ -179,7 +206,7 @@ struct RedesignWelcomeView: View {
             countRow(tr("Free periods"), count: displayedState.exemptions.count)
             countRow(tr("Planned windows"), count: displayedState.planned.count)
             countRow(tr("Pending changes"), count: displayedState.pending.count)
-            Text(tr("Your saved rules and pending changes are retained. Your existing delay settings are unchanged."))
+            Text(tr("Your saved rules and pending changes are retained. Unless you queue a change, your existing delay settings stay unchanged."))
                 .font(.footnote).foregroundStyle(Ink.faint)
         }
         .demoraSurface()
@@ -246,6 +273,8 @@ struct RedesignWelcomeView: View {
             }
             .demoraSurface()
             countRow(tr("Trusted contacts"), count: displayedState.overrides.contacts.count)
+            WeeklyUsageEstimateDraft(enabled: $wantsUsageEstimate, minutes: $usageEstimateMinutes)
+                .demoraSurface()
             Text(tr("You're ready. Your rules are still yours."))
                 .font(.system(.title2, design: .serif))
             Text(tr("The optional walkthrough is always in Settings → Help."))
@@ -330,8 +359,35 @@ struct RedesignWelcomeView: View {
                 return
             }
             #endif
+            if wantsUsageEstimate { WeeklyUsageEstimate.save(minutes: usageEstimateMinutes) }
             if openLimits { model.selectedTab = 1 }
             onComplete()
         }
     }
 }
+
+#if DEBUG
+/// A local draft only: no AppModel, persistence, queueing, or service calls.
+private struct MigrationDelayPreviewView: View {
+    @State private var policy: DelayPolicy
+
+    init(policy: DelayPolicy) {
+        _policy = State(initialValue: policy)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                DeveloperDemoNotice()
+                DemoraPageTitle(title: tr("How changes wait"))
+                Text(tr("Demo only. Try the delay choices here; nothing is queued or saved. Go back to keep exploring the welcome."))
+                    .font(.subheadline).foregroundStyle(Ink.faint)
+                DelayPolicyPicker(policy: $policy)
+            }
+            .padding(26).frame(maxWidth: 640).frame(maxWidth: .infinity)
+        }
+        .background(Ink.paper.ignoresSafeArea())
+        .casedNavigationTitle(tr("Delays"))
+    }
+}
+#endif

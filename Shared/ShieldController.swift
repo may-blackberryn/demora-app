@@ -13,18 +13,104 @@ struct ShieldController {
     static let store = ManagedSettingsStore(named: .init("latch.main"))
     private static let dayNightSelected = ManagedSettingsStore(named: .init("latch.dayNight.selected"))
     private static let dayNightOther = ManagedSettingsStore(named: .init("latch.dayNight.other"))
+    // Three legacy stores + at most 46 category cohorts stay below Apple's 50
+    // named-store ceiling. Names are shared by the host and all extensions.
+    private static let categoryStoreCapacity = 46
+    private static let categoryStoreCountKey = "latch.scheduleCategoryStores.v1"
+    private static let categoryStoreUnverifiedKey = "latch.scheduleCategoryStores.unverified.v1"
+    private static func categoryStore(_ index: Int) -> ManagedSettingsStore {
+        ManagedSettingsStore(named: .init("latch.schedule.category.\(index)"))
+    }
+
+    @discardableResult
+    private static func applyCategoryShields(_ cohorts: [FamilyActivitySelection]) -> Bool {
+        // Serialize the manifest and cohort updates across app/monitor writers.
+        // Publish a monotonic high-water mark BEFORE applying new settings, so
+        // a crash cannot strand an unrecorded named store. Never rewrite it on
+        // healthy refreshes or decode the configuration again here.
+        return SharedStore.coordinateStateMutation {
+            var groups = cohorts
+            if groups.count > categoryStoreCapacity {
+                // Pathological overlapping selections must never drop blocks.
+                // Coalesce overflow without exceptions (conservative fallback).
+                var overflow = FamilyActivitySelection()
+                for group in groups.dropFirst(categoryStoreCapacity - 1) {
+                    overflow.categoryTokens.formUnion(group.categoryTokens)
+                }
+                groups = Array(groups.prefix(categoryStoreCapacity - 1)) + [overflow]
+                if !SharedStore.enforcementDegraded { SharedStore.enforcementDegraded = true }
+            }
+            let raw = SharedStore.defaults.object(forKey: categoryStoreCountKey)
+            let recorded = raw as? Int
+            let oldCount = recorded.map { (0...categoryStoreCapacity).contains($0) ? $0 : categoryStoreCapacity }
+                ?? (raw == nil ? 0 : categoryStoreCapacity)
+            let highWater = max(oldCount, groups.count)
+            if highWater > oldCount || SharedStore.defaults.bool(forKey: categoryStoreUnverifiedKey) {
+                // Keep failed publication visibly unverified in the cached
+                // suite, so a retry cannot trust a failed growth as oldCount.
+                SharedStore.defaults.set(true, forKey: categoryStoreUnverifiedKey)
+                SharedStore.defaults.set(highWater, forKey: categoryStoreCountKey)
+                guard SharedStore.defaults.synchronize(),
+                      SharedStore.defaults.object(forKey: categoryStoreCountKey) as? Int == highWater
+                else { return false }
+                SharedStore.defaults.set(false, forKey: categoryStoreUnverifiedKey)
+            }
+            // A conservative bridge protects categories while cohort indices
+            // are replaced. If the process dies between two setter calls,
+            // this bridge remains restrictive until the next complete refresh.
+            // No opaque category-to-app membership has to be guessed.
+            var bridge = Set(groups.flatMap { $0.categoryTokens })
+            if case .specific(let categories, _) = dayNightSelected.shield.applicationCategories {
+                bridge.formUnion(categories)
+            }
+            for index in 0..<highWater {
+                if case .specific(let categories, _) = categoryStore(index).shield.applicationCategories {
+                    bridge.formUnion(categories)
+                }
+            }
+            dayNightSelected.shield.applicationCategories = bridge.isEmpty ? nil : .specific(bridge)
+            dayNightSelected.shield.webDomainCategories = bridge.isEmpty ? nil : .specific(bridge)
+            // Install the new restrictions before retiring obsolete cohorts.
+            for (index, group) in groups.enumerated() {
+                let target = categoryStore(index)
+                target.shield.applicationCategories = .specific(group.categoryTokens, except: group.applicationTokens)
+                target.shield.webDomainCategories = .specific(group.categoryTokens, except: group.webDomainTokens)
+            }
+            for index in groups.count..<highWater {
+                let target = categoryStore(index)
+                if target.shield.applicationCategories != nil || target.shield.webDomainCategories != nil {
+                    target.clearAllSettings()
+                }
+            }
+            return true
+        } ?? false
+    }
 
     /// Re-derive shields from state + blocked limit IDs. Idempotent —
     /// safe to call from the app or any extension at any time.
     ///
-    /// Rules are layered from lowest to highest priority so the higher one has
-    /// the final say:  limits  <  recurring  <  planned  <  session.
+    /// Rules are layered lowest-first: daily usage < wake/sleep < recurring
+    /// < planned < sessions. Explicit promoted schedules apply last and all
+    /// promotion/restoration edits are delay-gated.
     /// Within the recurring group, the most recently added window is applied
     /// last (so it wins). Each rule either blocks apps, "blocks all except" an
     /// allowlist, frees specific apps (unblock sessions), or frees everything
     /// (a free period). Stricter specific blocks still apply on top of an
     /// "all except" so a limit-spent allowlisted app stays blocked.
     static func refresh() {
+        // Read the latest state and usage markers inside the same cross-process
+        // transaction as ALL shield writes. An older host refresh must not run
+        // after a newer monitor refresh and erase its freshly-confirmed block.
+        guard SharedStore.coordinateStateMutation({
+            refreshCoordinated()
+            return true
+        }) == true else {
+            if !SharedStore.enforcementDegraded { SharedStore.enforcementDegraded = true }
+            return
+        }
+    }
+
+    private static func refreshCoordinated() {
         // A replay of the walkthrough runs the tour over throwaway sample state,
         // but the user's REAL limits must keep blocking the whole time —
         // otherwise starting a replay would be a way to unblock apps. Enforce the
@@ -45,6 +131,7 @@ struct ShieldController {
 
     /// Remove every shield this store owns.
     private static func clearAll() {
+        applyCategoryShields([])
         dayNightSelected.clearAllSettings()
         dayNightOther.clearAllSettings()
         store.shield.applications = nil
@@ -56,164 +143,56 @@ struct ShieldController {
     }
 
     /// Re-derive and apply every shield from the given state. Layered lowest to
-    /// highest priority: limits < recurring < planned < session.
+    /// highest priority, including persisted schedule priority choices.
     private static func apply(state: LatchState) {
         let blockedIDs = SharedStore.loadBlockedLimitIDs()
         let now = Date()
-        let featureBlockedIDs = LimitFeatures.blockedFeatureIDs(state: state, at: now)
+        let featureBlockedIDs = LimitFeatures.blockedFeatureIDs(state: state, at: now, includeWake: false)
         let extraUnblockedIDs = LimitFeatures.extraUnblockedIDs(state: state, at: now)
-
-        var apps = Set<ApplicationToken>()
-        var cats = Set<ActivityCategoryToken>()
-        var webs = Set<WebDomainToken>()
-        // nil = no "block all except" in effect.
-        var allowApps: Set<ApplicationToken>?
-        var allowWebs = Set<WebDomainToken>()
-        // Apps/domains an unblock session freed — excepted from category shields
-        // too, so unblocking works even when the block came from a category.
-        var freedApps = Set<ApplicationToken>()
-        var freedWebs = Set<WebDomainToken>()
-
-        func block(_ s: FamilyActivitySelection) {
-            apps.formUnion(s.applicationTokens)
-            cats.formUnion(s.categoryTokens)
-            webs.formUnion(s.webDomainTokens)
-            // A re-block overrides an earlier free for the same items.
-            freedApps.subtract(s.applicationTokens)
-            freedWebs.subtract(s.webDomainTokens)
-        }
-        func freeSel(_ s: FamilyActivitySelection) {
-            apps.subtract(s.applicationTokens)
-            cats.subtract(s.categoryTokens)
-            webs.subtract(s.webDomainTokens)
-            freedApps.formUnion(s.applicationTokens)
-            freedWebs.formUnion(s.webDomainTokens)
-            if allowApps != nil {
-                allowApps!.formUnion(s.applicationTokens)
-                allowWebs.formUnion(s.webDomainTokens)
-            }
-        }
-        func freeAll() {
-            apps.removeAll(); cats.removeAll(); webs.removeAll()
-            allowApps = nil; allowWebs.removeAll()
-            freedApps.removeAll(); freedWebs.removeAll()
-        }
-        func allExcept(_ s: FamilyActivitySelection) {
-            allowApps = s.applicationTokens
-            allowWebs = s.webDomainTokens
-        }
-
-        // 0. Limits that ran out (baseline). A 0-minute limit allows no time at
-        //    all, so it's blocked all day regardless of usage.
+        var baseline = FamilyActivitySelection()
         for limit in state.limits
         where ((limit.minutes(on: now) == 0 || blockedIDs.contains(limit.id))
-                && !extraUnblockedIDs.contains(limit.id))
-            || featureBlockedIDs.contains(limit.id) {
-            block(limit.selection)
+                && !extraUnblockedIDs.contains(limit.id)) || featureBlockedIDs.contains(limit.id) {
+            baseline.applicationTokens.formUnion(limit.selection.applicationTokens)
+            baseline.categoryTokens.formUnion(limit.selection.categoryTokens)
+            baseline.webDomainTokens.formUnion(limit.selection.webDomainTokens)
         }
-
-        // Global wake and sleep boundaries layer above ordinary usage limits.
-        // Excluding a group here never clears its separately-spent daily limit.
-        func applyBoundary(_ scope: BoundaryBlockScope) {
-            var selection = scope.selection
-            if scope.mode == .blockGroups {
-                selection = FamilyActivitySelection()
-                for group in state.limits where scope.groupIDs.contains(group.id)
-                    && !scope.excludedLimitIDs.contains(group.id) {
-                    selection.applicationTokens.formUnion(group.selection.applicationTokens)
-                    selection.categoryTokens.formUnion(group.selection.categoryTokens)
-                    selection.webDomainTokens.formUnion(group.selection.webDomainTokens)
+        let wakeActive: (GlobalWakeStatus) -> Bool = {
+            switch $0 { case .needsTap, .waiting: return true; case .inactive, .awake: return false }
+        }
+        let plan = ScheduleShieldPlan.build(state: state, baseline: baseline, at: now,
+            globalWakeActive: wakeActive(GlobalWake.status(state: state, at: now)),
+            limitWakeActive: { limit in
+                switch LimitFeatures.wakeState(for: limit, at: now) {
+                case .needsTap, .waiting: return true
+                case .notConfigured, .awake: return false
                 }
-            } else {
-                for group in state.limits where scope.excludedLimitIDs.contains(group.id) {
-                    if scope.mode == .blockAllExcept {
-                        selection.applicationTokens.formUnion(group.selection.applicationTokens)
-                        selection.webDomainTokens.formUnion(group.selection.webDomainTokens)
-                    } else {
-                        selection.applicationTokens.subtract(group.selection.applicationTokens)
-                        selection.categoryTokens.subtract(group.selection.categoryTokens)
-                        selection.webDomainTokens.subtract(group.selection.webDomainTokens)
-                    }
-                }
-            }
-            scope.mode == .blockAllExcept ? allExcept(selection) : block(selection)
-        }
-        switch GlobalWake.status(state: state, at: now) {
-        case .needsTap, .waiting:
-            applyBoundary(state.wakeRule.scope)
-        case .inactive, .awake:
-            break
-        }
-        if state.sleepRule.enabled,
-           windowActive(at: now,
-                        start: state.sleepRule.startMinutes,
-                        end: state.wakeRule.startHour * 60,
-                        recurrence: .weekly(state.sleepRule.weekdays)) {
-            applyBoundary(state.sleepRule.scope)
-        }
-
-        // 1. Recurring (schedules + free periods), oldest-added first.
-        var recurring: [(Date, () -> Void)] = []
-        for s in state.schedules where s.isActive(at: now) {
-            let sel = s.selection, mode = s.mode
-            recurring.append((s.addedAt, {
-                mode == .blockAllExcept ? allExcept(sel) : block(sel)
-            }))
-        }
-        for e in state.exemptions where e.isActive(at: now) {
-            recurring.append((e.addedAt, { freeAll() }))
-        }
-        for (_, apply) in recurring.sorted(by: { $0.0 < $1.0 }) { apply() }
-
-        // 2. Planned one-off windows (add order).
-        for w in state.planned where w.isActive {
-            switch w.kind {
-            case .blockSelected:  block(w.selection)
-            case .blockAllExcept: allExcept(w.selection)
-            case .free:           freeAll()
-            }
-        }
-
-        // 3. Sessions (add order) — highest priority.
-        for s in state.sessions where s.isActive {
-            switch s.kind {
-            case .block:   block(s.selection)
-            case .unblock: freeSel(s.selection)
-            case .free:    freeAll()          // a one-off free period
-            }
-        }
-
-        let nightPlan = DayNightPolicy.plan(state: state, at: now) {
-            DayNightWake.status(group: $0, at: now)
-        }
-        dayNightSelected.shield.applications = nightPlan.blocked.applicationTokens.isEmpty
-            ? nil : nightPlan.blocked.applicationTokens
-        dayNightSelected.shield.webDomains = nightPlan.blocked.webDomainTokens.isEmpty
-            ? nil : nightPlan.blocked.webDomainTokens
-        dayNightSelected.shield.applicationCategories = nightPlan.blocked.categoryTokens.isEmpty
-            ? nil : .specific(nightPlan.blocked.categoryTokens, except: nightPlan.freed.applicationTokens)
-        dayNightSelected.shield.webDomainCategories = nightPlan.blocked.categoryTokens.isEmpty
-            ? nil : .specific(nightPlan.blocked.categoryTokens, except: nightPlan.freed.webDomainTokens)
-        dayNightOther.shield.applicationCategories = nightPlan.allowed.map {
-            .all(except: $0.applicationTokens)
-        }
-        dayNightOther.shield.webDomainCategories = nightPlan.allowed.map {
-            .all(except: $0.webDomainTokens)
-        }
-
-        // Apply to the store.
-        if let allow = allowApps {
-            store.shield.applicationCategories = .all(except: allow)
-            store.shield.webDomainCategories = .all(except: allowWebs)
-            store.shield.applications = apps.isEmpty ? nil : apps
-            store.shield.webDomains = webs.isEmpty ? nil : webs
+            },
+            groupWakeActive: { wakeActive(DayNightWake.status(group: $0, at: now)) })
+        let categoriesApplied = applyCategoryShields(plan.categoryShields)
+        store.shield.applications = plan.blocked.applicationTokens.isEmpty ? nil : plan.blocked.applicationTokens
+        store.shield.webDomains = plan.blocked.webDomainTokens.isEmpty ? nil : plan.blocked.webDomainTokens
+        if let allow = plan.allowed {
+            store.shield.applicationCategories = .all(except: allow.applicationTokens)
+            store.shield.webDomainCategories = .all(except: allow.webDomainTokens)
         } else {
-            store.shield.applications = apps.isEmpty ? nil : apps
-            store.shield.applicationCategories = cats.isEmpty
-                ? nil : .specific(cats, except: freedApps)
-            store.shield.webDomains = webs.isEmpty ? nil : webs
-            store.shield.webDomainCategories = cats.isEmpty
-                ? nil : .specific(cats, except: freedWebs)
+            store.shield.applicationCategories = nil
+            store.shield.webDomainCategories = nil
+        }
+        // Category-specific exceptions cannot share one Apple's .specific
+        // policy. Keep separate cohorts; a promoted category revokes only its
+        // own exceptions, while spent categories keep unrelated session frees.
+        if categoriesApplied {
+            dayNightSelected.clearAllSettings()
+            dayNightOther.clearAllSettings()
+        } else {
+            // Coordination failure cannot silently drop a spent category.
+            // Preserve old cohorts and conservatively apply all current ones.
+            dayNightSelected.shield.applicationCategories = plan.blocked.categoryTokens.isEmpty ? nil
+                : .specific(plan.blocked.categoryTokens)
+            dayNightSelected.shield.webDomainCategories = plan.blocked.categoryTokens.isEmpty ? nil
+                : .specific(plan.blocked.categoryTokens)
+            if !SharedStore.enforcementDegraded { SharedStore.enforcementDegraded = true }
         }
 
         // App-deletion lock (blocks deleting ANY app, incl. this one).

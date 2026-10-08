@@ -1,6 +1,6 @@
 //
 //  OnboardingView.swift
-//  Real setup, one decision at a time. The sample tour stays available in Help.
+//  Real setup, one decision at a time. Help provides the current 2.0 guide.
 //  Draft choices are committed together by AppModel, never by a demo reset.
 //
 
@@ -38,6 +38,8 @@ struct OnboardingView: View {
     @State private var showCompletionError = false
     @State private var dayNightGroups: [DayNightGroup] = []
     @State private var overrides = OverridesConfig()
+    @State private var wantsUsageEstimate = false
+    @State private var usageEstimateMinutes = 21 * 60
 
     private var dayNightLimits: [AppLimit] { firstLimit.map { [$0] } ?? [] }
     private var dayNightValid: Bool {
@@ -350,7 +352,9 @@ struct OnboardingView: View {
                 Text(tr("That's okay. Without Screen Time access Demora can't block apps, but you can continue and turn it on later."))
                     .font(.footnote).foregroundStyle(Ink.faint)
             }
-            Text(tr("Want a practice run? The optional walkthrough and extra safeguards are in Settings → Help."))
+            WeeklyUsageEstimateDraft(enabled: $wantsUsageEstimate, minutes: $usageEstimateMinutes)
+                .demoraSurface()
+            Text(tr("Find practical instructions and troubleshooting in Settings → Help → Guide."))
                 .font(.footnote).foregroundStyle(Ink.faint).demoraSurface()
         }
     }
@@ -466,11 +470,13 @@ struct OnboardingView: View {
             let chosenLimit = firstLimit
             let chosenDayNight = dayNightGroups
             let chosenOverrides = overrides
+            let chosenEstimate = wantsUsageEstimate ? usageEstimateMinutes : nil
             Task { @MainActor in
                 let saved = await model.completeInitialSetup(policy: chosenPolicy, firstLimit: chosenLimit,
                                                             dayNightGroups: chosenDayNight,
                                                             overrides: chosenOverrides)
                 isCompleting = false
+                if saved, let chosenEstimate { WeeklyUsageEstimate.save(minutes: chosenEstimate) }
                 if !saved { showCompletionError = true }
             }
         }

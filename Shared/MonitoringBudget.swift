@@ -81,13 +81,23 @@ enum MonitoringBudget {
         for group in state.dayNightGroups {
             minutes.insert(group.defaultWakeStart)
             minutes.formUnion(group.weekdayWakeTimings.values.map(\.startMinutes))
+            if group.wakeEnabled {
+                if let latest = group.wakeLatestMinutes { minutes.insert(latest) }
+                minutes.formUnion(group.weekdayWakeTimings.values.compactMap(\.latestMinutes))
+            }
             if group.sleepEnabled { minutes.insert(group.sleepStartMinutes) }
         }
         for limit in state.limits where limit.wakeDelayMinutes != nil {
             if let schedule = limit.wakeSchedule {
                 if schedule.startMinutes != 0 { minutes.insert(schedule.startMinutes) }
                 minutes.formUnion(schedule.dayTimings.values.map(\.startMinutes).filter { $0 != 0 })
+                if let latest = schedule.latestMinutes { minutes.insert(latest) }
+                minutes.formUnion(schedule.dayTimings.values.compactMap(\.latestMinutes))
             }
+        }
+        if state.wakeRule.enabled {
+            if let latest = state.wakeRule.latestMinutes { minutes.insert(latest) }
+            minutes.formUnion(state.wakeRule.weekdayLatestMinutes?.values.map { $0 } ?? [])
         }
         return minutes
     }

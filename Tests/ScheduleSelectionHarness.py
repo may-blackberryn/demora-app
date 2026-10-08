@@ -19,6 +19,7 @@ models = (ROOT / "Shared/SharedModels.swift").read_text()
 features = (ROOT / "Shared/LimitFeatures.swift").read_text()
 phrases = (ROOT / "Shared/PhraseWords.swift").read_text()
 budget = (ROOT / "Shared/MonitoringBudget.swift").read_text()
+precedence = (ROOT / "Shared/SchedulePrecedence.swift").read_text().replace("import FamilyControls\n", "")
 registration = (ROOT / "Shared/MonitorRegistration.swift").read_text()
 
 
@@ -949,6 +950,47 @@ for mode in [DelayMode.shared, .lenientOnly] {
                     "normalized zero placeholder rejected")
     }
 }
+for mode in DelayMode.allCases {
+    delayCase("priority promotion/restoration remains delayed in \(mode)") {
+        var state = delayState(mode)
+        let rule = BlockSchedule(name: "Recurring", mode: .blockSelected, selection: app,
+                                 startMinutes: 600, endMinutes: 660)
+        state.schedules = [rule]
+        let key = "schedule-" + rule.id.uuidString
+        let action = ChangeAction.setSchedulePriority(key: key, prioritized: true)
+        SharedStore.rejectSave = false
+        DeviceActivityCenter.running = [LatchConstants.dailyActivityName]
+        SharedStore.save(state)
+        let queued = ChangeEngine.queue(action)
+        delayExpect(queued != nil, "valid promotion rejected")
+        guard let queued else { return }
+        delayExpect(queued.direction == .lenient && queued.appliesAt == TimeGuard.date.addingTimeInterval(900), "wrong current-policy delay")
+        delayExpect(SharedStore.state.prioritizedScheduleKeys.isEmpty, "promotion applied on queue")
+        delayExpect(ChangeEngine.queue(.setSchedulePriority(key: key, prioritized: false)) == nil, "second priority edit accepted")
+        TimeGuard.date = queued.appliesAt.addingTimeInterval(-1)
+        ChangeEngine.applyDueChanges()
+        delayExpect(SharedStore.state.prioritizedScheduleKeys.isEmpty, "promotion applied early")
+        TimeGuard.date = queued.appliesAt
+        ChangeEngine.applyDueChanges()
+        delayExpect(SharedStore.state.prioritizedScheduleKeys == [key], "due promotion not persisted")
+        let restored = try JSONDecoder().decode(LatchState.self, from: JSONEncoder().encode(SharedStore.state))
+        delayExpect(restored.prioritizedScheduleKeys == [key], "promotion lost after restart")
+        let reset = ChangeEngine.queue(.setSchedulePriority(key: key, prioritized: false))
+        delayExpect(reset?.direction == .lenient && reset?.appliesAt == TimeGuard.date.addingTimeInterval(900), "restoration bypassed wait")
+        var removed = restored; removed.schedules = []; removed.prioritizedScheduleKeys = []
+        ChangeEngine.applyForTest(action, state: &removed)
+        delayExpect(removed.prioritizedScheduleKeys.isEmpty && removed.schedules.isEmpty, "stale promotion resurrected removed rule")
+    }
+}
+delayCase("invalid/no-op priority keys are rejected without resetting usage") {
+    var state = delayState(.separate)
+    let rule = BlockSchedule(name: "Schedule", mode: .blockSelected, selection: app, startMinutes: 600, endMinutes: 660)
+    state.schedules = [rule]; SharedStore.save(state)
+    let resets = SharedStore.usageResetCalls
+    delayExpect(ChangeEngine.queue(.setSchedulePriority(key: "missing", prioritized: true)) == nil, "unknown key queued")
+    delayExpect(ChangeEngine.queue(.setSchedulePriority(key: "schedule-" + rule.id.uuidString, prioritized: false)) == nil, "no-op queued")
+    delayExpect(SharedStore.usageResetCalls == resets && SharedStore.state.pending.isEmpty, "invalid priority modified usage/pending")
+}
 print("Delay policy checks: \(delayCases) scenarios, \(delayFailures.count) failures")
 for failure in delayFailures { print("FAIL: \(failure)") }
 '''
@@ -1213,7 +1255,7 @@ SharedStore.blockedIDs = []; DeviceActivityCenter.running = [LatchConstants.dail
 print("Real queue budget checks passed: \(queueBudgetCases) cases; 20/21, save failure, recovery, stale occupancy, delay-safe repairs and pending conjunction")
 '''
 
-source = (infrastructure + models + phrases + budget + admission + feature_logic
+source = (infrastructure + models + phrases + budget + precedence + admission + feature_logic
           + block(engine, "func mathStrictnessScore(")
           + "\nenum ChangeEngine {\n" + block(engine, "enum ContactApprovalSource")
           + "\n" + methods + driver + monitor_checks + "\n}\n" + checks + delay_checks

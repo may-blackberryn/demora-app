@@ -189,6 +189,11 @@ func date(_ text: String) -> Date {
     format.dateFormat = "yyyy-MM-dd HH:mm:ss"
     return format.date(from: text)!
 }
+// Explicit offsets disambiguate the first and second repeated hour without
+// relying on DateFormatter's choice for an ambiguous local fixture.
+func offsetDate(_ text: String) -> Date {
+    ISO8601DateFormatter().date(from: text)!
+}
 let monday = date("2026-10-05 12:00:00")
 let runtimeKey = "latch.dayNightWake.entries.v1"
 let projectionKey = "latch.dayNightWake.projection.v1"
@@ -901,6 +906,113 @@ scenario("actual initial migration eligibility and collection validation") {
     let invalid = group("Category", tokens([], ["cat"]))
     let fallback = group("Other", mode: .allOtherApps)
     expect(SharedStore.initialDayNightState([invalid, fallback], state: legacy, in: migrationDefaults) == nil, "migration bypasses category/fallback validation")
+}
+
+scenario("latest wake ceiling releases untapped and running gates independently by weekday") {
+    var first = group("Morning", tokens(["app"]), wait: 240)
+    first.wakeLatestMinutes = 12 * 60
+    let before = date("2026-10-05 11:59:59"), noon = date("2026-10-05 12:00:00")
+    expect(DayNightWake.status(group: first, at: before, guardedNow: before) == .needsTap, "ceiling released early")
+    expect(DayNightWake.status(group: first, at: noon, guardedNow: noon) == .awake, "untapped gate didn't release")
+    let later = noon.addingTimeInterval(4 * 3600)
+    let entry = DayNightWake.Entry(day: SharedStore.dayKey(for: noon), epoch: first.wakeEpoch, release: later)
+    SharedStore.defaults.set(try JSONEncoder().encode([first.id.uuidString: entry]), forKey: runtimeKey)
+    expect(DayNightWake.status(group: first, at: before, guardedNow: before) == .waiting(later), "running wait shortened before ceiling")
+    expect(DayNightWake.status(group: first, at: noon, guardedNow: noon) == .awake, "running wait ignored calendar ceiling")
+    var second = first; second.id = UUID(); second.wakeLatestMinutes = 13 * 60
+    expect(DayNightWake.status(group: second, at: noon, guardedNow: noon) == .needsTap, "other group's ceiling leaked")
+    first.weekdayWakeTimings[2] = WakeDayTiming(startMinutes: 0, waitMinutes: 240, latestMinutes: 14 * 60)
+    expect(DayNightWake.status(group: first, at: noon, guardedNow: noon) == .waiting(later), "weekday override ignored")
+    let two = date("2026-10-05 14:00:00")
+    expect(DayNightWake.status(group: first, at: two, guardedNow: two) == .awake, "weekday ceiling didn't release")
+    var state = LatchState(); state.dayNightGroups = [first, second]
+    expect(MonitoringBudget.dayNightBoundaryMinutes(state: state).isSuperset(of: [0, 720, 780, 840]), "cutoff background boundaries missing")
+}
+scenario("fall-back ceiling releases at first 01:30 and stays released at second 01:15") {
+    expect(TimeZone.current.identifier == "America/New_York", "DST fixture zone not configured")
+    let before = offsetDate("2026-11-01T01:29:59-04:00")
+    let firstCap = offsetDate("2026-11-01T01:30:00-04:00")
+    let secondQuarter = offsetDate("2026-11-01T01:15:00-05:00")
+    expect(secondQuarter > firstCap, "repeated-hour fixture is not chronologically later")
+    expect(Calendar.current.component(.hour, from: secondQuarter) == 1
+        && Calendar.current.component(.minute, from: secondQuarter) == 15,
+        "second-hour fixture does not display 01:15")
+    let timing = WakeDayTiming(startMinutes: 0, waitMinutes: 240, latestMinutes: 90)
+    expect(!timing.ceilingReached(on: before), "first 01:30 cap crossed early")
+    expect(timing.ceilingReached(on: firstCap), "cap chose second 01:30 rather than first")
+    expect(timing.ceilingReached(on: secondQuarter), "cap rolled back at second 01:15")
+    var named = group("Repeated hour", tokens(["app"]), wait: 240)
+    named.wakeLatestMinutes = 90
+    for running in [false, true] {
+        SharedStore.defaults.storage.removeObject(forKey: runtimeKey)
+        let release = offsetDate("2026-11-01T04:00:00-05:00")
+        if running {
+            let entry = DayNightWake.Entry(day: DayNightWake.cycle(group: named, at: before),
+                                          epoch: named.wakeEpoch, release: release)
+            SharedStore.defaults.storage.set(try JSONEncoder().encode([named.id.uuidString: entry]),
+                                            forKey: runtimeKey)
+        }
+        let raw = SharedStore.defaults.storage.data(forKey: runtimeKey)
+        let writes = SharedStore.defaults.writes
+        expect(DayNightWake.status(group: named, at: before, guardedNow: before)
+            == (running ? .waiting(release) : .needsTap), "pre-cap status wrong (running=\(running))")
+        for moment in [firstCap, secondQuarter] {
+            expect(DayNightWake.status(group: named, at: moment, guardedNow: moment) == .awake,
+                   "named gate reblocked/missed cap (running=\(running), at=\(moment))")
+            expect(SharedStore.defaults.storage.data(forKey: runtimeKey) == raw,
+                   "DST status changed saved runtime/deadline")
+        }
+        expect(SharedStore.defaults.writes == writes, "DST status performed preference writes")
+    }
+}
+
+scenario("spring-forward skipped 02:30 ceiling releases at next valid 03:00") {
+    let before = offsetDate("2026-03-08T01:59:59-05:00")
+    let nextValid = offsetDate("2026-03-08T03:00:00-04:00")
+    expect(nextValid.timeIntervalSince(before) == 1, "spring fixture did not skip the 02 hour")
+    let timing = WakeDayTiming(startMinutes: 0, waitMinutes: 240, latestMinutes: 150)
+    expect(!timing.ceilingReached(on: before), "missing 02:30 cap released before jump")
+    expect(timing.ceilingReached(on: nextValid), "missing 02:30 cap did not use next valid time")
+    var named = group("Skipped hour", tokens(["app"]), wait: 240)
+    named.wakeLatestMinutes = 150
+    for running in [false, true] {
+        SharedStore.defaults.storage.removeObject(forKey: runtimeKey)
+        let release = offsetDate("2026-03-08T06:00:00-04:00")
+        if running {
+            let entry = DayNightWake.Entry(day: DayNightWake.cycle(group: named, at: before),
+                                          epoch: named.wakeEpoch, release: release)
+            SharedStore.defaults.storage.set(try JSONEncoder().encode([named.id.uuidString: entry]),
+                                            forKey: runtimeKey)
+        }
+        let raw = SharedStore.defaults.storage.data(forKey: runtimeKey)
+        let writes = SharedStore.defaults.writes
+        expect(DayNightWake.status(group: named, at: before, guardedNow: before)
+            == (running ? .waiting(release) : .needsTap), "pre-jump status wrong (running=\(running))")
+        for moment in [nextValid, nextValid.addingTimeInterval(15 * 60)] {
+            expect(DayNightWake.status(group: named, at: moment, guardedNow: moment) == .awake,
+                   "skipped-hour named ceiling not released (running=\(running))")
+            expect(SharedStore.defaults.storage.data(forKey: runtimeKey) == raw,
+                   "spring status changed saved runtime/deadline")
+        }
+        expect(SharedStore.defaults.writes == writes, "spring status performed preference writes")
+    }
+}
+
+scenario("cutoff validation and loosening classification preserve old nil defaults") {
+    var original = group("Original", tokens(["app"]))
+    var capped = original; capped.wakeLatestMinutes = 720
+    expect(capped.timingsAreValid && !capped.timingNoLooser(than: original), "adding a release ceiling wasn't looser")
+    expect(original.timingNoLooser(than: capped), "removing a ceiling wasn't tighter")
+    var invalid = capped; invalid.wakeLatestMinutes = 0
+    expect(!invalid.timingsAreValid, "cutoff at/before start accepted")
+    invalid.wakeLatestMinutes = 1439
+    expect(!invalid.timingsAreValid, "cutoff without minimum callback span accepted")
+    var raw = try JSONSerialization.jsonObject(with: JSONEncoder().encode(original)) as! [String: Any]
+    raw.removeValue(forKey: "wakeLatestMinutes")
+    original = try JSONDecoder().decode(DayNightGroup.self, from: JSONSerialization.data(withJSONObject: raw))
+    expect(original.wakeLatestMinutes == nil, "old group gained a cutoff")
+    let oldTiming = try JSONDecoder().decode(WakeDayTiming.self, from: Data("{\"startMinutes\":0,\"waitMinutes\":10}".utf8))
+    expect(oldTiming.latestMinutes == nil, "old weekday gained a cutoff")
 }
 
 SharedStore.defaults.storage.removePersistentDomain(forName: SharedStore.defaults.suite)
