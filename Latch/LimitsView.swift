@@ -725,6 +725,7 @@ struct LimitEditorView: View {
     @State private var showWeekdaySettings = false
     @State private var showSplitSettings = false
     @State private var showExtraSettings = false
+    @State private var receipt: ChangeReceiptRequest?
 
     var body: some View {
         NavigationStack {
@@ -780,19 +781,20 @@ struct LimitEditorView: View {
                     }
                 }
 
+                // Outside the legacy tutorial the receipt explains the wait,
+                // so the inline hints only stay for the tutorial's steps.
                 if let existing {
-                    delayHint(.configureLimit(draftLimit))
+                    if model.inTutorial { delayHint(.configureLimit(draftLimit)) }
                     Section {
                         Button(tr("Remove this limit"), role: .destructive) {
-                            model.queue(.removeLimit(id: existing.id))
-                            dismiss()
+                            submit(.removeLimit(id: existing.id))
                         }
                         .tutorialHighlight(model.tutorial == .removeLimit
                                            && model.tutorialScreen == "limitEditor")
-                        delayHintText(.removeLimit(id: existing.id))
+                        if model.inTutorial { delayHintText(.removeLimit(id: existing.id)) }
                     }
                     .demoraSurface()
-                } else {
+                } else if model.inTutorial {
                     delayHint(.addLimit(draftLimit))
                 }
               }
@@ -808,12 +810,7 @@ struct LimitEditorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(tr("Queue change")) {
-                        if existing != nil {
-                            model.queue(.configureLimit(draftLimit))
-                        } else {
-                            model.queue(.addLimit(draftLimit))
-                        }
-                        dismiss()
+                        submit(existing != nil ? .configureLimit(draftLimit) : .addLimit(draftLimit))
                     }
                     .disabled(!isValid)
                 }
@@ -821,6 +818,7 @@ struct LimitEditorView: View {
             .sheet(isPresented: $showPicker) {
                 AppPickerSheet(selection: $selection)
             }
+            .changeReceipt($receipt) { dismiss() }
             .onAppear {
                 if let existing {
                     minutes = existing.minutesPerDay
@@ -1139,6 +1137,18 @@ struct LimitEditorView: View {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = AppLanguage.current.locale
         return calendar.weekdaySymbols
+    }
+
+    /// Saving and removing end on the change receipt, which queues the change
+    /// and then closes this editor. The legacy tutorial queues directly, as
+    /// its steps expect.
+    private func submit(_ action: ChangeAction) {
+        if model.inTutorial {
+            model.queue(action)
+            dismiss()
+        } else {
+            receipt = ChangeReceiptRequest(action: action)
+        }
     }
 
     @ViewBuilder

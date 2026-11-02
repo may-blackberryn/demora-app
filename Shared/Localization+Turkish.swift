@@ -1188,4 +1188,13 @@ let turkishStrings: [String: String] = [
     "permissions, blank reports and false blocks": "izinler, boş raporlar ve hatalı engeller",
     "wake waits, latest times and sleep": "uyanma beklemeleri, en geç saatler ve uyku",
     "— No data": "— Veri yok",
+    // Change receipt (Today redesign)
+    "Looser change": "Daha az katı değişiklik",
+    "Stricter change": "Daha katı değişiklik",
+    "Takes effect": "Geçerli olacağı zaman",
+    "Right away": "Hemen",
+    "Until then nothing changes. You can cancel it from Today.": "O zamana kadar hiçbir şey değişmez. Bugün bölümünden iptal edebilirsin.",
+    "Hold to confirm": "Onaylamak için basılı tut",
+    "Keep editing": "Düzenlemeye devam et",
+    "Confirm looser change?": "Daha az katı değişiklik onaylansın mı?",
 ]

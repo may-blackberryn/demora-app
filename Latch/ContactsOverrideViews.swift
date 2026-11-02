@@ -930,6 +930,7 @@ struct ContactProfileView: View {
     let contactID: UUID
     @State private var name = ""
     @State private var avatar = ContactAvatar()
+    @State private var receipt: ChangeReceiptRequest?
 
     private var contact: TrustedContact? {
         model.state.overrides.contacts.first { $0.id == contactID }
@@ -995,7 +996,7 @@ struct ContactProfileView: View {
                 ContactVerificationSection(code: code)
             }
             Button(tr("Remove…"), role: .destructive) {
-                model.queue(.removeContact(id: contactID))
+                receipt = ChangeReceiptRequest(action: .removeContact(id: contactID))
             }
             .demoraSurface()
             }
@@ -1005,6 +1006,7 @@ struct ContactProfileView: View {
         }
         .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(navTitle)
+        .changeReceipt($receipt)
         .onAppear {
             // Prefer the shared per-code values so a name/photo set from the
             // "people you approve for" side shows here too.
@@ -1027,6 +1029,7 @@ struct EmailContactProfileView: View {
     let contactID: UUID
     @State private var name = ""
     @State private var avatar = ContactAvatar()
+    @State private var receipt: ChangeReceiptRequest?
     @State private var codeInput = ""
     @State private var sending = false
     @State private var verifying = false
@@ -1119,7 +1122,7 @@ struct EmailContactProfileView: View {
                     .demoraSurface()
             }
             Button(tr("Remove…"), role: .destructive) {
-                model.queue(.removeContact(id: contactID))
+                receipt = ChangeReceiptRequest(action: .removeContact(id: contactID))
             }
             .demoraSurface()
             }
@@ -1129,6 +1132,7 @@ struct EmailContactProfileView: View {
         }
         .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(navTitle)
+        .changeReceipt($receipt)
         .onAppear {
             name = contact?.name ?? ""
             avatar = contact?.avatar ?? ContactAvatar()

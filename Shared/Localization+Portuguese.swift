@@ -1187,4 +1187,13 @@ let portugueseStrings: [String: String] = [
     "Optional: add a trusted contact, a phrase, or a password. Choose exactly what each can approve or unlock.": "Opcional: adicione um contato de confiança, uma frase ou uma senha. Escolha exatamente o que cada um pode aprovar ou desbloquear.",
     "These choices apply when you finish setup. Later additions and permission changes follow your delays.": "Estas escolhas entram em vigor ao concluir a configuração. Adições e alterações de permissões posteriores seguem seus tempos de espera.",
     "Contact invitations are sent after setup. Contacts must confirm before they can approve; manage them in Delays → Trusted contacts.": "Os convites são enviados após a configuração. Os contatos devem confirmar antes de poder aprovar; gerencie-os em Atrasos → Contatos de confiança.",
+    // Change receipt (Today redesign)
+    "Looser change": "Alteração menos rigorosa",
+    "Stricter change": "Alteração mais rigorosa",
+    "Takes effect": "Entra em vigor",
+    "Right away": "Imediatamente",
+    "Until then nothing changes. You can cancel it from Today.": "Até lá, nada muda. Você pode cancelar em Hoje.",
+    "Hold to confirm": "Mantenha pressionado para confirmar",
+    "Keep editing": "Continuar editando",
+    "Confirm looser change?": "Confirmar a alteração menos rigorosa?",
 ]

@@ -1223,4 +1223,13 @@ let germanStrings: [String: String] = [
     "Contact invitations are sent after setup. Contacts must confirm before they can approve; manage them in Delays → Trusted contacts.": "Einladungen werden nach der Einrichtung gesendet. Kontakte müssen bestätigen, bevor sie etwas genehmigen können; verwalte sie unter Verzögerungen → Vertrauenswürdige Kontakte.",
     "Background monitoring limit": "Limit für die Hintergrundüberwachung",
     "This change needs %d background monitors, but iOS allows %d. Remove a schedule, split budget or pending change, then try again.": "Diese Änderung benötigt %d Hintergrundmonitore, aber iOS erlaubt %d. Entfernen Sie einen Zeitplan, ein aufgeteiltes Zeitbudget oder eine ausstehende Änderung und versuchen Sie es erneut.",
+    // Change receipt (Today redesign)
+    "Looser change": "Weniger strenge Änderung",
+    "Stricter change": "Strengere Änderung",
+    "Takes effect": "Gilt ab",
+    "Right away": "Sofort",
+    "Until then nothing changes. You can cancel it from Today.": "Bis dahin ändert sich nichts. Du kannst es unter Heute abbrechen.",
+    "Hold to confirm": "Zum Bestätigen gedrückt halten",
+    "Keep editing": "Weiter bearbeiten",
+    "Confirm looser change?": "Weniger strenge Änderung bestätigen?",
 ]

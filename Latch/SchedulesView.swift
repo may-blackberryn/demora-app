@@ -423,6 +423,7 @@ private struct UpcomingWeekView: View {
 struct ScheduledItemDetailView: View {
     @EnvironmentObject private var model: AppModel
     @State private var showEditSelection = false
+    @State private var receipt: ChangeReceiptRequest?
     let title: String
     let summary: String
     let timing: String
@@ -469,7 +470,7 @@ struct ScheduledItemDetailView: View {
                         Button(tr("Edit apps")) { showEditSelection = true }
                             .disabled(scheduleChangePending(schedule.id, in: model.state))
                         Button(tr("Remove…"), role: .destructive) {
-                            model.queue(.removeSchedule(id: schedule.id))
+                            receipt = ChangeReceiptRequest(action: .removeSchedule(id: schedule.id))
                         }
                         .disabled(scheduleChangePending(schedule.id, in: model.state))
                         if scheduleChangePending(schedule.id, in: model.state) {
@@ -486,6 +487,7 @@ struct ScheduledItemDetailView: View {
         }
         .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(title)
+        .changeReceipt($receipt)
         .sheet(isPresented: $showEditSelection) {
             if let schedule = currentSchedule {
                 ScheduleSelectionEditorView(schedule: schedule)
@@ -623,6 +625,7 @@ struct SessionsListView: View {
 struct PlannedListView: View {
     @EnvironmentObject var model: AppModel
     @State private var showAdd = false
+    @State private var receipt: ChangeReceiptRequest?
 
     var body: some View {
         ScrollView {
@@ -655,7 +658,7 @@ struct PlannedListView: View {
                             .font(.caption)
                         }
                         Button(tr("Remove…"), role: .destructive) {
-                            model.queue(.removePlanned(id: w.id))
+                            receipt = ChangeReceiptRequest(action: .removePlanned(id: w.id))
                         }
                         .buttonStyle(.bordered).controlSize(.small)
                     }
@@ -675,6 +678,7 @@ struct PlannedListView: View {
         .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(tr("Planned"))
         .refreshable { model.tick() }
+        .changeReceipt($receipt)
         .sheet(isPresented: $showAdd) { PlannedEditorView() }
     }
 }
@@ -683,6 +687,7 @@ struct RecurringListView: View {
     @EnvironmentObject var model: AppModel
     @State private var showAdd = false
     @State private var editingSchedule: BlockSchedule?
+    @State private var receipt: ChangeReceiptRequest?
 
     var body: some View {
         ScrollView {
@@ -717,7 +722,7 @@ struct RecurringListView: View {
                                 .disabled(scheduleChangePending(sched.id, in: model.state))
                         }
                         Button(tr("Remove…"), role: .destructive) {
-                            model.queue(.removeSchedule(id: sched.id))
+                            remove(.removeSchedule(id: sched.id))
                         }
                         .buttonStyle(.bordered).controlSize(.small)
                         .disabled(scheduleChangePending(sched.id, in: model.state))
@@ -746,7 +751,7 @@ struct RecurringListView: View {
                         Text("\(ex.recurrence.label) · \(tr("Free period"))")
                             .font(.caption).foregroundStyle(.secondary)
                         Button(tr("Remove…"), role: .destructive) {
-                            model.queue(.removeExemption(id: ex.id))
+                            remove(.removeExemption(id: ex.id))
                         }
                         .buttonStyle(.bordered).controlSize(.small)
                         .tutorialHighlight(model.tutorial == .removeSchedule
@@ -774,6 +779,17 @@ struct RecurringListView: View {
         }
         .sheet(isPresented: $showAdd) { ScheduleEditorView() }
         .sheet(item: $editingSchedule) { ScheduleSelectionEditorView(schedule: $0) }
+        .changeReceipt($receipt)
+    }
+
+    /// Removing waits behind the receipt. The legacy tutorial still queues
+    /// directly, as its steps expect.
+    private func remove(_ action: ChangeAction) {
+        if model.inTutorial {
+            model.queue(action)
+        } else {
+            receipt = ChangeReceiptRequest(action: action)
+        }
     }
 }
 

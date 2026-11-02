@@ -1188,4 +1188,13 @@ let hindiStrings: [String: String] = [
     "permissions, blank reports and false blocks": "अनुमतियाँ, खाली रिपोर्ट और गलत ब्लॉक",
     "wake waits, latest times and sleep": "जागने का इंतज़ार, अंतिम समय और नींद",
     "— No data": "— डेटा नहीं",
+    // Change receipt (Today redesign)
+    "Looser change": "कम सख्त बदलाव",
+    "Stricter change": "अधिक सख्त बदलाव",
+    "Takes effect": "लागू होगा",
+    "Right away": "तुरंत",
+    "Until then nothing changes. You can cancel it from Today.": "तब तक कुछ नहीं बदलेगा। आप इसे आज वाले हिस्से से रद्द कर सकते हैं।",
+    "Hold to confirm": "पुष्टि के लिए दबाए रखें",
+    "Keep editing": "संपादन जारी रखें",
+    "Confirm looser change?": "कम सख्त बदलाव की पुष्टि करें?",
 ]

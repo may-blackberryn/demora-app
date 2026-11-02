@@ -1188,4 +1188,13 @@ let polishStrings: [String: String] = [
     "permissions, blank reports and false blocks": "uprawnienia, puste raporty i błędne blokady",
     "wake waits, latest times and sleep": "oczekiwanie na pobudkę, najpóźniejsze godziny i sen",
     "— No data": "— Brak danych",
+    // Change receipt (Today redesign)
+    "Looser change": "Mniej rygorystyczna zmiana",
+    "Stricter change": "Bardziej rygorystyczna zmiana",
+    "Takes effect": "Wchodzi w życie",
+    "Right away": "Od razu",
+    "Until then nothing changes. You can cancel it from Today.": "Do tego czasu nic się nie zmienia. Możesz to anulować w sekcji Dziś.",
+    "Hold to confirm": "Przytrzymaj, aby potwierdzić",
+    "Keep editing": "Edytuj dalej",
+    "Confirm looser change?": "Potwierdzić mniej rygorystyczną zmianę?",
 ]

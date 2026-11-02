@@ -204,3 +204,80 @@ with tempfile.TemporaryDirectory(prefix='demora-today-') as directory:
     subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', str(presentation), str(main),
                     '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
+
+# --- Change receipt (§5.10) and where it's adopted -------------------------
+import re
+STRING = r'"((?:[^"\\]|\\.)*)"'
+
+
+def section(text, start, end):
+    assert start in text, ('missing', start)
+    return text.split(start, 1)[1].split(end, 1)[0]
+
+
+receipt = (ROOT / 'Latch/ChangeReceiptSheet.swift').read_text()
+sheet = section(receipt, 'struct ChangeReceiptSheet: View {', '\n}\n')
+assert 'model.preview(action)' in sheet, 'direction and delay come from the same policy as the queue'
+assert 'ChangeEngine.summary(for: action, state: model.state)' in sheet, 'the queued change says the same'
+assert 'ReceiptPlan.make(looser: direction == .lenient, delay: delay, now: now)' in sheet
+assert 'HoldButton(tr("Hold to confirm"), role: .loosen,' in sheet
+assert 'confirmationTitle: tr("Confirm looser change?")' in sheet
+assert 'case .confirm:' in sheet and '.buttonStyle(DemoraPrimaryButtonStyle())' in sheet
+assert sheet.count('model.queue(') == 1 and 'if model.queue(action) != nil {' in sheet, \
+    'queues once, only on confirm'
+assert 'model.queueNotice = nil' in sheet, 'a refusal stays on the receipt, not the app-wide alert'
+for forbidden in ('TimeGuard', 'SharedStore', 'ChangeEngine.queue', 'applyNow'):
+    assert forbidden not in receipt, ('receipt must not', forbidden)
+presenter = section(receipt, 'private struct ChangeReceiptPresenter: ViewModifier {', '\n}\n')
+assert 'if queued { queued = false; onQueued() }' in presenter, 'the editor closes after the receipt'
+
+limits = (ROOT / 'Latch/LimitsView.swift').read_text()
+editor = section(limits, 'struct LimitEditorView: View {', '\nstruct ExtraTimePasswordGate')
+submit = section(editor, 'private func submit(_ action: ChangeAction) {', '\n    }\n')
+assert 'if model.inTutorial {' in submit and 'receipt = ChangeReceiptRequest(action: action)' in submit
+assert editor.count('model.queue(') == 1, 'the limit editor queues only through submit (tutorial) or the receipt'
+assert 'submit(.removeLimit(id: existing.id))' in editor
+assert 'submit(existing != nil ? .configureLimit(draftLimit) : .addLimit(draftLimit))' in editor
+assert '.changeReceipt($receipt) { dismiss() }' in editor
+
+schedules = (ROOT / 'Latch/SchedulesView.swift').read_text()
+for action in ('.removePlanned(', '.removeExemption('):
+    assert f'model.queue({action}' not in schedules, ('removal bypasses the receipt', action)
+detail = section(schedules, 'struct ScheduledItemDetailView: View {', '\n// MARK: - Type card')
+assert 'receipt = ChangeReceiptRequest(action: .removeSchedule(id: schedule.id))' in detail
+recurring = section(schedules, 'struct RecurringListView: View {', '\n// MARK: - Recurrence picker')
+assert 'model.queue(' in recurring and recurring.count('model.queue(') == 1 \
+    and 'if model.inTutorial {\n            model.queue(action)' in recurring, 'only the tutorial queues directly'
+for view in (detail, recurring, section(schedules, 'struct PlannedListView: View {', '\nstruct RecurringListView')):
+    assert '.changeReceipt($receipt)' in view
+contacts = (ROOT / 'Latch/ContactsOverrideViews.swift').read_text()
+assert 'model.queue(.removeContact(' not in contacts
+assert contacts.count('receipt = ChangeReceiptRequest(action: .removeContact(id: contactID))') == 2
+assert contacts.count('.changeReceipt($receipt)') == 2
+
+# --- Every word on the new screens is translated ---------------------------
+TABLES = {'es': '', 'de': '+German', 'fr': '+French', 'pt': '+Portuguese',
+          'pl': '+Polish', 'tr': '+Turkish', 'hi': '+Hindi'}
+TODAY_FILES = ['Latch/ChangeReceiptSheet.swift', 'Latch/ChangesLedgerView.swift', 'Latch/TodayView.swift']
+keys = set()
+for name in TODAY_FILES:
+    path = ROOT / name
+    if not path.exists():
+        continue
+    text = path.read_text()
+    for call in re.findall(r'\btr\((?:[^()"]|"(?:[^"\\]|\\.)*")*\)', text):
+        keys.update(re.findall(STRING, call))
+assert keys, 'no translated strings found'
+entry = re.compile(r'^\s*' + STRING + r'\s*:\s*' + STRING + r',?\s*$', re.M)
+for code, suffix in TABLES.items():
+    pairs = entry.findall((ROOT / f'Shared/Localization{suffix}.swift').read_text())
+    seen = [k for k, _ in pairs]
+    duplicates = sorted({k for k in seen if seen.count(k) > 1})
+    assert not duplicates, (code, 'duplicate keys crash the dictionary literal', duplicates)
+    table = dict(pairs)
+    missing = sorted(k for k in keys if k not in table)
+    assert not missing, (code, 'untranslated', missing)
+    for key in keys:
+        for spec in ('%@', '%d'):
+            assert key.count(spec) == table[key].count(spec), (code, key, spec)
+print(f'Today source guards passed: receipt confirm/hold and adoption; {len(keys)} strings × 7 tables, no duplicate keys')
