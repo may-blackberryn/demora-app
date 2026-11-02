@@ -281,3 +281,32 @@ for code, suffix in TABLES.items():
         for spec in ('%@', '%d'):
             assert key.count(spec) == table[key].count(spec), (code, key, spec)
 print(f'Today source guards passed: receipt confirm/hold and adoption; {len(keys)} strings × 7 tables, no duplicate keys')
+
+# --- Changes ledger (§5.9) --------------------------------------------------
+ledger = (ROOT / 'Latch/ChangesLedgerView.swift').read_text()
+row = section(ledger, 'struct ChangeRow: View {', '\n}\n')
+assert 'CountdownText(to: change.appliesAt)' in row
+assert 'Text(timerInterval:' not in row and 'TimeGuard.now()' not in row, \
+    'projection must live only in CountdownProjection'
+assert row.index('if let frozenRemaining') < row.index('} else if change.isDue') \
+    < row.index('CountdownText(to: change.appliesAt'), 'tutorial → due → countdown order kept'
+assert 'Text(tr("Applying…"))' in row
+assert 'if canOverride && !change.isDue {' in row, 'Apply now only when an override exists'
+assert '#if DEBUG' in row and 'Skip delay (dev)' in row.split('#if DEBUG', 1)[1].split('#endif', 1)[0], \
+    'the developer skip stays Debug-only'
+assert 'tr(change.direction == .stricter ? "Stricter" : "Looser")' in row
+ledger_view = section(ledger, 'struct ChangesLedgerView: View {', '\nprivate struct LedgerSection')
+assert 'LedgerGrouping.groups(model.state.pending, date: \\.appliesAt,' in ledger_view, 'stored appliesAt'
+assert 'selection.formIntersection(pendingIDs)' in ledger_view
+assert 'if pendingIDs.isEmpty { selecting = false }' in ledger_view
+assert 'confirmBulkCancel = true' in ledger_view and '.confirmationDialog(tr("Cancel these changes?")' in ledger_view, \
+    'bulk cancel asks once'
+assert 'onCancel: { model.cancel(change) }' in ledger_view, 'a single cancel stays immediate'
+assert 'OverrideGateView(changes: [change])' in ledger_view and 'OverrideGateView(changes: bulkChanges)' in ledger_view
+assert 'ContactGateView(changes: target.changes, showChangeList: true,' in ledger_view
+assert 'ChangeEngine.hasOverride(for: needGate, state: model.state)' in ledger_view
+waiting = section(ledger, 'struct ChangeWaiting: Equatable {', '\n}\n')
+assert '$0.changeIds.contains(change.id)' in waiting and 'contacts.first { $0.id == id }' in waiting
+for forbidden in ('ContactsRelay.outgoingRequests', 'clearOutgoing', 'SharedStore'):
+    assert forbidden not in ledger, ('the ledger reuses what Today loads', forbidden)
+print('Ledger source guards passed: countdown projection, grouping on stored appliesAt, Select bar, waiting contact')

@@ -1196,4 +1196,18 @@ let frenchStrings: [String: String] = [
     "Hold to confirm": "Maintenez pour confirmer",
     "Keep editing": "Continuer à modifier",
     "Confirm looser change?": "Confirmer ce changement moins strict ?",
+    // Changes ledger (Today redesign)
+    "Stricter": "Plus strict",
+    "Looser": "Moins strict",
+    "Waiting for %@": "En attente de %@",
+    "Changes": "Changements",
+    "Within the hour": "Dans l’heure",
+    "Later today": "Plus tard aujourd’hui",
+    "Tomorrow": "Demain",
+    "Later": "Plus tard",
+    "No changes waiting": "Aucun changement en attente",
+    "Changes you make wait here until they apply.": "Vos changements attendent ici jusqu’à leur application.",
+    "Cancel these changes?": "Annuler ces changements ?",
+    // Bulk apply notice (was untranslated)
+    "Those changes are still counting down. Wait them out or use an available override.": "Ces changements sont encore en compte à rebours. Attendez la fin du délai ou utilisez une dérogation disponible.",
 ]

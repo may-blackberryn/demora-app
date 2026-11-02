@@ -1197,4 +1197,18 @@ let polishStrings: [String: String] = [
     "Hold to confirm": "Przytrzymaj, aby potwierdzić",
     "Keep editing": "Edytuj dalej",
     "Confirm looser change?": "Potwierdzić mniej rygorystyczną zmianę?",
+    // Changes ledger (Today redesign)
+    "Stricter": "Surowiej",
+    "Looser": "Łagodniej",
+    "Waiting for %@": "Czeka na: %@",
+    "Changes": "Zmiany",
+    "Within the hour": "W ciągu godziny",
+    "Later today": "Później dzisiaj",
+    "Tomorrow": "Jutro",
+    "Later": "Później",
+    "No changes waiting": "Brak oczekujących zmian",
+    "Changes you make wait here until they apply.": "Twoje zmiany czekają tutaj, aż wejdą w życie.",
+    "Cancel these changes?": "Anulować te zmiany?",
+    // Bulk apply notice (was untranslated)
+    "Those changes are still counting down. Wait them out or use an available override.": "Te zmiany wciąż odliczają czas. Poczekaj do końca albo użyj dostępnego wyjątku.",
 ]

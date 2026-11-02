@@ -1197,4 +1197,18 @@ let turkishStrings: [String: String] = [
     "Hold to confirm": "Onaylamak için basılı tut",
     "Keep editing": "Düzenlemeye devam et",
     "Confirm looser change?": "Daha az katı değişiklik onaylansın mı?",
+    // Changes ledger (Today redesign)
+    "Stricter": "Daha katı",
+    "Looser": "Daha esnek",
+    "Waiting for %@": "%@ bekleniyor",
+    "Changes": "Değişiklikler",
+    "Within the hour": "Bir saat içinde",
+    "Later today": "Bugün daha sonra",
+    "Tomorrow": "Yarın",
+    "Later": "Daha sonra",
+    "No changes waiting": "Bekleyen değişiklik yok",
+    "Changes you make wait here until they apply.": "Yaptığın değişiklikler uygulanana kadar burada bekler.",
+    "Cancel these changes?": "Bu değişiklikler iptal edilsin mi?",
+    // Bulk apply notice (was untranslated)
+    "Those changes are still counting down. Wait them out or use an available override.": "Bu değişikliklerin geri sayımı sürüyor. Bitmesini bekle ya da kullanılabilir bir istisna kullan.",
 ]

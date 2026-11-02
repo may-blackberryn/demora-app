@@ -1197,4 +1197,18 @@ let hindiStrings: [String: String] = [
     "Hold to confirm": "पुष्टि के लिए दबाए रखें",
     "Keep editing": "संपादन जारी रखें",
     "Confirm looser change?": "कम सख्त बदलाव की पुष्टि करें?",
+    // Changes ledger (Today redesign)
+    "Stricter": "अधिक सख्त",
+    "Looser": "कम सख्त",
+    "Waiting for %@": "%@ की प्रतीक्षा",
+    "Changes": "बदलाव",
+    "Within the hour": "एक घंटे के भीतर",
+    "Later today": "आज बाद में",
+    "Tomorrow": "कल",
+    "Later": "बाद में",
+    "No changes waiting": "कोई बदलाव प्रतीक्षा में नहीं",
+    "Changes you make wait here until they apply.": "आपके बदलाव लागू होने तक यहाँ प्रतीक्षा करते हैं।",
+    "Cancel these changes?": "ये बदलाव रद्द करें?",
+    // Bulk apply notice (was untranslated)
+    "Those changes are still counting down. Wait them out or use an available override.": "इन बदलावों की उलटी गिनती अभी चल रही है। इंतज़ार करें या कोई उपलब्ध अपवाद इस्तेमाल करें।",
 ]
