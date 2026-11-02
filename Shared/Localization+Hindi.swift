@@ -1245,4 +1245,8 @@ let hindiStrings: [String: String] = [
     "%d of %d min": "%d / %d मिनट",
     "Used up": "खत्म",
     "No data yet": "अभी कोई डेटा नहीं",
+    // Today review fixes
+    "%@ is used up for now.": "%@ फ़िलहाल खत्म हो गया।",
+    "%d limits are used up for now.": "फ़िलहाल %d सीमाएँ खत्म हो गईं।",
+    "Add a daily time limit.": "एक दैनिक समय सीमा जोड़ें।",
 ]

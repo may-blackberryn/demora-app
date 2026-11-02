@@ -65,6 +65,8 @@ struct HomeView: View {
     @State private var usageRefreshRequest: UUID?
     // Today. Spent limits and extra-time states are read in event callbacks.
     @State private var spentLimitIDs: Set<UUID> = []
+    @State private var portionLimitIDs: Set<UUID> = []
+    @State private var extraRequestPending: Set<UUID> = []
     @State private var extraTimes: [UUID: ExtraTimeState] = [:]
     @State private var showLedger = false
     @State private var showAddLimit = false
@@ -183,6 +185,7 @@ struct HomeView: View {
                     TimelineView(.periodic(from: .now, by: 60)) { context in
                         let summary = NowSummary.make(state: model.state,
                                                       blockedLimitIDs: spentLimitIDs,
+                                                      portionLimitIDs: portionLimitIDs,
                                                       wakes: wakePresentation, now: context.date)
                         NowCard(summary: summary, now: context.date,
                                 startingWake: startingWake, wakeSaveFailed: wakeSaveFailed,
@@ -256,7 +259,8 @@ struct HomeView: View {
             } else {
                 CompactHomeUsageReport(limits: model.state.limits,
                                        reloadRequest: usageRefreshRequest)
-                ExtraTimeRows(limits: model.state.limits, states: extraTimes) { limit, remaining in
+                ExtraTimeRows(limits: model.state.limits, states: extraTimes,
+                              contactPending: extraRequestPending) { limit, remaining in
                     requestExtraTime(for: limit, remaining: remaining)
                 }
             }
@@ -632,13 +636,29 @@ struct HomeView: View {
     /// never while SwiftUI evaluates the body.
     private func refreshSnapshot(state: LatchState) {
         refreshWakePresentation(state: state)
-        guard !model.inTutorial else { spentLimitIDs = []; extraTimes = [:]; return }
-        spentLimitIDs = SharedStore.loadBlockedLimitIDs()
+        guard !model.inTutorial else {
+            spentLimitIDs = []; portionLimitIDs = []; extraTimes = [:]; extraRequestPending = []
+            return
+        }
+        // The same sets the shield's baseline uses: spent for the day unless
+        // extra time is running, plus split portions blocked for now.
+        let now = Date()
+        let blocked = SharedStore.loadBlockedLimitIDs()
+        let extraUnblocked = LimitFeatures.extraUnblockedIDs(state: state, at: now)
+        let featureBlocked = LimitFeatures.blockedFeatureIDs(state: state, at: now, includeWake: false)
+        let daily = Set(state.limits.filter {
+            ($0.minutes(on: now) == 0 || blocked.contains($0.id)) && !extraUnblocked.contains($0.id)
+        }.map(\.id))
+        spentLimitIDs = daily
+        portionLimitIDs = featureBlocked.subtracting(daily)
         var states: [UUID: ExtraTimeState] = [:]
+        var pending = Set<UUID>()
         for limit in state.limits where limit.extraTime != nil {
             states[limit.id] = LimitFeatures.extraTimeState(for: limit)
+            if ContactsRelay.pendingExtraRequest(for: limit.id) != nil { pending.insert(limit.id) }
         }
         extraTimes = states
+        extraRequestPending = pending
     }
 
     /// Opens the limit's next extra-time gate: contact, password, phrase or wait.
@@ -771,12 +791,12 @@ private enum HomeDaySources {
                 : (session.kind == .free ? .free : .unblock)
             items.append(TodayItem(id: "session-\(session.id)", name: session.name,
                 detail: session.kind.label, kind: kind,
-                start: session.startedAt, end: session.endsAt))
+                layer: 3, start: session.startedAt, end: session.endsAt))
         }
         for window in state.planned {
             items.append(TodayItem(id: "planned-\(window.id)", name: window.name,
                 detail: window.kind.label, kind: window.kind == .free ? .free : .block,
-                start: window.startsAt, end: window.endsAt))
+                layer: 2, start: window.startsAt, end: window.endsAt))
         }
         for schedule in state.schedules {
             for interval in HomeDayProjection.recurring(start: schedule.startMinutes,
@@ -802,7 +822,7 @@ private enum HomeDaySources {
                 end: state.wakeRule.startHour * 60, day: day, calendar: calendar,
                 matches: { state.sleepRule.weekdays.contains(calendar.component(.weekday, from: $0)) }) {
                 items.append(TodayItem(id: "global-sleep", name: tr("Sleep"), detail: tr("Sleep"),
-                    kind: .block, start: interval.start, end: interval.end))
+                    kind: .block, layer: 0, start: interval.start, end: interval.end))
             }
         }
         // Mirrors DayNightGroup.sleepIsActive: each evening ends at that night's wake time.
@@ -820,7 +840,7 @@ private enum HomeDaySources {
                         minute: endMinute % 60, second: 0, of: endDay),
                       endsAt > startsAt, startsAt < day.end, endsAt > day.start else { continue }
                 items.append(TodayItem(id: "day-night-sleep-\(group.id)", name: group.name,
-                    detail: tr("Sleep"), kind: .block, start: startsAt, end: endsAt))
+                    detail: tr("Sleep"), kind: .block, layer: 0, start: startsAt, end: endsAt))
             }
         }
         for wake in wakes {
@@ -845,11 +865,11 @@ extension NowSummary {
     /// The Now card for saved state (spec §5.3). `blockedLimitIDs` is the
     /// monitor's spent list, read in an event callback; names are rule names.
     fileprivate static func make(state: LatchState, blockedLimitIDs: Set<UUID>,
+                                 portionLimitIDs: Set<UUID>,
                                  wakes: [HomeWakePresentation], now: Date) -> NowSummary {
         make(items: HomeDaySources.items(state: state, wakes: wakes, date: now),
-             spentLimitNames: state.limits
-                .filter { blockedLimitIDs.contains($0.id) || $0.minutes(on: now) == 0 }
-                .map(\.name),
+             spentLimitNames: state.limits.filter { blockedLimitIDs.contains($0.id) }.map(\.name),
+             portionLimitNames: state.limits.filter { portionLimitIDs.contains($0.id) }.map(\.name),
              wakes: wakes.map { Wake(name: $0.name, waitMinutes: $0.waitMinutes,
                                      release: $0.wallRelease) },
              now: now)

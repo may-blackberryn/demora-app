@@ -43,6 +43,9 @@ func block(_ id: String, _ name: String, _ s: Date, _ e: Date) -> TodayItem {
 func free(_ id: String, _ name: String, _ s: Date, _ e: Date) -> TodayItem {
     TodayItem(id: id, name: name, kind: .free, start: s, end: e)
 }
+extension TodayItem {
+    func withLayer(_ layer: Int) -> TodayItem { var copy = self; copy.layer = layer; return copy }
+}
 
 // MARK: Now card — each priority row
 let now = ny(11, 2, 17, 0)
@@ -93,7 +96,32 @@ s = NowSummary.make(items: [study, study], spentLimitNames: [], wakes: [], now: 
 check(s.hero == .oneBlock(name: "Study", until: ny(11, 2, 19, 30)), "the same interval counts once")
 
 s = NowSummary.make(items: [evening], spentLimitNames: ["Games", "Chat", "Games"], wakes: [], now: now)
-check(s.hero == .spent(names: ["Chat", "Games"]) && s.facts == [.resetsAtMidnight], "5: spent only")
+check(s.hero == .spent(names: ["Chat", "Games"], forNow: false) && s.facts == [.resetsAtMidnight], "5: spent only")
+// Review fix: a split portion reopens at its cutoff, so it never claims midnight.
+s = NowSummary.make(items: [], spentLimitNames: [], portionLimitNames: ["Games"], wakes: [], now: now)
+check(s.hero == .spent(names: ["Games"], forNow: true) && s.facts.isEmpty, "5: portion used up for now")
+s = NowSummary.make(items: [], spentLimitNames: ["Games"], portionLimitNames: ["Games"], wakes: [], now: now)
+check(s.hero == .spent(names: ["Games"], forNow: false), "5: spent for the day wins over its portion")
+s = NowSummary.make(items: [], spentLimitNames: ["Chat"], portionLimitNames: ["Games"], wakes: [], now: now)
+check(s.hero == .spent(names: ["Chat", "Games"], forNow: true) && s.facts.isEmpty, "5: mixed says for now")
+// Review fix: a free rule on a higher layer clears blocks below it.
+let recurringBlock = TodayItem(id: "r", name: "Evening block", kind: .block, layer: 1,
+                               start: ny(11, 2, 16), end: ny(11, 2, 21))
+let freeSession = TodayItem(id: "fs", name: "Break", kind: .free, layer: 3,
+                            start: ny(11, 2, 16, 45), end: ny(11, 2, 17, 30))
+s = NowSummary.make(items: [recurringBlock, freeSession], spentLimitNames: ["Games"], wakes: [], now: now)
+check(s.hero == .free(until: ny(11, 2, 17, 30)), "free session clears a recurring block")
+let plannedFree = TodayItem(id: "pf", name: "Trip", kind: .free, layer: 2,
+                            start: ny(11, 2, 16), end: ny(11, 2, 18))
+let sessionBlock = TodayItem(id: "sb", name: "Focus", kind: .block, layer: 3,
+                             start: ny(11, 2, 16, 30), end: ny(11, 2, 17, 30))
+s = NowSummary.make(items: [recurringBlock, plannedFree, sessionBlock], spentLimitNames: [], wakes: [], now: now)
+check(s.hero == .oneBlock(name: "Focus", until: ny(11, 2, 17, 30)), "a later-layer block survives a planned free window")
+s = NowSummary.make(items: [recurringBlock, lunch], spentLimitNames: [], wakes: [], now: now)
+check(s.hero == .oneBlock(name: "Evening block", until: ny(11, 2, 21)), "same layer: the block is kept")
+s = NowSummary.make(items: [recurringBlock, free("old", "Done", ny(11, 2, 9), ny(11, 2, 10)).withLayer(3)],
+                    spentLimitNames: [], wakes: [], now: now)
+check(s.hero == .oneBlock(name: "Evening block", until: ny(11, 2, 21)), "a finished free session clears nothing")
 s = NowSummary.make(items: [lunch, free("x", "Long", ny(11, 2, 16), ny(11, 2, 19))],
     spentLimitNames: ["Games"], wakes: [], now: now)
 check(s.hero == .free(until: ny(11, 2, 19)), "6: free period (latest end) wins over spent limits")
@@ -395,6 +423,21 @@ limits_tab = section((ROOT / 'Latch/LimitsView.swift').read_text(), 'struct Limi
 for gone in ('extraTimeControl', 'requestExtraTimeOffMain', 'ExtraTimePasswordGate', 'ExtraTimePhraseGate',
              'extraContactTarget'):
     assert gone not in limits_tab, ('extra time lives on Today only', gone)
-assert 'ExtraTimeRows(limits: model.state.limits, states: extraTimes)' in home
+assert 'ExtraTimeRows(limits: model.state.limits, states: extraTimes,' in home
 assert 'ChangeEngine.requestExtraTimeOffMain(limitID: id)' in home
 print('Extra time guards passed: one place (Today), same gates')
+
+# --- Review fixes ----------------------------------------------------------
+rows_view = section(today_src, 'struct ExtraTimeRows: View {', '\n// MARK: - Day thread')
+assert 'ContactsRelay.' not in rows_view and 'contactPending.contains(limit.id)' in rows_view, \
+    'the pending contact request is read in refreshSnapshot, not while drawing'
+snapshot = section(home, '    private func refreshSnapshot(state: LatchState) {', '\n    }\n')
+for read in ('LimitFeatures.extraUnblockedIDs(state: state, at: now)',
+             'LimitFeatures.blockedFeatureIDs(state: state, at: now, includeWake: false)',
+             '!extraUnblocked.contains($0.id)', 'featureBlocked.subtracting(daily)',
+             'ContactsRelay.pendingExtraRequest(for: limit.id)'):
+    assert read in snapshot, ('the Now card mirrors the shield baseline', read)
+for layer in ('layer: 3, start: session.startedAt', 'layer: 2, start: window.startsAt',
+              'kind: .block, layer: 0, start: interval.start'):
+    assert layer in home, ('day sources carry their effect layer', layer)
+print('Review-fix guards passed: event-only contact read, shield-baseline spent sets, effect layers')

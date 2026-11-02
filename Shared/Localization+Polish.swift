@@ -1245,4 +1245,8 @@ let polishStrings: [String: String] = [
     "%d of %d min": "%d z %d min",
     "Used up": "Wyczerpany",
     "No data yet": "Brak danych",
+    // Today review fixes
+    "%@ is used up for now.": "%@ na razie się wyczerpał.",
+    "%d limits are used up for now.": "Wyczerpane na razie limity: %d.",
+    "Add a daily time limit.": "Dodaj dzienny limit czasu.",
 ]

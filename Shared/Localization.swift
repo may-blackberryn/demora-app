@@ -1355,4 +1355,8 @@ let spanishStrings: [String: String] = [
     "%d of %d min": "%d de %d min",
     "Used up": "Agotado",
     "No data yet": "Aún no hay datos",
+    // Today review fixes
+    "%@ is used up for now.": "%@ se ha agotado por ahora.",
+    "%d limits are used up for now.": "%d límites se han agotado por ahora.",
+    "Add a daily time limit.": "Añade un límite de tiempo diario.",
 ]

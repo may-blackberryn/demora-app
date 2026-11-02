@@ -1280,4 +1280,8 @@ let germanStrings: [String: String] = [
     "%d of %d min": "%d von %d Min.",
     "Used up": "Aufgebraucht",
     "No data yet": "Noch keine Daten",
+    // Today review fixes
+    "%@ is used up for now.": "%@ ist vorerst aufgebraucht.",
+    "%d limits are used up for now.": "%d Limits sind vorerst aufgebraucht.",
+    "Add a daily time limit.": "Füge ein tägliches Zeitlimit hinzu.",
 ]

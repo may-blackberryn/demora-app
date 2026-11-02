@@ -1245,4 +1245,8 @@ let turkishStrings: [String: String] = [
     "%d of %d min": "%d / %d dk",
     "Used up": "Doldu",
     "No data yet": "Henüz veri yok",
+    // Today review fixes
+    "%@ is used up for now.": "%@ şimdilik doldu.",
+    "%d limits are used up for now.": "%d sınır şimdilik doldu.",
+    "Add a daily time limit.": "Günlük bir süre sınırı ekle.",
 ]

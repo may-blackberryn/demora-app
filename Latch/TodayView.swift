@@ -171,12 +171,13 @@ struct NowCard: View {
                 tr("%d blocks are on. The first ends at %@.")
                     .replacingOccurrences(of: "%d", with: "\(count)"),
                 [time(firstEnd, loosen)])
-        case .spent(let names):
+        case .spent(let names, let forNow):
             if names.count == 1 {
-                return TodaySentence.text(tr("%@ is used up for today."),
+                return TodaySentence.text(tr(forNow ? "%@ is used up for now." : "%@ is used up for today."),
                                           [.init(text: names[0], bold: true)])
             }
-            return Text(String(format: tr("%d limits are used up for today."), names.count))
+            return Text(String(format: tr(forNow ? "%d limits are used up for now."
+                                                 : "%d limits are used up for today."), names.count))
         case .free(let until):
             return TodaySentence.text(tr("You're in a free period until %@."), [time(until, Ink.free)])
         case .nothing:
@@ -300,6 +301,8 @@ struct ExtraTimeRows: View {
     let limits: [AppLimit]
     /// Read in event callbacks, never while drawing.
     let states: [UUID: ExtraTimeState]
+    /// Limits whose extra time waits on a sent contact request (event-side).
+    let contactPending: Set<UUID>
     let onRequest: (AppLimit, Int) -> Void
 
     var body: some View {
@@ -328,7 +331,7 @@ struct ExtraTimeRows: View {
             case .ready(let remaining):
                 Button { onRequest(limit, remaining) } label: {
                     HStack {
-                        name + Text(" · ") + Text(ContactsRelay.pendingExtraRequest(for: limit.id) != nil
+                        name + Text(" · ") + Text(contactPending.contains(limit.id)
                             ? tr("Waiting for a trusted contact")
                             : String(format: tr("Get extra time (%d left)"), remaining))
                             .foregroundColor(accent)

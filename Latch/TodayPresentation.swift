@@ -25,6 +25,10 @@ struct TodayItem: Equatable {
     /// The rule kind's label ("Block only…", "Free period"), for the legacy line.
     var detail: String = ""
     let kind: Kind
+    /// Default effect order: sleep 0, recurring 1, planned 2, session 3. An
+    /// active free rule on a higher layer clears blocks below it, as the
+    /// shield plan applies them.
+    var layer: Int = 1
     /// Wall-clock interval, not clipped to the day.
     let start: Date
     let end: Date
@@ -43,7 +47,8 @@ struct NowSummary: Equatable {
         case wakeRunning(opensAt: Date)
         case oneBlock(name: String, until: Date)
         case severalBlocks(count: Int, firstEnd: Date)
-        case spent(names: [String])
+        /// `forNow` when a split portion, not the whole day, is used up.
+        case spent(names: [String], forNow: Bool)
         case free(until: Date)
         case nothing
     }
@@ -80,6 +85,7 @@ struct NowSummary: Equatable {
     /// An active free period means limits aren't blocking, so spent limits
     /// only lead when no free period is running.
     static func make(items: [TodayItem], spentLimitNames: [String],
+                     portionLimitNames: [String] = [],
                      wakes: [Wake], now: Date) -> NowSummary {
         // 1. A wake tap is needed.
         let needsTap = wakes.filter { $0.release == nil }
@@ -98,9 +104,13 @@ struct NowSummary: Equatable {
             return NowSummary(hero: .wakeRunning(opensAt: opens),
                               facts: [.countdown(to: opens)], action: nil)
         }
-        // 3–4. Blocks active now, first to end first; ties by name.
-        let blocks = unique(items.filter { $0.kind == .block && $0.isActive(at: now) })
-            .sorted { ($0.end, $0.name) < ($1.end, $1.name) }
+        // 3–4. Blocks active now, first to end first; ties by name. A free
+        // rule on a higher layer (a free session over a recurring block)
+        // clears them; on the same layer the block is kept, to stay cautious.
+        let freeLayer = items.filter { $0.kind == .free && $0.isActive(at: now) }.map(\.layer).max()
+        let blocks = unique(items.filter {
+            $0.kind == .block && $0.isActive(at: now) && $0.layer >= (freeLayer ?? Int.min)
+        }).sorted { ($0.end, $0.name) < ($1.end, $1.name) }
         if let first = blocks.first {
             if blocks.count == 1 {
                 return NowSummary(hero: .oneBlock(name: first.name, until: first.end),
@@ -117,10 +127,14 @@ struct NowSummary: Equatable {
         if let until = free.map(\.end).max() {
             return NowSummary(hero: .free(until: until), facts: [], action: nil)
         }
-        // 5. Only spent limits.
-        let spent = Array(Set(spentLimitNames)).sorted()
+        // 5. Only spent limits. A split portion reopens at its cutoff, so it
+        // never claims midnight.
+        let daily = Set(spentLimitNames)
+        let spent = Array(daily.union(portionLimitNames)).sorted()
         if !spent.isEmpty {
-            return NowSummary(hero: .spent(names: spent), facts: [.resetsAtMidnight], action: nil)
+            let forNow = !Set(portionLimitNames).isSubset(of: daily)
+            return NowSummary(hero: .spent(names: spent, forNow: forNow),
+                              facts: forNow ? [] : [.resetsAtMidnight], action: nil)
         }
         // 7. Nothing: name the next block starting later, if any.
         let next = unique(items.filter { $0.kind == .block && $0.start > now })
@@ -251,8 +265,9 @@ struct ReceiptPlan: Equatable {
     let wait: TimeInterval?
     let commit: Commit
 
-    /// Looser changes and removals always hold to confirm, even with no wait;
-    /// stricter ones confirm with one tap.
+    /// Looser changes (including looser removals) always hold to confirm, even
+    /// with no wait; stricter ones, such as removing a contact, confirm with one
+    /// tap (plan D9 as corrected 2026-11-02).
     static func make(looser: Bool, delay: TimeInterval, now: Date) -> ReceiptPlan {
         let waits = delay > 0
         return ReceiptPlan(looser: looser,
