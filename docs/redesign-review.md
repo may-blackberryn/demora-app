@@ -39,7 +39,7 @@
 ## Sessions
 | Session | Scope | Commits | Status |
 | --- | --- | --- | --- |
-| Foundations build | Tokens, type, components, text case, tab bar | `7af8f65`, `46181bc`, `b15b244`, `d448215`, `5fad6e0` | Done, awaiting review |
+| Foundations build | Tokens, type, components, text case, tab bar; three review fixes | `7af8f65`, `46181bc`, `b15b244`, `d448215`, `5fad6e0`; fixes `3d25eda`, `23ba309`, `a59969f` | Done, reviewed and fixed |
 
 ## Foundations build (2026-11-02)
 | Decision | Why | Done? |
@@ -71,3 +71,10 @@
 | Report extension palette copy not done | Brief: don't touch `LatchReport/`; spec §8 asks for it | Follow-up |
 | No fade-in on cards (spec §9 "cards appear with a 0.2 s fade") | That's a screen transition; it belongs with each screen's build | Follow-up |
 | No visual check of anything | No iOS Simulator runtime on this Mac and no device in this session | Limit |
+
+## Review fixes
+| Bug | Fix | Test |
+| --- | --- | --- |
+| `CountdownText` read the clocks only in `body`; with an unchanged deadline SwiftUI could skip it and keep a stale projection (e.g. 0:00 after a clock change while not yet due) | The projection is taken in `init` (runs on every parent redraw) and stored as the view's input; `CountdownRing` passes its tick's clocks so ring and text agree (`3d25eda`) | `FoundationsComponentsHarness`: compiles the real `CountdownText` and checks a redraw after the guarded clock moves re-projects; guards that `body` doesn't read the clocks |
+| `DayChips` used the device calendar for week order and day names, ignoring the in-app "week starts on Monday" setting and the in-app language | Pure `DayChipsCalendar` builds the calendar from the environment locale with `firstWeekday` from `weekStartMonday`, as the month calendar does (`23ba309`) | `FoundationsComponentsHarness`: natively checks order for both week starts and Spanish/German names; guards against `Calendar.current` in `DayChips` |
+| Home's "No limits yet" card was still wrapped in `demoraSurface()`, drawing a second rule and extra padding | Removed the wrapper (`a59969f`) | `FoundationsComponentsHarness`: fails if any screen wraps `EmptyStateView` in another surface (confirmed it catches the old code) |
