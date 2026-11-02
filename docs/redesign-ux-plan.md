@@ -254,5 +254,5 @@ app token, not the rule).
 | D6 | Regular case by default; lowercase remains an option | Easier scanning and translation; existing lowercase users keep their choice |
 | D7 | Usage stats get their own tab (Insights) | The owner wants thorough stats; today they're one link deep on Home |
 | D8 | Overrides become one list in You ("Ways to skip a wait") | Removes the four contact routes and three password/phrase routes |
-| D9 | Removals of schedules/sessions/contacts now confirm via the receipt | They are less-strict changes; today they queue without a check |
+| D9 | Removals of schedules/sessions/contacts now confirm via the receipt | Today they queue without a check. (Correction 2026-11-02: removing a contact, password or phrase is *stricter* in the engine, so those get a plain Confirm; Hold to confirm stays for looser ones.) |
 | D10 | Keep both light and dark; design light first, dark from the same tokens | The store screenshots are dark; the 2.0 tree is light |

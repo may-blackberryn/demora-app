@@ -247,3 +247,7 @@ the restyle of `OverrideGateView` and contact sheets beyond colours.
 | T4 | Today hides empty sections | The page shrinks to what matters; the ledger keeps the empty message |
 | T5 | Extra time moves from the Limits tab to Today, under the usage report | You look for it when you're blocked, which is where Today already is |
 | T6 | "Awaiting approval" merges into the change it belongs to | One place per change |
+
+## Amendments
+- 2026-11-02 (Insights I6, owner-approved): the usage card's refresh arrow is
+  removed; Today keeps pull-to-refresh and refresh-on-appear.
