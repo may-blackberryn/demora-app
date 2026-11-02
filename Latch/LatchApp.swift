@@ -15,7 +15,7 @@ struct LatchApp: App {
     @StateObject private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("appearance") private var appearanceRaw = Appearance.system.rawValue
-    @AppStorage("textCasing") private var textCasingRaw = TextCasing.lower.rawValue
+    @AppStorage("textCasing") private var textCasingRaw = TextCasing.fallback.rawValue
     @AppStorage("latch.accentColor", store: SharedStore.defaults)
     private var accentColorRaw = "blue"
 
@@ -27,7 +27,7 @@ struct LatchApp: App {
                 .tint(Ink.accent(for: accentColorRaw))
                 .serifDesign()
                 .toggleStyle(DemoraToggleStyle())
-                .textCase((TextCasing(rawValue: textCasingRaw) ?? .lower).textCase)
+                .textCase(TextCasing.resolved(textCasingRaw).textCase)
                 .environment(\.locale, model.language.locale)
                 .preferredColorScheme(
                     (Appearance(rawValue: appearanceRaw) ?? .system).colorScheme)

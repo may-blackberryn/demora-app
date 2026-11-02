@@ -430,7 +430,7 @@ struct ContactView: View {
 struct AppearanceGridView: View {
     @EnvironmentObject var model: AppModel
     @AppStorage("appearance") private var appearanceRaw = Appearance.system.rawValue
-    @AppStorage("textCasing") private var textCasingRaw = TextCasing.lower.rawValue
+    @AppStorage("textCasing") private var textCasingRaw = TextCasing.fallback.rawValue
     @AppStorage("weekStartMonday") private var weekStartMonday = false
     @AppStorage("latch.accentColor", store: SharedStore.defaults)
     private var accentColorRaw = "blue"
@@ -454,11 +454,11 @@ struct AppearanceGridView: View {
                 }
                 Button {
                     let all = TextCasing.allCases
-                    let cur = TextCasing(rawValue: textCasingRaw) ?? .lower
+                    let cur = TextCasing.resolved(textCasingRaw)
                     textCasingRaw = all[(all.firstIndex(of: cur)! + 1) % all.count].rawValue
                 } label: {
                     GridCard(symbol: "textformat", title: tr("Text case"),
-                             subtitle: (TextCasing(rawValue: textCasingRaw) ?? .lower).label)
+                             subtitle: TextCasing.resolved(textCasingRaw).label)
                 }
                 Button {
                     weekStartMonday.toggle()

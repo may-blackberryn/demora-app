@@ -20,7 +20,7 @@ struct OnboardingView: View {
     @State private var authTried = false
     @State private var isRequestingAuthorization = false
     @AppStorage("appearance") private var appearanceRaw = Appearance.system.rawValue
-    @AppStorage("textCasing") private var textCasingRaw = TextCasing.lower.rawValue
+    @AppStorage("textCasing") private var textCasingRaw = TextCasing.fallback.rawValue
     @AppStorage("latch.accentColor", store: SharedStore.defaults)
     private var accentRaw = "blue"
     @State private var step = 0

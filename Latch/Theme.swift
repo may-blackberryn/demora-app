@@ -31,12 +31,24 @@ enum Appearance: String, CaseIterable, Identifiable {
 
 // MARK: - Text case setting
 
-/// Whether the app renders its text all-lowercase (the editorial default)
-/// or in the regular case written in code. Applied once at the app root via
-/// `.textCase()`, which cascades to every Text. The "demora" wordmark is
-/// written lowercase, so it stays lowercase in either mode.
+/// Whether the app renders its text all-lowercase or in the regular case
+/// written in code. Applied once at the app root via `.textCase()`, which
+/// cascades to every Text. The "demora" wordmark is written lowercase, so it
+/// stays lowercase in either mode.
+///
+/// Regular is the default (foundations decision F3). `@AppStorage` never
+/// writes its default, so a stored value means the person picked a case in
+/// onboarding or Settings, and that choice is kept.
 enum TextCasing: String, CaseIterable, Identifiable {
     case lower, regular
+
+    /// What people who never chose a case see.
+    static let fallback = TextCasing.regular
+
+    /// The stored choice, or the default when none (or an unreadable one) is stored.
+    static func resolved(_ rawValue: String) -> TextCasing {
+        TextCasing(rawValue: rawValue) ?? fallback
+    }
 
     var id: String { rawValue }
     var label: String {
@@ -628,12 +640,12 @@ struct TutorialBlocker: View {
 }
 
 private struct CasedNavigationTitle: ViewModifier {
-    @AppStorage("textCasing") private var textCasingRaw = TextCasing.lower.rawValue
+    @AppStorage("textCasing") private var textCasingRaw = TextCasing.fallback.rawValue
     let title: String
 
     func body(content: Content) -> some View {
         content.navigationTitle(
-            (TextCasing(rawValue: textCasingRaw) ?? .lower) == .lower
+            TextCasing.resolved(textCasingRaw) == .lower
                 ? title.lowercased() : title)
     }
 }
