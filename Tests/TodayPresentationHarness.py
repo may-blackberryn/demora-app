@@ -389,3 +389,12 @@ for forbidden in ('.set(', 'removeObject', 'NotificationCenter', 'FileManager', 
 extension_src = (ROOT / 'LatchReport/LatchReportExtension.swift').read_text()
 assert 'if let seconds = perApp[t] { used += seconds; reported = true }' in extension_src
 print('Report guards passed: palette copy matches InkPalette, no-data rows, used-up rows, read-only theme')
+
+# --- T5: extra time moved from the Limits tab to Today -----------------------
+limits_tab = section((ROOT / 'Latch/LimitsView.swift').read_text(), 'struct LimitsView: View {', '\n/// A limit row')
+for gone in ('extraTimeControl', 'requestExtraTimeOffMain', 'ExtraTimePasswordGate', 'ExtraTimePhraseGate',
+             'extraContactTarget'):
+    assert gone not in limits_tab, ('extra time lives on Today only', gone)
+assert 'ExtraTimeRows(limits: model.state.limits, states: extraTimes)' in home
+assert 'ChangeEngine.requestExtraTimeOffMain(limitID: id)' in home
+print('Extra time guards passed: one place (Today), same gates')

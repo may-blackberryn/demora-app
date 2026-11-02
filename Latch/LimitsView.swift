@@ -16,10 +16,6 @@ struct LimitsView: View {
     @AppStorage("limits.countingNoteDismissed") private var countingNoteDismissed = false
     @State private var recheckInFlight = false
     @State private var recheckMessage: String?
-    @State private var extraTimeMessage: String?
-    @State private var extraPasswordTarget: AppLimit?
-    @State private var extraPhraseTarget: AppLimit?
-    @State private var extraContactTarget: ExtraContactContext?
 
     var body: some View {
         NavigationStack {
@@ -90,6 +86,7 @@ struct LimitsView: View {
                                                 model.state.strictDelay.shortDelayLabel)
                         )
                     }
+                    // Extra time lives on Today, under the usage report (T5).
                     ForEach(model.state.limits) { limit in
                         VStack(alignment: .leading, spacing: 8) {
                             Button { editTarget = limit } label: {
@@ -98,9 +95,6 @@ struct LimitsView: View {
                             .tint(.primary)
                             .tutorialHighlight(model.tutorial == .removeLimit
                                                && model.tutorialScreen == "limits")
-                            if limit.extraTime != nil && !model.inTutorial {
-                                extraTimeControl(for: limit)
-                            }
                         }
                         .demoraSurface()
                     }
@@ -125,16 +119,6 @@ struct LimitsView: View {
             }
             .sheet(isPresented: $showAdd) { LimitEditorView(existing: nil) }
             .sheet(item: $editTarget) { LimitEditorView(existing: $0) }
-            .sheet(item: $extraPasswordTarget) { limit in
-                ExtraTimePasswordGate(limitID: limit.id)
-            }
-            .sheet(item: $extraPhraseTarget) { limit in
-                ExtraTimePhraseGate(limitID: limit.id)
-            }
-            .sheet(item: $extraContactTarget) { context in
-                ContactGateView(changes: [], extraContext: context,
-                                onSuccess: { model.tick() })
-            }
             .alert(tr("Limit recheck"), isPresented: Binding(
                 get: { recheckMessage != nil },
                 set: { if !$0 { recheckMessage = nil } }
@@ -143,111 +127,6 @@ struct LimitsView: View {
             } message: {
                 Text(recheckMessage ?? "")
             }
-            .alert(tr("Extra time"), isPresented: Binding(
-                get: { extraTimeMessage != nil },
-                set: { if !$0 { extraTimeMessage = nil } }
-            )) {
-                Button(tr("OK"), role: .cancel) {}
-            } message: {
-                Text(extraTimeMessage ?? "")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func extraTimeControl(for limit: AppLimit) -> some View {
-        switch LimitFeatures.extraTimeState(for: limit) {
-        case .notConfigured:
-            EmptyView()
-        case .notNeeded(let remaining):
-            Text(String(format: tr("Extra-time requests left today: %d"), remaining))
-                .font(.caption).foregroundStyle(.secondary)
-        case .ready(let remaining):
-            VStack(alignment: .leading, spacing: 5) {
-                Button {
-                    let id = limit.id
-                    if let pending = ContactsRelay.pendingExtraRequest(for: id) {
-                        extraContactTarget = pending
-                        return
-                    }
-                    if let steps = limit.extraTime?.effectiveSteps,
-                       steps.indices.contains(steps.count - remaining) {
-                        let step = steps[steps.count - remaining]
-                        if step.contactRequired {
-                            extraContactTarget = ExtraContactContext(
-                                requestID: UUID().uuidString, limitID: id,
-                                day: SharedStore.dayKey(for: TimeGuard.now()),
-                                stepIndex: steps.count - remaining,
-                                step: step, limitName: limit.name)
-                            return
-                        }
-                        if step.passwordPolicyID != nil {
-                            extraPasswordTarget = limit
-                            return
-                        }
-                        if step.phrasePolicyID != nil {
-                            extraPhraseTarget = limit
-                            return
-                        }
-                    }
-                    Task {
-                        let started = await ChangeEngine.requestExtraTimeOffMain(limitID: id)
-                        model.tick()
-                        if !started {
-                            extraTimeMessage = tr("Extra time could not be started safely. Your limit is still in place; try again later.")
-                        }
-                    }
-                } label: {
-                    Label(ContactsRelay.pendingExtraRequest(for: limit.id) != nil
-                          ? tr("Waiting for a trusted contact")
-                          : String(format: tr("Request extra time (%d left)"), remaining),
-                          systemImage: "plus.circle")
-                }
-                .buttonStyle(.bordered)
-                if let steps = limit.extraTime?.effectiveSteps,
-                   steps.indices.contains(steps.count - remaining) {
-                    let step = steps[steps.count - remaining]
-                    if step.contactRequired {
-                        Text(String(format: tr("Next use: %d usage minutes after contact approval"),
-                                    step.minutes))
-                            .font(.caption).foregroundStyle(.secondary)
-                    } else if let policyID = step.passwordPolicyID {
-                        let name = model.state.overrides.passwordPolicies.first {
-                            $0.id == policyID
-                        }?.name ?? tr("Unavailable password")
-                        Text(String(format: tr("Next use: %d usage minutes after entering %@"),
-                                    step.minutes, name))
-                            .font(.caption).foregroundStyle(.secondary)
-                    } else if let policyID = step.phrasePolicyID {
-                        let name = model.state.overrides.phrasePolicies.first {
-                            $0.id == policyID
-                        }?.name ?? tr("Unavailable phrase")
-                        Text(String(format: tr("Next use: %d usage minutes after typing %@"),
-                                    step.minutes, name))
-                            .font(.caption).foregroundStyle(.secondary)
-                    } else {
-                        Text(String(format: tr("Next use: %d usage minutes after a %d-minute wait"),
-                                    step.minutes, step.waitMinutes))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-            }
-        case .waiting(let until, let remaining):
-            let seconds = max(1, until.timeIntervalSince(TimeGuard.now()))
-            HStack {
-                Text(tr("Extra time available in"))
-                Text(timerInterval: Date.now...Date.now.addingTimeInterval(seconds),
-                     countsDown: true)
-                    .monospacedDigit()
-                Text(String(format: tr("(%d requests left)"), remaining))
-            }
-            .font(.caption).foregroundStyle(.secondary)
-        case .active(let remaining):
-            Text(String(format: tr("Extra usage active · %d requests left"), remaining))
-                .font(.caption).foregroundStyle(accent)
-        case .exhausted:
-            Text(tr("No extra-time requests left today"))
-                .font(.caption).foregroundStyle(.secondary)
         }
     }
 
