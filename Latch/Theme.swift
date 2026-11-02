@@ -441,6 +441,47 @@ enum DemoraRadius {
     static let sheet: CGFloat = 28
 }
 
+// MARK: - Type
+
+/// The type ladder from docs/foundations-redesign.md §5.2. Every style is
+/// built on a Dynamic Type text style, so it scales with the user's setting.
+/// Serif for names and times; SF Pro for sentences, metadata and labels.
+/// SF Pro styles name `.default` explicitly so the app-wide serif design
+/// (`serifDesign()` at the root) doesn't turn them into New York.
+/// Apply with `.demoraType(_:)`, which also sets the style's tracking.
+enum DemoraType {
+    case pageTitle, hero, cardTitle, time, timeLarge, body, meta, label, chip
+
+    var font: Font {
+        switch self {
+        case .pageTitle: return .system(.largeTitle, design: .serif)
+        case .hero:      return .system(.title2, design: .serif)
+        case .cardTitle: return .system(.headline, design: .serif).weight(.regular)
+        case .time:      return .system(.title3, design: .serif).monospacedDigit()
+        case .timeLarge: return .system(.largeTitle, design: .serif).monospacedDigit()
+        case .body:      return .system(.body, design: .default)
+        case .meta:      return .system(.subheadline, design: .default)
+        case .label:     return .system(.footnote, design: .default).weight(.medium).smallCaps()
+        case .chip:      return .system(.caption, design: .default).weight(.medium)
+        }
+    }
+
+    var tracking: CGFloat {
+        switch self {
+        case .pageTitle: return -0.6
+        case .label:     return 0.6
+        default:         return 0
+        }
+    }
+}
+
+extension View {
+    /// Sets a `DemoraType` style's font and tracking.
+    func demoraType(_ style: DemoraType) -> some View {
+        font(style.font).tracking(style.tracking)
+    }
+}
+
 private extension UIColor {
     convenience init(rgb: UInt32) {
         self.init(red: CGFloat((rgb >> 16) & 0xFF) / 255,
