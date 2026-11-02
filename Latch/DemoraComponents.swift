@@ -369,23 +369,39 @@ struct HoldButton: View {
 
 // MARK: - Day chips
 
-/// Seven round day toggles in the user's calendar order. Days use Calendar
-/// weekday numbers (1 = Sunday … 7 = Saturday), as the saved rules do.
+/// Day order and names for DayChips. Pure, so the harness can check it.
+enum DayChipsCalendar {
+    /// The in-app language and week start (Settings → "week starts on Monday",
+    /// as CalendarView uses), not the device's.
+    static func calendar(locale: Locale, weekStartMonday: Bool) -> Calendar {
+        var calendar = Calendar.current
+        calendar.locale = locale
+        calendar.firstWeekday = weekStartMonday ? 2 : 1
+        return calendar
+    }
+
+    /// Calendar weekday numbers (1 = Sunday … 7 = Saturday) starting at `firstWeekday`.
+    static func orderedDays(firstWeekday: Int) -> [Int] {
+        (0..<7).map { (firstWeekday - 1 + $0) % 7 + 1 }
+    }
+}
+
+/// Seven round day toggles in the app's week order and language. Days use
+/// Calendar weekday numbers (1 = Sunday … 7 = Saturday), as the saved rules do.
 struct DayChips: View {
     @AppAccent private var accent
+    @Environment(\.locale) private var locale
+    @AppStorage("weekStartMonday") private var weekStartMonday = false
     @Binding var selection: Set<Int>
     /// Rules need at least one day, so by default the last day can't be cleared.
     var allowsEmpty = false
 
-    private var orderedDays: [Int] {
-        let first = Calendar.current.firstWeekday
-        return (0..<7).map { (first - 1 + $0) % 7 + 1 }
-    }
-
     var body: some View {
-        let calendar = Calendar.current
+        let calendar = DayChipsCalendar.calendar(locale: locale,
+                                                 weekStartMonday: weekStartMonday)
         HStack(spacing: DemoraSpace.xxs) {
-            ForEach(orderedDays, id: \.self) { day in
+            ForEach(DayChipsCalendar.orderedDays(firstWeekday: calendar.firstWeekday),
+                    id: \.self) { day in
                 let isOn = selection.contains(day)
                 Button {
                     if isOn {

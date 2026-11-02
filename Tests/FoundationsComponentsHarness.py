@@ -122,6 +122,47 @@ with tempfile.TemporaryDirectory(prefix='demora-countdown-text-') as directory:
     subprocess.run(['swiftc', str(source), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
 
+# 2b. Review fix: DayChips follows the app's week start and language.
+chips = section(components, 'struct DayChips: View {', '\n}\n')
+assert '@Environment(\\.locale) private var locale' in chips
+assert '@AppStorage("weekStartMonday") private var weekStartMonday = false' in chips
+assert 'DayChipsCalendar.calendar(locale: locale,\n' in chips
+assert 'Calendar.current' not in chips, 'device calendar must not drive order or names'
+assert 'calendar.veryShortWeekdaySymbols[day - 1]' in chips
+assert '.accessibilityLabel(calendar.weekdaySymbols[day - 1])' in chips
+# Same key and default as the existing month calendar.
+schedules = (ROOT / 'Latch/SchedulesView.swift').read_text()
+assert '@AppStorage("weekStartMonday") private var weekStartMonday = false' in schedules
+assert 'c.firstWeekday = weekStartMonday ? 2 : 1' in schedules
+day_calendar = 'enum DayChipsCalendar {' + section(components, 'enum DayChipsCalendar {', '\n}\n') + '\n}\n'
+day_driver = r'''
+import Foundation
+func check(_ ok: Bool, _ message: String) { if !ok { print("FAIL: " + message); exit(1) } }
+''' + day_calendar + r'''
+check(DayChipsCalendar.orderedDays(firstWeekday: 1) == [1, 2, 3, 4, 5, 6, 7], "Sunday first")
+check(DayChipsCalendar.orderedDays(firstWeekday: 2) == [2, 3, 4, 5, 6, 7, 1], "Monday first")
+// en-US starts on Sunday and es/de on Monday by locale; the app setting wins either way.
+for code in ["en_US", "es", "de"] {
+    for start in [false, true] {
+        let calendar = DayChipsCalendar.calendar(locale: Locale(identifier: code), weekStartMonday: start)
+        check(calendar.firstWeekday == (start ? 2 : 1), "\(code): app setting wins over the locale")
+        check(calendar.weekdaySymbols.count == 7 && calendar.veryShortWeekdaySymbols.count == 7,
+              "\(code): seven names")
+    }
+}
+let spanish = DayChipsCalendar.calendar(locale: Locale(identifier: "es"), weekStartMonday: true)
+check(spanish.weekdaySymbols[1] == "lunes", "in-app language names the days (es)")
+let german = DayChipsCalendar.calendar(locale: Locale(identifier: "de"), weekStartMonday: false)
+check(german.weekdaySymbols[1] == "Montag", "in-app language names the days (de)")
+print("DayChips calendar passed: app week start, in-app language names, order")
+'''
+with tempfile.TemporaryDirectory(prefix='demora-day-chips-') as directory:
+    source = Path(directory) / 'DayChips.swift'
+    binary = Path(directory) / 'DayChips'
+    source.write_text(day_driver)
+    subprocess.run(['swiftc', str(source), '-o', str(binary)], check=True)
+    subprocess.run([str(binary)], check=True)
+
 # 3. HoldButton: 1.2 s hold, accessible fallback, cancel on release.
 hold = section(components, 'struct HoldButton: View {', '\n}\n')
 assert 'var duration: TimeInterval = 1.2' in hold
