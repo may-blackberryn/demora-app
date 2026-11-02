@@ -238,8 +238,12 @@ struct RootView: View {
 /// The five destinations in the redesign use an app-owned navigation bar
 /// instead of the system TabView chrome. It leaves system permission sheets
 /// and app pickers native, where replacing them would reduce accessibility.
+/// Styled per docs/foundations-redesign.md §7 (equal items, icon above label,
+/// selected in accent, others in inkSoft, paper with a top hairline); the
+/// switch to four tabs waits for the Rules, Insights and You screens.
 private struct DemoraTabBar: View {
     @AppAccent private var accent
+    @AppLoosen private var loosen
     @Binding var selection: Int
     let locked: Bool
     let pendingCount: Int
@@ -263,34 +267,27 @@ private struct DemoraTabBar: View {
                     VStack(spacing: 6) {
                         ZStack(alignment: .topTrailing) {
                             Image(systemName: item.2)
-                                .font(.system(size: item.0 == 0 ? 19 : 17,
-                                              weight: .regular))
+                                .font(.system(size: 18, weight: .regular))
                                 .foregroundStyle(selection == item.0
-                                                 ? accent : Ink.faint)
+                                                 ? accent : Ink.inkSoft)
                                 .frame(width: 44, height: 26)
                             let count = item.0 == 0 ? pendingCount
                                 : (item.0 == 3 ? inviteCount : 0)
                             if count > 0 {
-                                Circle().fill(Ink.danger)
+                                Circle().fill(loosen)
                                     .frame(width: 7, height: 7)
                                     .offset(x: -2, y: 2)
                             }
                         }
                         Text(tr(item.1))
-                            .font(.system(size: 10, weight: selection == item.0
-                                          ? .semibold : .regular, design: .monospaced))
+                            .font(.system(size: 11, weight: selection == item.0
+                                          ? .semibold : .medium, design: .default))
                             .foregroundStyle(selection == item.0
-                                             ? Ink.ink : Ink.faint)
+                                             ? accent : Ink.inkSoft)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
                     .frame(maxWidth: .infinity, minHeight: 56)
-                    .overlay(alignment: .top) {
-                        if selection == item.0 {
-                            Rectangle().fill(accent).frame(width: 24, height: 2)
-                                .offset(y: -10)
-                        }
-                    }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -299,10 +296,10 @@ private struct DemoraTabBar: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.top, 14)
+        .padding(.top, 10)
         .padding(.bottom, 4)
         .overlay(alignment: .top) {
-            Rectangle().fill(Ink.rule).frame(height: 1)
+            Rectangle().fill(Ink.hairline).frame(height: 1)
         }
         .frame(maxWidth: 700)
         .frame(maxWidth: .infinity)

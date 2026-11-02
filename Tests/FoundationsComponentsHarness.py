@@ -100,3 +100,27 @@ for suffix in ('', '+German', '+French', '+Portuguese', '+Polish', '+Turkish', '
 
 print(f'Foundations components passed: PendingChangeRow countdown source guards, '
       f'HoldButton fallback guards, {len(keys)} component strings × 7 tables')
+
+# 5. Tab bar restyle (§7) is visual only: the five current tabs keep their
+# order, bindings, lock, badges and accessibility.
+app = (ROOT / 'Latch/LatchApp.swift').read_text()
+bar = section(app, 'private struct DemoraTabBar: View {', '\n}\n')
+assert '''    private let items: [(Int, String, String)] = [
+        (4, "Delays", "hourglass"),
+        (1, "Limits", "square.stack.3d.up"),
+        (0, "Home", "house.fill"),
+        (2, "Schedules", "calendar"),
+        (3, "Settings", "slider.horizontal.3")
+    ]''' in bar, 'five tabs, same order and icons'
+for guard in ('@Binding var selection: Int', 'let locked: Bool', 'let pendingCount: Int',
+              'let inviteCount: Int', 'guard !locked else { return }',
+              'withAnimation(.easeInOut(duration: 0.18)) { selection = item.0 }',
+              'let count = item.0 == 0 ? pendingCount\n                                : (item.0 == 3 ? inviteCount : 0)',
+              '.accessibilityLabel(tr(item.1))',
+              '.accessibilityAddTraits(selection == item.0 ? [.isSelected] : [])',
+              '.frame(maxWidth: .infinity, minHeight: 56)'):
+    assert guard in bar, ('tab bar behaviour changed', guard)
+assert 'DemoraTabBar(selection: $model.selectedTab,\n                         locked: model.inTutorial,' in app
+assert 'design: .monospaced' not in bar, 'monospaced labels retired'
+assert '? accent : Ink.inkSoft' in bar and 'Ink.hairline' in bar, 'selected = accent, others = inkSoft'
+print('Tab bar passed: five tabs, order, lock, badges and accessibility unchanged; restyled colours')
