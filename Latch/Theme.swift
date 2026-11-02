@@ -305,16 +305,65 @@ struct AppAccent: DynamicProperty {
     var projectedValue: Color { Ink.accentOnDark(for: rawValue) }
 }
 
+/// Observe the "blocked / looser" ink through SwiftUI. It follows the accent:
+/// brick with the blue accent, ochre with the red one, so blocked ≠ primary.
+@propertyWrapper
+struct AppLoosen: DynamicProperty {
+    @Environment(\.demoraAccentColor) private var rawValue
+    var wrappedValue: Color { Ink.loosen(for: rawValue) }
+}
+
+/// One light/dark pair of sRGB hex values. Kept as plain numbers so
+/// `Tests/FoundationsContrastHarness.py` can check every pair for contrast.
+struct InkPair {
+    let light: UInt32
+    let dark: UInt32
+}
+
+/// The foundations palette (docs/foundations-redesign.md §5.1). Edit values
+/// here only, then run the contrast harness.
+enum InkPalette {
+    static let paper      = InkPair(light: 0xF6F3EB, dark: 0x191C1D)
+    static let card       = InkPair(light: 0xFFFCF5, dark: 0x222829)
+    static let cardRaised = InkPair(light: 0xFFFFFF, dark: 0x2A3133)
+    static let ink        = InkPair(light: 0x252E32, dark: 0xEFEDE5)
+    static let inkSoft    = InkPair(light: 0x5E6566, dark: 0xA5ADAE)
+    static let hairline   = InkPair(light: 0xDCDAD0, dark: 0x363D3F)
+    static let accentBlue = InkPair(light: 0x325F79, dark: 0xA0C5D9)
+    static let accentRed  = InkPair(light: 0xA23B2E, dark: 0xD9877A)
+    static let loosen     = InkPair(light: 0xA23B2E, dark: 0xD9877A)
+    static let loosenOchre = InkPair(light: 0x8A5A12, dark: 0xD6A55C)
+    static let free       = InkPair(light: 0x4F6F55, dark: 0x9DBFA3)
+    /// Share of the ink laid over `card` for chip and receipt backgrounds.
+    /// Dark uses 12 % too: the spec's 22 % left red and ochre text under 4.5:1.
+    static let tintLight: Double = 0.12
+    static let tintDark: Double = 0.12
+}
+
 enum Ink {
-    static let paper  = dynamic(0xF6F3EB, 0x191C1D)
-    static let ink    = dynamic(0x252E32, 0xEFEDE5)
-    static let faint  = dynamic(0x656C6D, 0xA5ADAE)
-    static let rule   = dynamic(0xD5D6CF, 0x3D4446)
-    static let surface = dynamic(0xFFFCF5, 0x222829)
+    static let paper      = dynamic(InkPalette.paper)
+    static let card       = dynamic(InkPalette.card)
+    static let cardRaised = dynamic(InkPalette.cardRaised)
+    static let ink        = dynamic(InkPalette.ink)
+    static let inkSoft    = dynamic(InkPalette.inkSoft)
+    static let hairline   = dynamic(InkPalette.hairline)
+    /// Free periods, "awake", allowed.
+    static let free       = dynamic(InkPalette.free)
+
+    // Old names, kept as thin aliases until each screen moves to the new ones.
+    static let faint   = inkSoft
+    static let rule    = hairline
+    static let surface = card
+    /// Retired by the foundations spec; still read by the current Home hero
+    /// and buttons, so the old values stay until those screens move.
     static let hero = dynamic(0x222D2C, 0x303B39)
     static let heroText = Color(red: 0.97, green: 0.96, blue: 0.92)
     static let heroMuted = Color(red: 0.73, green: 0.80, blue: 0.77)
     static let buttonText = dynamic(0xFFFCF5, 0x171D1B)
+    /// Old warning ink, unchanged so current screens look as they did. New
+    /// work uses `loosen`, which turns ochre when the accent is red.
+    static let danger = dynamic(InkPalette.loosen)
+
     static var accentOnDark: Color {
         accentOnDark(for: SharedStore.defaults.string(forKey: "latch.accentColor") ?? "blue")
     }
@@ -327,13 +376,41 @@ enum Ink {
         accent(for: SharedStore.defaults.string(forKey: "latch.accentColor") ?? "blue")
     }
     static func accent(for value: String) -> Color {
-        value == "red"
-            ? dynamic(0xA23B2E, 0xD9877A)
-            : dynamic(0x325F79, 0xA0C5D9)
+        dynamic(accentPair(for: value))
     }
-    /// Muted brick red for warnings/expiry — warm enough to sit in the paper
-    /// palette rather than a neon system red.
-    static let danger = dynamic(0xA23B2E, 0xD9877A)
+    static func accentPair(for value: String) -> InkPair {
+        value == "red" ? InkPalette.accentRed : InkPalette.accentBlue
+    }
+
+    /// Blocked, looser changes, removals. Prefer `@AppLoosen` in views.
+    static func loosen(for accentValue: String) -> Color {
+        dynamic(loosenPair(for: accentValue))
+    }
+    static func loosenPair(for accentValue: String) -> InkPair {
+        accentValue == "red" ? InkPalette.loosenOchre : InkPalette.loosen
+    }
+
+    /// A chip or receipt background: the ink laid thinly over `card`. Text on
+    /// a tint always uses the full-strength ink of the same pair.
+    static func tint(_ pair: InkPair) -> Color {
+        dynamic(InkPair(light: blend(pair.light, over: InkPalette.card.light,
+                                     amount: InkPalette.tintLight),
+                        dark: blend(pair.dark, over: InkPalette.card.dark,
+                                    amount: InkPalette.tintDark)))
+    }
+
+    static func blend(_ top: UInt32, over bottom: UInt32, amount: Double) -> UInt32 {
+        [16, 8, 0].reduce(UInt32(0)) { result, shift in
+            let a = Double((top >> UInt32(shift)) & 0xFF)
+            let b = Double((bottom >> UInt32(shift)) & 0xFF)
+            let mixed = UInt32((a * amount + b * (1 - amount)).rounded())
+            return result | (mixed << UInt32(shift))
+        }
+    }
+
+    private static func dynamic(_ pair: InkPair) -> Color {
+        dynamic(pair.light, pair.dark)
+    }
 
     private static func dynamic(_ light: UInt32, _ dark: UInt32) -> Color {
         Color(uiColor: UIColor { traits in
@@ -341,6 +418,27 @@ enum Ink {
                 ? UIColor(rgb: dark) : UIColor(rgb: light)
         })
     }
+}
+
+/// Spacing, radius and width from docs/foundations-redesign.md §5.3.
+enum DemoraSpace {
+    static let xxs: CGFloat = 4
+    static let xs: CGFloat = 8
+    static let s: CGFloat = 12
+    static let m: CGFloat = 16
+    static let l: CGFloat = 20
+    static let xl: CGFloat = 24
+    static let xxl: CGFloat = 32
+    static let pageGutter: CGFloat = 20
+    static let cardPadding: CGFloat = 16
+    static let cardGap: CGFloat = 12
+    static let sectionGap: CGFloat = 28
+    static let maxContentWidth: CGFloat = 640
+}
+
+enum DemoraRadius {
+    static let card: CGFloat = 20
+    static let sheet: CGFloat = 28
 }
 
 private extension UIColor {
