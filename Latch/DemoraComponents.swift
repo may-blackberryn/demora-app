@@ -178,20 +178,27 @@ enum CountdownProjection {
 /// A live countdown to a TimeGuard deadline. The caller decides what shows
 /// once the deadline is due (for example "Applying…"); until then this ticks
 /// down and holds at 0:01 rather than looping.
+///
+/// The projection is taken in `init`, which runs on every parent redraw, and
+/// stored as the view's input. Reading the clocks only in `body` would let
+/// SwiftUI skip this view when the deadline is unchanged, leaving a stale
+/// projection (for example 0:00 after a clock change while not yet due).
 struct CountdownText: View {
-    let deadline: Date
+    let interval: ClosedRange<Date>
     /// `nil` leaves the font to the caller.
     var style: DemoraType? = .time
 
-    init(to deadline: Date, style: DemoraType? = .time) {
-        self.deadline = deadline
+    /// `guardedNow` and `systemNow` default to the current clocks; a caller
+    /// that already ticks (CountdownRing) passes its own pair so both agree.
+    init(to deadline: Date, style: DemoraType? = .time,
+         guardedNow: Date = TimeGuard.now(), systemNow: Date = Date.now) {
+        self.interval = CountdownProjection.interval(
+            until: deadline, guardedNow: guardedNow, systemNow: systemNow)
         self.style = style
     }
 
     var body: some View {
-        let text = Text(timerInterval: CountdownProjection.interval(
-            until: deadline, guardedNow: TimeGuard.now(), systemNow: Date.now),
-                        countsDown: true)
+        let text = Text(timerInterval: interval, countsDown: true)
         if let style {
             text.demoraType(style)
         } else {
@@ -218,6 +225,7 @@ struct CountdownRing: View {
         let ink = Ink.color(role.pair(accent: accentValue))
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             let guardedNow = TimeGuard.now()
+            let systemNow = Date.now
             HStack(spacing: DemoraSpace.xs) {
                 ZStack {
                     Circle().stroke(Ink.hairline, lineWidth: 3)
@@ -231,7 +239,8 @@ struct CountdownRing: View {
                 if guardedNow >= deadline {
                     Text(tr("Applying…")).demoraType(.meta).foregroundStyle(Ink.inkSoft)
                 } else {
-                    CountdownText(to: deadline).foregroundStyle(Ink.ink)
+                    CountdownText(to: deadline, guardedNow: guardedNow, systemNow: systemNow)
+                        .foregroundStyle(Ink.ink)
                 }
             }
         }

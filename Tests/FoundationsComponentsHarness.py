@@ -73,10 +73,54 @@ assert row.index('if let frozenRemaining') < row.index('} else if change.isDue')
 assert 'TutorialCountdownText(remaining: frozenRemaining)' in row
 assert 'Text(tr("Applying…"))' in row
 countdown = section(components, 'struct CountdownText: View {', '\n}\n')
-assert 'guardedNow: TimeGuard.now(), systemNow: Date.now' in countdown
+assert 'guardedNow: Date = TimeGuard.now(), systemNow: Date = Date.now' in countdown
 assert 'countsDown: true' in countdown
 assert len(re.findall(r'^\s*let text = Text\(timerInterval:', components, re.M)) == 1, \
     'one countdown implementation'
+# Review fix: the projection is a stored input captured in init (which runs on
+# every parent redraw), never read from the clocks only inside body.
+countdown_body = countdown.split('var body: some View {', 1)[1]
+assert 'let interval: ClosedRange<Date>' in countdown
+assert 'self.interval = CountdownProjection.interval(' in countdown.split('var body', 1)[0]
+assert 'TimeGuard.now()' not in countdown_body and 'Date.now' not in countdown_body, \
+    'body must not re-read the clocks'
+assert 'Text(timerInterval: interval, countsDown: true)' in countdown_body
+ring = section(components, 'struct CountdownRing: View {', '\n}\n')
+assert 'CountdownText(to: deadline, guardedNow: guardedNow, systemNow: systemNow)' in ring, \
+    'ring and text share one tick'
+assert ring.index('let guardedNow = TimeGuard.now()') < ring.index('let systemNow = Date.now') \
+    < ring.index('CountdownText(to: deadline'), 'clocks read inside the TimelineView tick'
+
+# Natively: two inits of the real CountdownText with the same deadline take
+# different projections when the guarded clock moves (the old body-only read
+# gave SwiftUI identical inputs, so a skipped body kept the stale value).
+text_driver = r'''
+import SwiftUI
+func check(_ ok: Bool, _ message: String) { if !ok { print("FAIL: " + message); exit(1) } }
+enum TimeGuard { static var clock = Date(timeIntervalSince1970: 2_000_000_000); static func now() -> Date { clock } }
+enum DemoraType { case time }
+extension View { func demoraType(_ style: DemoraType) -> some View { self } }
+''' + projection + 'struct CountdownText: View {' + countdown + '\n}\n' + r'''
+let deadline = TimeGuard.clock.addingTimeInterval(3600)
+let before = CountdownText(to: deadline)
+check(abs(before.interval.upperBound.timeIntervalSince(before.interval.lowerBound) - 3600) < 0.001,
+      "an hour away reads an hour")
+TimeGuard.clock = TimeGuard.clock.addingTimeInterval(1800)
+let after = CountdownText(to: deadline)
+check(abs(after.interval.upperBound.timeIntervalSince(after.interval.lowerBound) - 1800) < 0.001,
+      "a redraw after the guarded clock moves re-projects")
+check(before.interval != after.interval, "inputs differ, so SwiftUI can't skip the redraw")
+let fixed = Date(timeIntervalSince1970: 1_000)
+let shared = CountdownText(to: fixed.addingTimeInterval(90), guardedNow: fixed, systemNow: fixed)
+check(shared.interval == fixed...fixed.addingTimeInterval(90), "caller-supplied tick is used as given")
+print("CountdownText passed: projection captured at init, re-projects per redraw, ring tick shared")
+'''
+with tempfile.TemporaryDirectory(prefix='demora-countdown-text-') as directory:
+    source = Path(directory) / 'CountdownText.swift'
+    binary = Path(directory) / 'CountdownText'
+    source.write_text(text_driver)
+    subprocess.run(['swiftc', str(source), '-o', str(binary)], check=True)
+    subprocess.run([str(binary)], check=True)
 
 # 3. HoldButton: 1.2 s hold, accessible fallback, cancel on release.
 hold = section(components, 'struct HoldButton: View {', '\n}\n')
