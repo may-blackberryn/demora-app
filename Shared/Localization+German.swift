@@ -926,6 +926,7 @@ let germanStrings: [String: String] = [
     "For the tutorial, the password is: test": "Für das Tutorial ist das Passwort: test",
     "Everything here is just a sample — nothing is saved and nothing is actually blocked. It's only to show how the app works.": "Alles hier ist nur ein Beispiel — nichts ist gespeichert und nichts ist tatsächlich blockiert. Es ist nur zu zeigen, wie die App funktioniert.",
     "Applying…": "Anwenden...",
+    "Confirm": "Bestätigen",
     "Apps": "Apps",
     "Apps that stay usable": "Apps, die nutzbar bleiben",
     "Apps to block": "Apps zum Blockieren",

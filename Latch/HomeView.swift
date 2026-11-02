@@ -802,30 +802,6 @@ private struct HomeDayTimeline: View {
     }
 }
 
-/// iOS 16-compatible stand-in for ContentUnavailableView (iOS 17+).
-struct EmptyStateView: View {
-    @AppAccent private var accent
-    let title: String
-    let systemImage: String
-    let description: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.system(size: 24, weight: .ultraLight))
-                .foregroundStyle(accent)
-            Text(title).font(.system(.title3, design: .serif))
-            Text(description)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.leading)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 16)
-        .accessibilityElement(children: .combine)
-    }
-}
-
 struct PendingChangeRow: View {
     @AppAccent private var accent
     let change: PendingChange
@@ -853,14 +829,9 @@ struct PendingChangeRow: View {
                     Text(tr("Applying…")).font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    // `appliesAt` is anchored to TimeGuard's tamper-resistant
-                    // clock, but Text(timerInterval:) ticks on the system clock.
-                    // Project the TimeGuard-based remaining time onto the system
-                    // clock so the countdown is correct — and doesn't flicker at
-                    // ~1s — even when the two clocks disagree (e.g. after sleep).
-                    let remaining = max(1, change.appliesAt.timeIntervalSince(TimeGuard.now()))
-                    Text(timerInterval: Date.now...Date.now.addingTimeInterval(remaining),
-                         countsDown: true)
+                    // CountdownText projects the TimeGuard deadline onto the
+                    // system clock (see CountdownProjection).
+                    CountdownText(to: change.appliesAt, style: nil)
                         .font(.system(.title2, design: .serif).monospacedDigit())
                 }
             }

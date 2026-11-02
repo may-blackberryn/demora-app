@@ -137,23 +137,6 @@ struct DemoraSectionTitle: View {
     }
 }
 
-struct DemoraPrimaryButtonStyle: ButtonStyle {
-    @AppAccent private var accent
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(.headline, design: .serif))
-            .foregroundStyle(Ink.buttonText)
-            .padding(.horizontal, 20)
-            .frame(maxWidth: .infinity, minHeight: 54)
-            .background(accent, in: Capsule())
-            .opacity(isEnabled ? 1 : 0.48)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
-    }
-}
-
 /// The position within a calendar day, not a usage estimate. The little ink
 /// mark moves with the actual clock; Screen Time progress stays in its report.
 struct DemoraDayLine: View {
@@ -408,8 +391,13 @@ enum Ink {
         }
     }
 
-    private static func dynamic(_ pair: InkPair) -> Color {
+    /// A light/dark pair as a SwiftUI colour.
+    static func color(_ pair: InkPair) -> Color {
         dynamic(pair.light, pair.dark)
+    }
+
+    private static func dynamic(_ pair: InkPair) -> Color {
+        color(pair)
     }
 
     private static func dynamic(_ light: UInt32, _ dark: UInt32) -> Color {
@@ -465,6 +453,9 @@ enum DemoraType {
         case .chip:      return .system(.caption, design: .default).weight(.medium)
         }
     }
+
+    /// Button labels: verb-first sentences, so SF Pro rather than the serif.
+    static let button = Font.system(.body, design: .default).weight(.semibold)
 
     var tracking: CGFloat {
         switch self {

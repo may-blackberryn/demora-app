@@ -803,6 +803,7 @@ let hindiStrings: [String: String] = [
     "For the tutorial, the password is: test": "ट्यूटोरियल के लिए, पासवर्ड है: test",
     "Everything here is just a sample — nothing is saved and nothing is actually blocked. It's only to show how the app works.": "यहाँ सब कुछ केवल एक नमूना है — कुछ भी सहेजा नहीं गया है और कुछ भी वास्तव में अवरुद्ध नहीं किया गया है। यह केवल यह दिखाने के लिए है कि ऐप कैसे काम करता है।",
     "Applying…": "आवेदन कर रहा है…",
+    "Confirm": "पुष्टि करें",
     "Apps": "ऐप्स",
     "Apps that stay usable": "ऐप्लिकेशन जो उपयोग योग्य रहते हैं",
     "Apps to block": "ब्लॉक करने के लिए ऐप्स",

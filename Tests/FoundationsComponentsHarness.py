@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""Checks for the foundations components (docs/foundations-redesign.md §6).
+
+Compiles the pure `CountdownProjection` from Latch/DemoraComponents.swift with
+a native test driver, then runs source guards for PendingChangeRow's
+countdown, HoldButton's accessible fallback and component translations.
+No iOS build, simulator, defaults mutation or saved state is involved; the
+guards read source text and don't prove how the views render.
+"""
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+sys.dont_write_bytecode = True
+
+ROOT = Path(__file__).resolve().parents[1]
+STRING = r'"((?:[^"\\]|\\.)*)"'
+
+
+def section(source, start, end):
+    assert start in source, ('missing', start)
+    return source.split(start, 1)[1].split(end, 1)[0]
+
+
+components = (ROOT / 'Latch/DemoraComponents.swift').read_text()
+home = (ROOT / 'Latch/HomeView.swift').read_text()
+
+# 1. The countdown projection, compiled and run natively.
+projection = 'enum CountdownProjection {' + section(components, 'enum CountdownProjection {', '\n}\n') + '\n}\n'
+driver = r'''
+import Foundation
+func check(_ ok: Bool, _ message: String) { if !ok { print("FAIL: " + message); exit(1) } }
+''' + projection + r'''
+let system = Date(timeIntervalSince1970: 2_000_000_000)
+// TimeGuard and the system clock disagree in both directions (sleep, clock edits).
+for skew in [-3600.0, -1.0, 0.0, 42.0, 86_400.0] {
+    let guarded = system.addingTimeInterval(skew)
+    let deadline = guarded.addingTimeInterval(600)
+    let range = CountdownProjection.interval(until: deadline, guardedNow: guarded, systemNow: system)
+    check(range.lowerBound == system, "starts at the system clock")
+    check(range.upperBound.timeIntervalSince(system) == 600, "guarded remaining projected, skew \(skew)")
+}
+check(CountdownProjection.remaining(until: system, guardedNow: system) == 1, "due floors at 1 s")
+check(CountdownProjection.remaining(until: system.addingTimeInterval(-90), guardedNow: system) == 1,
+      "overdue floors at 1 s, never negative")
+check(CountdownProjection.remaining(until: system.addingTimeInterval(0.4), guardedNow: system) == 1,
+      "sub-second wait floors at 1 s")
+check(CountdownProjection.remaining(until: system.addingTimeInterval(3661), guardedNow: system) == 3661,
+      "long wait kept exactly")
+let start = system, end = system.addingTimeInterval(100)
+check(CountdownProjection.progress(from: start, until: end, guardedNow: system.addingTimeInterval(-5)) == 0, "before start")
+check(CountdownProjection.progress(from: start, until: end, guardedNow: system.addingTimeInterval(25)) == 0.25, "quarter")
+check(CountdownProjection.progress(from: start, until: end, guardedNow: system.addingTimeInterval(500)) == 1, "after end")
+check(CountdownProjection.progress(from: start, until: start, guardedNow: system) == 1, "zero-length wait complete")
+check(CountdownProjection.progress(from: end, until: start, guardedNow: system) == 1, "inverted wait complete")
+print("Countdown projection passed: clock skew, 1 s floor, progress clamps")
+'''
+with tempfile.TemporaryDirectory(prefix='demora-foundations-') as directory:
+    source = Path(directory) / 'Countdown.swift'
+    binary = Path(directory) / 'Countdown'
+    source.write_text(driver)
+    subprocess.run(['swiftc', str(source), '-o', str(binary)], check=True)
+    subprocess.run([str(binary)], check=True)
+
+# 2. PendingChangeRow uses CountdownText with identical branches.
+row = section(home, 'struct PendingChangeRow: View {', '\n}\n')
+assert 'CountdownText(to: change.appliesAt, style: nil)' in row
+assert 'Text(timerInterval:' not in row and 'TimeGuard.now()' not in row, \
+    'projection must live only in CountdownProjection'
+assert row.index('if let frozenRemaining') < row.index('} else if change.isDue') \
+    < row.index('CountdownText(to: change.appliesAt'), 'tutorial → due → countdown order kept'
+assert 'TutorialCountdownText(remaining: frozenRemaining)' in row
+assert 'Text(tr("Applying…"))' in row
+countdown = section(components, 'struct CountdownText: View {', '\n}\n')
+assert 'guardedNow: TimeGuard.now(), systemNow: Date.now' in countdown
+assert 'countsDown: true' in countdown
+assert len(re.findall(r'^\s*let text = Text\(timerInterval:', components, re.M)) == 1, \
+    'one countdown implementation'
+
+# 3. HoldButton: 1.2 s hold, accessible fallback, cancel on release.
+hold = section(components, 'struct HoldButton: View {', '\n}\n')
+assert 'var duration: TimeInterval = 1.2' in hold
+assert 'if voiceOver || reduceMotion {' in hold
+assert '.alert(confirmationTitle, isPresented: $confirming)' in hold
+assert 'Button(tr("Cancel"), role: .cancel)' in hold
+assert '.accessibilityAction { confirming = true }' in hold
+assert 'onLongPressGesture(minimumDuration: duration' in hold
+assert '} else if !completed {' in hold, 'early release cancels the fill'
+assert 'impactOccurred()' in hold and 'notificationOccurred(.success)' in hold
+
+# 4. Every component string is translated in all seven tables.
+keys = set(re.findall(r'\btr\(\s*' + STRING, components))
+assert keys, 'no component strings found'
+entry = re.compile(r'^\s*' + STRING + r'\s*:', re.M)
+for suffix in ('', '+German', '+French', '+Portuguese', '+Polish', '+Turkish', '+Hindi'):
+    table = set(entry.findall((ROOT / f'Shared/Localization{suffix}.swift').read_text()))
+    missing = sorted(keys - table)
+    assert not missing, (suffix or 'Spanish', 'missing', missing)
+
+print(f'Foundations components passed: PendingChangeRow countdown source guards, '
+      f'HoldButton fallback guards, {len(keys)} component strings × 7 tables')

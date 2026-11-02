@@ -998,6 +998,7 @@ let spanishStrings: [String: String] = [
     "For the tutorial, the password is: test": "Para el tutorial, la contraseña es: test",
     "Everything here is just a sample — nothing is saved and nothing is actually blocked. It's only to show how the app works.": "Todo esto es solo una muestra — nada se guarda y nada se bloquea de verdad. Es solo para mostrarte cómo funciona la app.",
     "Applying…": "Aplicando…",
+    "Confirm": "Confirmar",
     "Apps": "Apps",
     "Apps that stay usable": "Apps que siguen disponibles",
     "Apps to block": "Apps a bloquear",

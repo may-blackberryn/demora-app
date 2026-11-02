@@ -803,6 +803,7 @@ let polishStrings: [String: String] = [
     "For the tutorial, the password is: test": "Dla szkolenia hasło brzmi: test",
     "Everything here is just a sample — nothing is saved and nothing is actually blocked. It's only to show how the app works.": "Wszystko jest tylko próbką — nic nie jest zapisane i nic nie jest faktycznie zablokowane. To tylko pokazanie, jak działa aplikacja.",
     "Applying…": "Naklejam...",
+    "Confirm": "Potwierdź",
     "Apps": "Aplikacje",
     "Apps that stay usable": "Aplikacje, które pozostają użyteczne",
     "Apps to block": "Aplikacje do zablokowania",

@@ -890,6 +890,7 @@ let portugueseStrings: [String: String] = [
     "For the tutorial, the password is: test": "Para o tutorial, a senha é: teste",
     "Everything here is just a sample — nothing is saved and nothing is actually blocked. It's only to show how the app works.": "Tudo aqui é apenas uma amostra nada é salvo e nada é realmente bloqueado. É apenas para mostrar como o aplicativo funciona.",
     "Applying…": "A aplicar...",
+    "Confirm": "Confirmar",
     "Apps": "Aplicativos",
     "Apps that stay usable": "Apps que podem ser utilizados",
     "Apps to block": "Apps para bloquear",

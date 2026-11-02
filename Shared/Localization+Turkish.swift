@@ -803,6 +803,7 @@ let turkishStrings: [String: String] = [
     "For the tutorial, the password is: test": "Eğitim için şifre: test",
     "Everything here is just a sample — nothing is saved and nothing is actually blocked. It's only to show how the app works.": "Buradaki her şey sadece bir örnek — hiçbir şey kaydedilmiyor ve hiçbir şey gerçekten engellenmiyor. Bu, uygulamanın nasıl çalıştığını göstermek içindir.",
     "Applying…": "Başvuruluyor…",
+    "Confirm": "Onayla",
     "Apps": "Uygulamalar",
     "Apps that stay usable": "Kullanılabilir kalan uygulamalar",
     "Apps to block": "Bloklamak için uygulamalar",
