@@ -1,7 +1,8 @@
 //
 //  LimitsUsageView.swift
-//  The SwiftUI content the report extension renders — accurate per-limit
-//  usage (minutes used today vs the budget), drawn as a progress bar.
+//  The SwiftUI content the report extension renders on Today — accurate
+//  per-limit usage (minutes used today vs the budget) as one row per limit
+//  (docs/today-redesign.md §5.5).
 //
 
 import SwiftUI
@@ -25,23 +26,7 @@ struct LimitsUsageView: View {
         }
     }
 
-    private var accent: Color {
-        let red = accentColorRaw == "red"
-        if red {
-            return scheme == .dark
-                ? Color(red: 0.85, green: 0.53, blue: 0.48)
-                : Color(red: 0.64, green: 0.23, blue: 0.18)
-        }
-        return scheme == .dark
-            ? Color(red: 0.63, green: 0.77, blue: 0.85)
-            : Color(red: 0.20, green: 0.37, blue: 0.47)
-    }
-
-    private var warning: Color {
-        scheme == .dark
-            ? Color(red: 0.85, green: 0.53, blue: 0.48)
-            : Color(red: 0.64, green: 0.23, blue: 0.18)
-    }
+    private func ink(_ pair: ReportInkPair) -> Color { ReportTheme.color(pair, scheme) }
 
     var body: some View {
         // The host owns a bounded viewport, not an estimated per-row height.
@@ -49,67 +34,53 @@ struct LimitsUsageView: View {
         // payload is written to the App Group or sent back to the host.
         ScrollView { reportContent }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .serifIfAvailable()
             .environment(\.colorScheme, scheme)
     }
 
     private var reportContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             if rows.isEmpty {
-                Text("No limits yet")
-                    .font(.subheadline).foregroundStyle(.secondary)
+                Text(insightsText("No limits yet"))
+                    .font(.system(.subheadline, design: .default))
+                    .foregroundStyle(ink(ReportPalette.inkSoft))
             }
             ForEach(rows) { r in
-                let spent = r.usedMinutes >= r.budget
+                let spent = r.hasData && r.usedMinutes >= r.budget
                 let shown = max(0, r.usedMinutes)
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                let accent = ink(ReportTheme.accent(for: accentColorRaw))
+                let loosen = ink(ReportTheme.loosen(for: accentColorRaw))
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(r.name)
-                            .font(.system(.title3, design: .serif))
+                            .font(.system(.headline, design: .serif).weight(.regular))
+                            .foregroundStyle(ink(ReportPalette.ink))
                             .lineLimit(2)
                         Spacer()
-                        Text("\(shown)")
-                            .font(.system(.title2, design: .serif).monospacedDigit())
-                            .foregroundStyle(spent ? warning : accent)
-                        Text("/ \(r.budget) min")
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
+                        // Missing is unknown, not zero.
+                        Text(!r.hasData ? insightsText("No data yet")
+                             : spent ? insightsText("Used up")
+                             : String(format: insightsText("%d of %d min"), shown, r.budget))
+                            .font(.system(.subheadline, design: .default).monospacedDigit())
+                            .foregroundStyle(spent ? loosen : ink(ReportPalette.inkSoft))
+                            .multilineTextAlignment(.trailing)
                     }
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
-                            Rectangle().fill(Color.secondary.opacity(0.2))
-                                .frame(height: 1)
-                            Rectangle().fill(spent ? warning : accent)
-                                .frame(width: geo.size.width
-                                    * min(1, Double(shown) / Double(max(1, r.budget))),
-                                       height: 2)
-                            HStack(spacing: 0) {
-                                ForEach(0...20, id: \.self) { tick in
-                                    if tick > 0 { Spacer(minLength: 0) }
-                                    Rectangle().fill(Color.secondary.opacity(0.25))
-                                        .frame(width: 1, height: tick % 5 == 0 ? 9 : 4)
-                                }
+                            Capsule().fill(ink(ReportPalette.hairline))
+                            if r.hasData {
+                                Capsule().fill(spent ? loosen : accent)
+                                    .frame(width: geo.size.width * (spent ? 1
+                                        : min(1, Double(shown) / Double(max(1, r.budget)))))
                             }
                         }
                     }
-                    .frame(height: 10)
-                    if spent {
-                        Label("Blocked", systemImage: "lock.fill")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(warning)
-                    }
+                    .frame(height: 6)
+                    .accessibilityHidden(true)
                 }
+                .accessibilityElement(children: .combine)
             }
         }
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-    }
-}
-
-private extension View {
-    /// `.fontDesign(.serif)` is iOS 16.1+; no-op on 16.0 (the extension's
-    /// deployment target) so the usage report still builds and renders.
-    @ViewBuilder func serifIfAvailable() -> some View {
-        if #available(iOS 16.1, *) { self.fontDesign(.serif) } else { self }
     }
 }

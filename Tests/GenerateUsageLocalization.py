@@ -18,7 +18,7 @@ LANGUAGES = {'es': '', 'de': '+German', 'fr': '+French', 'pt': '+Portuguese',
 
 def report_keys():
     view = '\n'.join((ROOT / 'LatchReport' / name).read_text() for name in
-                     ['UsageInsightsView.swift', 'UsageTrendsView.swift'])
+                     ['UsageInsightsView.swift', 'UsageTrendsView.swift', 'LimitsUsageView.swift'])
     # Includes literal helper arguments, period titles, and conditional labels.
     keys = {json.loads('"' + key + '"') for key in re.findall(
         r'\b(?:insightsText|heading|format|rangeButton|pageButton)\(\s*' + STRING, view)}

@@ -75,6 +75,9 @@ struct LimitUsageRow: Identifiable {
     let name: String
     let usedMinutes: Int
     let budget: Int
+    /// Whether any of the limit's apps or categories appeared in today's
+    /// data. Without it the row says "No data yet", never 0. Stays here.
+    var hasData = true
 }
 
 // `nonisolated` conformance: the extension's `body` is built off the main
@@ -115,11 +118,17 @@ struct LimitsUsageReport: nonisolated DeviceActivityReportScene {
 
         return loadLimits().map { limit in
             var used: TimeInterval = 0
-            for t in limit.selection.applicationTokens { used += perApp[t] ?? 0 }
-            for t in limit.selection.categoryTokens { used += perCat[t] ?? 0 }
+            var reported = false
+            for t in limit.selection.applicationTokens {
+                if let seconds = perApp[t] { used += seconds; reported = true }
+            }
+            for t in limit.selection.categoryTokens {
+                if let seconds = perCat[t] { used += seconds; reported = true }
+            }
             return LimitUsageRow(id: limit.id, name: limit.name,
                                  usedMinutes: Int(used / 60),
-                                 budget: limit.minutes(on: Date()))
+                                 budget: limit.minutes(on: Date()),
+                                 hasData: reported)
         }
     }
 

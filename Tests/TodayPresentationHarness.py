@@ -369,3 +369,23 @@ assert 'CountdownText(to: until)' in today_src, 'extra-time wait is a TimeGuard 
 assert 'arrow.clockwise' not in host and 'tr("Refresh")' not in host
 assert '.onAppear { onScreen = true; requestRefresh() }' in host and '.onChange(of: reloadRequest)' in host
 print('Today layout guards passed: section order, legacy tutorial routing, pinned Block now, event-only reads, rule names only, report refresh')
+
+# --- Report restyle (§5.5) and its palette copy -----------------------------
+theme = (ROOT / 'Latch/Theme.swift').read_text()
+report_theme = (ROOT / 'LatchReport/ReportTheme.swift').read_text()
+pair = re.compile(r'static let (\w+)\s*=\s*\w+\(light: 0x([0-9A-Fa-f]{6}), dark: 0x([0-9A-Fa-f]{6})\)')
+app_palette = {name: (l.upper(), d.upper()) for name, l, d in pair.findall(section(theme, 'enum InkPalette {', '\n}\n'))}
+copied = {name: (l.upper(), d.upper()) for name, l, d in pair.findall(section(report_theme, 'enum ReportPalette {', '\n}\n'))}
+assert len(copied) >= 7, copied
+for name, values in copied.items():
+    assert app_palette.get(name) == values, ('report palette drifted from InkPalette', name, values, app_palette.get(name))
+assert 'value == "red" ? ReportPalette.loosenOchre : ReportPalette.loosen' in report_theme, 'ochre with the red accent'
+report_view = (ROOT / 'LatchReport/LimitsUsageView.swift').read_text()
+assert 'insightsText("No data yet")' in report_view and 'r.hasData' in report_view, 'missing is unknown, not zero'
+assert 'insightsText("Used up")' in report_view and 'insightsText("%d of %d min")' in report_view
+assert 'Color(red:' not in report_view, 'colours come from ReportTheme'
+for forbidden in ('.set(', 'removeObject', 'NotificationCenter', 'FileManager', 'URLSession', 'print('):
+    assert forbidden not in report_theme, ('report theme must stay read-only', forbidden)
+extension_src = (ROOT / 'LatchReport/LatchReportExtension.swift').read_text()
+assert 'if let seconds = perApp[t] { used += seconds; reported = true }' in extension_src
+print('Report guards passed: palette copy matches InkPalette, no-data rows, used-up rows, read-only theme')

@@ -187,7 +187,7 @@ assert '"app.demora.production.limits-usage"' in host
 assert "ScrollView { reportContent }" in report
 assert "alignment: .topLeading" in report
 assert "Spacer()" in report  # horizontal label spacer remains
-assert ".frame(height: 10)" in report  # bounded progress GeometryReader
+assert ".frame(height: 6)" in report  # bounded 6-pt bar GeometryReader (Today §5.5)
 assert "let shown = max(0, r.usedMinutes)" in report
 for forbidden in (".set(", "removeObject", "NotificationCenter", "FileManager",
                   "PreferenceKey", ".onAppear", ".task"):

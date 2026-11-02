@@ -1241,4 +1241,8 @@ let turkishStrings: [String: String] = [
     "%@ asks to apply “%@”": "%@, “%@” değişikliğini uygulamak istiyor",
     "A contact asks to apply “%@”": "Bir kişi “%@” değişikliğini uygulamak istiyor",
     "Usage stays in the Screen Time report. Scroll to see more groups. If it looks empty, pull down to refresh; an empty report does not mean zero usage.": "Kullanım Ekran Süresi raporunda kalır. Daha fazla grup için kaydır. Boş görünüyorsa yenilemek için aşağı çek; boş bir rapor sıfır kullanım anlamına gelmez.",
+    // Usage report rows (Today redesign)
+    "%d of %d min": "%d / %d dk",
+    "Used up": "Doldu",
+    "No data yet": "Henüz veri yok",
 ]

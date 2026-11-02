@@ -1241,4 +1241,8 @@ let hindiStrings: [String: String] = [
     "%@ asks to apply “%@”": "%@ “%@” लागू करना चाहते हैं",
     "A contact asks to apply “%@”": "एक संपर्क “%@” लागू करना चाहता है",
     "Usage stays in the Screen Time report. Scroll to see more groups. If it looks empty, pull down to refresh; an empty report does not mean zero usage.": "उपयोग स्क्रीन टाइम रिपोर्ट में ही रहता है। और समूह देखने के लिए स्क्रॉल करें। अगर यह खाली दिखे, तो रीफ़्रेश के लिए नीचे खींचें; खाली रिपोर्ट का मतलब शून्य उपयोग नहीं है।",
+    // Usage report rows (Today redesign)
+    "%d of %d min": "%d / %d मिनट",
+    "Used up": "खत्म",
+    "No data yet": "अभी कोई डेटा नहीं",
 ]

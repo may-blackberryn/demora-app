@@ -1240,4 +1240,8 @@ let frenchStrings: [String: String] = [
     "%@ asks to apply “%@”": "%@ demande d’appliquer « %@ »",
     "A contact asks to apply “%@”": "Un contact demande d’appliquer « %@ »",
     "Usage stays in the Screen Time report. Scroll to see more groups. If it looks empty, pull down to refresh; an empty report does not mean zero usage.": "L’utilisation reste dans le rapport Temps d’écran. Faites défiler pour voir d’autres groupes. S’il semble vide, tirez vers le bas pour actualiser ; un rapport vide ne signifie pas une utilisation nulle.",
+    // Usage report rows (Today redesign)
+    "%d of %d min": "%d sur %d min",
+    "Used up": "Épuisé",
+    "No data yet": "Pas encore de données",
 ]
