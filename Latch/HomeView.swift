@@ -59,6 +59,7 @@ struct HomeView: View {
     @State private var startingWake = false
     @State private var wakeSaveFailed = false
     @State private var wakePresentation: [HomeWakePresentation] = []
+    @State private var usageRefreshRequest: UUID?
 
     private var needsWakeTap: Bool {
         wakePresentation.contains { $0.wallRelease == nil }
@@ -171,7 +172,8 @@ struct HomeView: View {
                         }
                         .buttonStyle(.plain)
                     } else {
-                        CompactHomeUsageReport(limitCount: model.state.limits.count)
+                        CompactHomeUsageReport(limits: model.state.limits,
+                                               reloadRequest: usageRefreshRequest)
                     }
                     NavigationLink {
                         UsageInsightsView().toolbar(.visible, for: .navigationBar)
@@ -418,7 +420,12 @@ struct HomeView: View {
                     .background(.bar)
                 }
             }
-            .task { await loadInbox(); loadOutgoing() }
+            .task(id: model.selectedTab == 0) {
+                guard model.selectedTab == 0 else { return }
+                await loadInbox()
+                guard !Task.isCancelled else { return }
+                loadOutgoing()
+            }
             .onReceive(model.$state) { state in
                 refreshWakePresentation(state: state)
                 // Due changes can disappear while this section is selected.
@@ -441,7 +448,14 @@ struct HomeView: View {
             .onChange(of: selecting) { _ in syncApplyBar() }
             .onChange(of: selection) { _ in syncApplyBar() }
             .onDisappear { model.applyBarVisible = false }
+            .onChange(of: model.selectedTab) { tab in
+                // Retained Home no longer disappears on a normal tab switch.
+                // Never leave its bulk-action bar active behind another page.
+                if tab == 0 { syncApplyBar() }
+                else { model.applyBarVisible = false }
+            }
             .refreshable {
+                usageRefreshRequest = UUID()
                 model.tick()
                 refreshWakePresentation(state: model.state)
                 await loadInbox()
@@ -566,13 +580,15 @@ struct HomeView: View {
     }
 
     private func loadInbox() async {
-        inbox = (try? await ContactsRelay.pendingRequestsForMe()) ?? []
+        let incoming = (try? await ContactsRelay.pendingRequestsForMe()) ?? []
+        guard !Task.isCancelled, model.selectedTab == 0 else { return }
+        inbox = incoming
     }
 
     /// Mirror the multi-select Apply bar's visibility to the model so the
     /// tutorial callout can lift above it (and otherwise sit at the bottom).
     private func syncApplyBar() {
-        model.applyBarVisible = selecting && !selection.isEmpty
+        model.applyBarVisible = model.selectedTab == 0 && selecting && !selection.isEmpty
     }
 }
 

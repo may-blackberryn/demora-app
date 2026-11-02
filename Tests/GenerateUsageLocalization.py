@@ -17,7 +17,8 @@ LANGUAGES = {'es': '', 'de': '+German', 'fr': '+French', 'pt': '+Portuguese',
 
 
 def report_keys():
-    view = (ROOT / 'LatchReport/UsageInsightsView.swift').read_text()
+    view = '\n'.join((ROOT / 'LatchReport' / name).read_text() for name in
+                     ['UsageInsightsView.swift', 'UsageTrendsView.swift'])
     # Includes literal helper arguments, period titles, and conditional labels.
     keys = {json.loads('"' + key + '"') for key in re.findall(
         r'\b(?:insightsText|heading|format|rangeButton|pageButton)\(\s*' + STRING, view)}
@@ -26,6 +27,7 @@ def report_keys():
                  'Daily usage', 'Weekly totals', 'Tap a bar to see that day.', 'Tap a bar to see that week.',
                  'Expanded', 'Compact'})
     keys.update({'Week', 'Last seven completed days', 'Previous seven completed days'})
+    keys.update({'See all apps', 'Show fewer apps'})
     return keys
 
 

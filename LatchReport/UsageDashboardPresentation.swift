@@ -2,6 +2,24 @@ import Foundation
 
 // Display-only projections. Never infer missing data or change aggregation.
 enum UsageDashboardPresentation {
+    static func unavailable(_ configuration: UsageInsightsConfiguration) -> UsageInsightsConfiguration {
+        UsageInsightsAccumulator(now: configuration.generatedAt, calendar: configuration.calendar)
+            .configuration(baseline: nil)
+    }
+    static func appSeconds(_ app: UsageInsightsApplication, day: Date?, week: Date?) -> TimeInterval? {
+        let seconds: TimeInterval?
+        if let week { seconds = app.usage.weeks.first { $0.start == week }?.seconds }
+        else { seconds = app.usage.days.first { $0.date == day }?.seconds }
+        guard let seconds, seconds.isFinite, seconds >= 0 else { return nil }
+        return seconds
+    }
+    static func rankedApplications(_ applications: [UsageInsightsApplication], day: Date?, week: Date?) -> [UsageInsightsApplication] {
+        applications.filter { appSeconds($0, day: day, week: week) != nil }.sorted {
+            let lhs = appSeconds($0, day: day, week: week)!
+            let rhs = appSeconds($1, day: day, week: week)!
+            return lhs == rhs ? $0.id < $1.id : lhs > rhs
+        }
+    }
     static func lastPage(dayCount: Int) -> Int { max(0, (dayCount - 1) / 7) }
     static func window(_ days: [UsageInsightsDay], page: Int) -> [UsageInsightsDay] {
         guard !days.isEmpty else { return [] }

@@ -26,7 +26,13 @@ struct LatchReportExtension: DeviceActivityReportExtension {
             LimitsUsageView(rows: rows)
         }
         UsageInsightsReport { configuration in
-            UsageInsightsView(configuration: configuration)
+            UsageInsightsView(configuration: configuration.usage, applicationLabel: { id in
+                if let token = configuration.applicationTokens[id] { return AnyView(Label(token)) }
+                return AnyView(Image(systemName: "app"))
+            }, applicationIdentity: { id in
+                if let token = configuration.applicationTokens[id] { return AnyHashable(token) }
+                return AnyHashable(id)
+            })
         }
     }
 }

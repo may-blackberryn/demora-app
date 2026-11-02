@@ -662,3 +662,133 @@ App Store copy until those paths are enforced and tested.
   a target without that dependency; no Swift errors/warnings. `git diff --check`
   passed. Debug/production identities and version/build 2.0.0 / 67 are unchanged.
   Nothing was installed, committed, pushed or deployed.
+
+## Per-app usage breakdown — 2026-10-08
+
+- Most used apps ranks actual app durations for the selected day or completed
+  seven-day period, with private Apple labels, proportional bars and a See all
+  action. Tapping an app scopes the main total, day/week chart, average and
+  comparison to that app. All apps restores overall screen-on usage. Scope
+  selection stays inside the report and follows opaque tokens across reordered
+  configurations. If that app disappears, its label and All apps action remain
+  with an unknown-data state, never silently replaced by overall totals.
+- A separate Foundation accumulator handles per-source daily app maps. Newer
+  snapshots replace whole membership maps, including lower corrections and
+  removed entries. Duplicate categories/snapshots use maxima rather than sums;
+  contradictory equal-version maps suppress complete coverage. Reliability is
+  attached to the winning revision, so stale invalid revisions cannot poison
+  newer coverage and a newer corrected map restores it. Missing app-days or
+  sources are unknown, not zero. Only complete periods produce app averages or
+  trends; partial measured totals stay explicitly labelled. Overall screen-on
+  time still uses segment totals, not summed app/category values. A manual
+  whole-phone estimate is never compared with an app-specific total.
+- App labels and durations exist only in the report. No raw names/bundle IDs,
+  host export, measured persistence, network, analytics, monitoring registration,
+  enforcement, signing/identity or permission-flow changes were introduced.
+  Eight new strings were added to all seven catalogs and regenerated for the
+  extension. Apple API basis verified 2026-10-08: ApplicationActivity.application
+  and totalActivityDuration, CategoryActivity.applications, and FamilyControls
+  activity-token Labels. Real token delivery/equality remains a device check.
+- Verification: 58 production per-app revision/coverage/ranking/unknown-scope
+  checks, 74 existing usage-model checks, 42 dashboard projections and privacy/
+  selection/navigation guards passed. Localization checks passed for 80
+  host/Guide and 49 report keys across seven catalogs. Read-only review found
+  two refresh issues; both were repaired, regression-tested and re-reviewed
+  without remaining concrete findings. Native SwiftUI synthetic fixtures were
+  inspected for overall daily usage, selected-app daily/weekly views, dark/red,
+  narrow German, partial history, missing selection and large touch targets.
+  This is macOS fixture rendering, not real iOS Dynamic Type, VoiceOver, private
+  Apple-label rendering or signed-device Screen Time delivery validation.
+- Final sequential unsigned arm64 Debug and Release device builds passed with
+  stable Xcode 27.0. Only skipped AppIntents metadata extraction was warned;
+  no Swift errors/warnings. `git diff --check` passed. Version/build remain
+  2.0.0 / 67; nothing installed, committed, pushed or deployed. On a signed
+  device, verify app labels, durations, selection through refreshes and days
+  with no app data before uploading to TestFlight.
+
+## App-label switching and a deeper Trends page — 2026-10-09
+
+- Keyed the selected app's embedded Apple label to its opaque token. Changing
+  apps now resets only that label's identity, not the DeviceActivityReport or
+  selected date/week. List labels and app-change labels use the same stable
+  identity. The fallback label remains available for a disappeared selection.
+  Apple SwiftUI `View.id` identity behavior was checked against the official
+  documentation; actual private-label rendering still needs a signed device.
+- Explore trends now opens a distinct, custom page inside the existing report
+  process, with a Back to usage action. It includes a four-week overview,
+  selected-week change and daily-average change, paired daily comparison bars,
+  weekday averages with sample counts, high/low fully reported days, the largest
+  comparable app changes, and complete/partial/missing coverage. Selecting an
+  app works here too. The manual starting-estimate comparison is overall-only
+  and explicitly not proof of savings. No measured data or selection leaves
+  the report, and no new report scene or monitoring slot is required.
+- Trends excludes today. Missing data is never zero; incomplete periods do not
+  create comparisons or full-week averages. Weekday means and extrema use only
+  valid complete days; extrema on partially reported periods are explicitly
+  limited to those reported days. App changes require exact matching complete
+  periods, sort by absolute change, and are not claimed to explain overall
+  screen-on differences. The oldest available week has no invented predecessor.
+- Fixed stale invalid overall snapshots poisoning corrected coverage. Validity
+  now belongs to the winning source/day revision. New valid revisions restore
+  coverage; stale invalid revisions are ignored. Contradictory equal-version
+  totals keep known maxima but suppress confidence. Per-app invalid markers
+  preserve the winning snapshot's actual interval and revision timestamp.
+- Charts scroll on narrow screens, the selected week is brought into view,
+  paired day details adapt horizontally/vertically, and coverage cells scale
+  and scroll at large text sizes. VoiceOver daily-bar values include both days'
+  coverage. Reduce Motion is respected. Added 28 catalog keys in seven languages;
+  the generated extension snapshot contains 73 keys per language.
+- Verification: 47 new production trend-projection checks, 81 overall model
+  checks (including seven new revision regressions), 58 per-app checks and 42
+  display-projection checks passed. Navigation/manual-estimate/privacy guards,
+  localization checks (80 host/Guide and 73 report keys × seven catalogs), and
+  `git diff --check` passed. Read-only review findings were fixed and re-reviewed
+  with none remaining. Native SwiftUI synthetic previews were inspected for
+  light/blue, dark/red, narrow German, app scope, partial/empty history, Hindi,
+  a manual estimate and large-text configuration. These are macOS fixture
+  renders, not signed iOS Dynamic Type, VoiceOver or Apple-label verification.
+- Final sequential unsigned arm64 Debug and Release device builds passed on
+  stable Xcode 27.0. Only skipped AppIntents metadata extraction was warned.
+  Enforcement, bundle/App Group IDs, signing and version/build were unchanged.
+  Nothing installed, committed, pushed or deployed. Signed-device follow-up:
+  switch A → B within an app report, navigate Trends and back, change weeks,
+  check app scopes through report refreshes, and test large text and VoiceOver.
+
+## Home limit-report lifecycle recovery — 2026-10-09
+
+- Normal tab navigation now retains Home's hierarchy instead of discarding its
+  DeviceActivityReport on each switch. Hidden Home has zero opacity, no hit
+  testing and no accessibility exposure. The legacy tutorial keeps its original
+  screen appearance/disappearance routing. Home's Apply-bar flag is scoped to
+  its selected tab; inbox loading resumes on Home return and cancelled/off-tab
+  results cannot publish. Retained Usage & trends refreshes only when visible.
+- The compact report's filter requests the union of configured application,
+  category and website tokens. User/device filtering remains unchanged to avoid
+  silently changing existing aggregation semantics. Its selection snapshot is
+  held while hidden and updated during the next visible query. No measured
+  data, readiness or height signal is exported from the report.
+- `HomeReportRefreshPolicy` coalesces requests for 350 ms, with at least two
+  seconds between scheduled queries and one soft retry three seconds after
+  the first. SwiftUI task cancellation replaces pending work on new requests
+  or hides/backgrounding. No timer/poll loop or identity reset is added.
+  Appearance, authorization, selection, foreground and tab-return events use
+  this path, as do the arrow and Home pull-to-refresh. Query time follows Date,
+  including backwards clock changes; the first minute after midnight no longer
+  clamps all query endpoints to the same future minute.
+- Verification: 20 actual refresh-policy/filter-projection checks and a native
+  synthetic SwiftUI lifetime test passed (seven normal tab switches retain one
+  Home instance; legacy tutorial remains separate). Home presentation, intro/
+  tutorial routing, manual-estimate/navigation, hidden refresh, cancellation,
+  privacy and enforcement-isolation guards passed. Two read-only review findings
+  (inbox return and retained insights visibility) were fixed and re-reviewed
+  with none remaining. `git diff --check` passed. Final sequential unsigned
+  arm64 Debug and Release device builds succeeded on stable Xcode 27.0; Release
+  warned only about skipped AppIntents metadata extraction, and Debug emitted
+  no warnings. Signing, environment IDs, version/build and enforcement unchanged.
+  Nothing installed, committed, pushed or deployed.
+- This is a host-lifecycle/recovery improvement, not proof that Apple's remote
+  process always survives or supplies data. Signed-device acceptance: cold
+  launch, rapid tab switches, report navigation and sheets, repeated refresh,
+  background/foreground, permission loss/regrant, midnight/clock changes, and
+  app/category/site/mixed selections. Confirm fewer blank reports and unchanged
+  blocking/accounting; never interpret a missing report as zero use.

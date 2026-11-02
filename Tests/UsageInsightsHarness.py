@@ -16,6 +16,9 @@ view = (ROOT / "LatchReport/UsageInsightsView.swift").read_text()
 extension = (ROOT / "LatchReport/LatchReportExtension.swift").read_text()
 model = MODEL.read_text()
 presentation = (ROOT / "LatchReport/UsageDashboardPresentation.swift").read_text()
+application_model = (ROOT / "LatchReport/ApplicationUsageAccumulator.swift").read_text()
+trends = (ROOT / "LatchReport/UsageTrendsView.swift").read_text()
+trends_model = (ROOT / "LatchReport/UsageTrendsModel.swift").read_text()
 
 # This suite links the actual production model, not a Python translation.
 driver = r'''
@@ -126,6 +129,35 @@ add(&invalidBesideValid, -1, seconds: Double.nan)
 check(config(invalidBesideValid).days[27].seconds == 60
       && !config(invalidBesideValid).days[27].isComplete
       && config(invalidBesideValid).trend == nil, "invalid same-day evidence suppresses confidence")
+var staleInvalid = full
+add(&staleInvalid, -1, seconds: Double.nan, updatedAt: now.addingTimeInterval(-60))
+check(config(staleInvalid).days[27].isComplete && config(staleInvalid).trend != nil,
+      "stale invalid duration cannot poison the winning revision")
+var corrected = UsageInsightsAccumulator(now: now, calendar: calendar)
+for offset in -14 ... -1 {
+    add(&corrected, offset, seconds: offset == -1 ? .nan : 60, updatedAt: now.addingTimeInterval(-60))
+}
+check(config(corrected).trend == nil && config(corrected).days[27].seconds == nil,
+      "winning invalid duration remains unknown")
+add(&corrected, -1, seconds: 60)
+check(config(corrected).days[27].isComplete && config(corrected).trend?.differenceMinutes == 0,
+      "newer valid revision restores coverage and trend")
+var invalidFirst = UsageInsightsAccumulator(now: now, calendar: calendar)
+add(&invalidFirst, -1, seconds: .nan)
+add(&invalidFirst, -1, seconds: 60)
+check(config(invalidFirst).days[27].seconds == 60 && !config(invalidFirst).days[27].isComplete,
+      "equal-version invalid evidence retained regardless of arrival order")
+var conflictingTotals = full
+add(&conflictingTotals, -1, seconds: 120)
+check(config(conflictingTotals).days[27].seconds == 120 && config(conflictingTotals).trend == nil,
+      "contradictory equal-version totals retain max but suppress comparison")
+var badStamp = full
+add(&badStamp, -1, seconds: .nan, updatedAt: now.addingTimeInterval(60))
+check(config(badStamp).trend != nil, "invalid future revision cannot poison current confidence")
+var invalidOlderInterval = full
+invalidOlderInterval.add(source: 0, start: day(-1), end: end(today), seconds: 60,
+                        updatedAt: now.addingTimeInterval(-60))
+check(config(invalidOlderInterval).trend != nil, "stale malformed interval cannot poison current confidence")
 var clipped = UsageInsightsAccumulator(now: now, calendar: calendar)
 clipped.add(source: 0, start: day(-1), end: day(-1).addingTimeInterval(3_600),
             seconds: 600, updatedAt: now)
@@ -233,18 +265,21 @@ assert '"app.demora.production.usage-insights"' in report
 assert "segment.totalActivityDuration" in report
 assert report.index('let now = Date()') > report.index('for await segment')
 assert "case .daily = result.segmentInterval" in report
-assert not re.search(r"segment\.(categories|applications)|\.appleID|\.device\.name", report)
+assert not re.search(r"\.appleID|\.device\.name|\.bundleIdentifier|\.localizedDisplayName|category\.webDomains", report)
+assert "activity.application.token" in report and "ApplicationUsageAccumulator" in report
+assert "appAccumulator.applications()" in report
 assert "ScrollView {" in view and "maxHeight: .infinity" in view
 assert "dynamicTypeSize.isAccessibilitySize" in view
 assert "accessibilityElement(children: .combine)" in view
 assert "accessibilityAddTraits(.isHeader)" in view
 assert "insightsText(" in view
 assert all(key in view for key in ["latch.language", "latch.appearance", "latch.accentColor"])
-assert "Self-reported weekly baseline" in view and "not measured Screen Time or a goal" in view
+assert "Compared with your starting estimate" in trends and "not measured Screen Time or a goal" in trends
+assert "baseline: selectedApplication == nil ? configuration.baseline : nil" in view
 assert "Shared/Localization" not in report + view + model
 
 # Strip comments for guards so privacy documentation doesn't trigger itself.
-production = "\n".join(line.split("//", 1)[0] for line in (report + view + model + presentation).splitlines())
+production = "\n".join(line.split("//", 1)[0] for line in (report + view + model + presentation + application_model + trends + trends_model).splitlines())
 for forbidden in [r"\bEncodable\b", r"\bCodable\b", r"\bJSONEncoder\b",
                   r"\bURLSession\b", r"\bURLRequest\b", r"\bFileManager\b",
                   r"\bNotificationCenter\b", r"\bOSLog\b", r"\bos_log\b",

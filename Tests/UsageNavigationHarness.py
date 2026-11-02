@@ -55,6 +55,7 @@ enum SharedStore {
 ''' + block(usage, 'struct WeeklyUsageEstimate:') + '''
 struct RefreshDriver {
     var refreshedAt: Date
+    var canRefresh = true
 ''' + refresh.replace('private func', 'mutating func') + '''
 }
 ''' + r'''
@@ -62,6 +63,10 @@ let beforeRefresh = Date()
 var refreshDriver = RefreshDriver(refreshedAt: beforeRefresh.addingTimeInterval(86_400))
 refreshDriver.refresh()
 precondition(refreshDriver.refreshedAt >= beforeRefresh && refreshDriver.refreshedAt <= Date())
+let lastVisibleQuery = refreshDriver.refreshedAt
+refreshDriver.canRefresh = false
+refreshDriver.refresh()
+precondition(refreshDriver.refreshedAt == lastVisibleQuery)
 let defaults = SharedStore.defaults
 defer { defaults.removePersistentDomain(forName: SharedStore.suite) }
 precondition(WeeklyUsageEstimate.load() == nil)

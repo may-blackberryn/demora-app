@@ -3,6 +3,8 @@ import Foundation
 
 struct UsageInsightsView: View {
     let configuration: UsageInsightsConfiguration
+    let applicationLabel: (Int) -> AnyView
+    let applicationIdentity: (Int) -> AnyHashable
     @Environment(\.colorScheme) private var systemScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -12,10 +14,22 @@ struct UsageInsightsView: View {
     @State private var selectedDay: Date?
     @State private var selectedWeek: Date?
     @State private var showingDetails = false
+    @State private var selectedApplication: AnyHashable?
+    @State private var selectedApplicationLabel: AnyView?
+    @State private var showingAllApplications = false
+    @State private var showingTrends = false
 
-    init(configuration: UsageInsightsConfiguration, initiallyWeekly: Bool = false) {
+    init(configuration: UsageInsightsConfiguration, initiallyWeekly: Bool = false,
+         initiallySelectedApplication: Int? = nil, initiallyShowingTrends: Bool = false,
+         applicationLabel: @escaping (Int) -> AnyView = { _ in AnyView(Image(systemName: "app")) },
+         applicationIdentity: @escaping (Int) -> AnyHashable = { AnyHashable($0) }) {
         self.configuration = configuration
+        self.applicationLabel = applicationLabel
+        self.applicationIdentity = applicationIdentity
         _weekly = State(initialValue: initiallyWeekly)
+        _selectedApplication = State(initialValue: initiallySelectedApplication.map(applicationIdentity))
+        _selectedApplicationLabel = State(initialValue: initiallySelectedApplication.map(applicationLabel))
+        _showingTrends = State(initialValue: initiallyShowingTrends)
     }
 
     // Read-only preferences. Selection, layout and measured values stay here.
@@ -43,12 +57,20 @@ struct UsageInsightsView: View {
     private var ink: Color { scheme == .dark ? Color(red: 0.94, green: 0.93, blue: 0.90) : Color(red: 0.15, green: 0.18, blue: 0.20) }
     private var muted: Color { scheme == .dark ? Color(red: 0.65, green: 0.69, blue: 0.69) : Color(red: 0.40, green: 0.43, blue: 0.43) }
     private var paper: Color { scheme == .dark ? Color(red: 0.10, green: 0.11, blue: 0.11) : Color(red: 0.965, green: 0.953, blue: 0.922) }
-    private var window: [UsageInsightsDay] { UsageDashboardPresentation.window(configuration.days, page: page) }
+    private var usage: UsageInsightsConfiguration {
+        guard selectedApplication != nil else { return configuration }
+        return configuration.applications.first { applicationIdentity($0.id) == selectedApplication }?.usage
+            ?? UsageDashboardPresentation.unavailable(configuration)
+    }
+    private var selectedApplicationID: Int? {
+        configuration.applications.first { applicationIdentity($0.id) == selectedApplication }?.id
+    }
+    private var window: [UsageInsightsDay] { UsageDashboardPresentation.window(usage.days, page: page) }
     private var day: UsageInsightsDay? { window.first { $0.date == selectedDay } ?? window.last }
-    private var week: UsageInsightsPeriod { configuration.weeks.first { $0.start == selectedWeek } ?? configuration.lastSevenDays }
-    private var comparisonCurrent: UsageInsightsPeriod { weekly ? week : configuration.lastSevenDays }
+    private var week: UsageInsightsPeriod { usage.weeks.first { $0.start == selectedWeek } ?? usage.lastSevenDays }
+    private var comparisonCurrent: UsageInsightsPeriod { weekly ? week : usage.lastSevenDays }
     private var comparisonPrevious: UsageInsightsPeriod? {
-        weekly ? UsageDashboardPresentation.preceding(week, in: configuration.weeks) : configuration.previousSevenDays
+        weekly ? UsageDashboardPresentation.preceding(week, in: usage.weeks) : usage.previousSevenDays
     }
     private var comparisonTrend: UsageInsightsTrend? {
         guard let previous = comparisonPrevious else { return nil }
@@ -56,13 +78,30 @@ struct UsageInsightsView: View {
     }
 
     var body: some View {
+        Group {
+            if showingTrends {
+                UsageTrendsView(usage: usage, applications: configuration.applications,
+                    baseline: selectedApplication == nil ? configuration.baseline : nil,
+                    scopeLabel: scopeLabel, applicationLabel: applicationLabel, applicationIdentity: applicationIdentity,
+                    accent: accent, ink: ink, muted: muted, paper: paper, locale: locale,
+                    selectedPeriod: weekly ? week.start : usage.lastSevenDays.start,
+                    onBack: { showingTrends = false },
+                    onAllApps: { selectedApplication = nil; selectedApplicationLabel = nil },
+                    onSelectApp: selectApplication)
+            } else { dashboard }
+        }.background(paper).environment(\.colorScheme, scheme).environment(\.locale, locale)
+    }
+    private var dashboard: some View {
         // A single report-owned dashboard. No usage, height or readiness export.
+        ScrollViewReader { reader in
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                rangeControl
-                if configuration.reportedDays == 0 { emptyState }
-                else { usageHero; chartSection; comparison }
-                if let baseline = configuration.baseline { baselineSummary(baseline) }
+                rangeControl.id("usageTop")
+                if selectedApplication != nil { applicationScope }
+                if usage.reportedDays == 0 { emptyState }
+                else { usageHero; chartSection }
+                trendsEntry
+                if configuration.reportedDays > 0 || !configuration.applications.isEmpty { mostUsedApplications }
                 details
             }
             .padding(.horizontal, 22).padding(.top, 12).padding(.bottom, 24)
@@ -71,6 +110,12 @@ struct UsageInsightsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(paper).foregroundStyle(ink)
         .environment(\.colorScheme, scheme).environment(\.locale, locale)
+        .onChange(of: selectedApplication) { _ in
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+                reader.scrollTo("usageTop", anchor: .top)
+            }
+        }
+        }
     }
 
     private var rangeControl: some View {
@@ -105,7 +150,7 @@ struct UsageInsightsView: View {
             HStack(alignment: .top, spacing: 8) {
                 Circle().fill(accent).frame(width: 5, height: 5).padding(.top, 5).accessibilityHidden(true)
                 Text(insightsText(weekly ? (week.isComplete ? "Full reported coverage" : "Partial reported coverage")
-                    : (day?.date == configuration.today?.date ? "Today so far"
+                    : (day?.date == usage.today?.date ? "Today so far"
                         : (day?.isComplete == true ? "Full reported coverage" : "Partial reported coverage"))))
                     .font(.caption).foregroundStyle(muted)
             }
@@ -126,7 +171,7 @@ struct UsageInsightsView: View {
                 heading(weekly ? "Weekly totals" : "Daily usage")
                 Spacer(minLength: 4)
                 if !weekly {
-                    pageButton("Previous week", symbol: "chevron.left", enabled: page < UsageDashboardPresentation.lastPage(dayCount: configuration.days.count)) {
+                    pageButton("Previous week", symbol: "chevron.left", enabled: page < UsageDashboardPresentation.lastPage(dayCount: usage.days.count)) {
                         page += 1; selectedDay = nil
                     }
                     pageButton("Next week", symbol: "chevron.right", enabled: page > 0) { page -= 1; selectedDay = nil }
@@ -149,9 +194,9 @@ struct UsageInsightsView: View {
     }
 
     private var chart: some View {
-        let values = weekly ? configuration.weeks.compactMap(\.seconds) : window.compactMap(\.seconds)
+        let values = weekly ? usage.weeks.compactMap(\.seconds) : window.compactMap(\.seconds)
         let maximum = max(1, values.max() ?? 1)
-        let count = weekly ? configuration.weeks.count : window.count
+        let count = weekly ? usage.weeks.count : window.count
         return GeometryReader { geometry in
             // Narrow screens can scroll horizontally; every target stays >=44pt.
             ZStack(alignment: .topLeading) {
@@ -166,7 +211,7 @@ struct UsageInsightsView: View {
                     }.frame(height: 154).accessibilityHidden(true)
                     HStack(alignment: .bottom, spacing: 6) {
                         if weekly {
-                            ForEach(configuration.weeks) { item in
+                            ForEach(usage.weeks) { item in
                                 bar(seconds: item.seconds, maximum: maximum, selected: week.start == item.start,
                                     label: date(item.start), accessibility: dateRange(item), complete: item.isComplete) {
                                     selectedWeek = item.start
@@ -194,6 +239,110 @@ struct UsageInsightsView: View {
         }.frame(height: dynamicTypeSize.isAccessibilitySize ? 295 : 215)
     }
     private var chartSelectionID: Date? { weekly ? week.start : day?.date }
+
+    private var applicationScope: some View {
+        HStack(alignment: .center, spacing: 14) {
+            if let scopeLabel { scopeLabel.font(.headline).labelStyle(.titleAndIcon).frame(maxWidth: .infinity, alignment: .leading) }
+            Button { selectedApplication = nil; selectedApplicationLabel = nil } label: {
+                Text(insightsText("All apps")).font(.caption.weight(.semibold))
+                    .padding(.horizontal, 14).frame(minHeight: 44)
+                    .background(accent.opacity(0.08), in: Capsule())
+            }.buttonStyle(.plain).foregroundStyle(accent)
+        }
+    }
+    private var scopeLabel: AnyView? {
+        if let id = selectedApplicationID {
+            // Recreate only Apple's embedded label when its opaque app changes.
+            // Never reset DeviceActivityReport or its measured configuration.
+            return AnyView(applicationLabel(id).id(selectedApplication))
+        } else if let selectedApplicationLabel {
+            return AnyView(selectedApplicationLabel.id(selectedApplication))
+        }
+        return nil
+    }
+    private func selectApplication(_ id: Int) {
+        selectedApplicationLabel = applicationLabel(id)
+        selectedApplication = applicationIdentity(id)
+    }
+    private var trendsEntry: some View {
+        Button { showingTrends = true } label: {
+            HStack(spacing: 16) {
+                Image(systemName: "chart.xyaxis.line").font(.system(size: 25, weight: .light))
+                    .frame(width: 46, height: 46).background(accent.opacity(0.08), in: Circle()).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(insightsText("Explore trends")).font(.system(.title3, design: .serif))
+                    Text(insightsText("A closer look at patterns, changes and reported coverage.")).font(.caption).foregroundStyle(muted)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "arrow.up.right").font(.title3).accessibilityHidden(true)
+            }.foregroundStyle(accent).frame(minHeight: 72).padding(.vertical, 10).contentShape(Rectangle())
+        }.buttonStyle(.plain)
+    }
+    private var rankedApplications: [UsageInsightsApplication] {
+        UsageDashboardPresentation.rankedApplications(configuration.applications,
+            day: day?.date, week: weekly ? week.start : nil)
+    }
+    private var mostUsedApplications: some View {
+        let applications = rankedApplications
+        let maximum = applications.first.flatMap { applicationSeconds($0) } ?? 1
+        return VStack(alignment: .leading, spacing: 18) {
+            heading("Most used apps")
+            Text(weekly ? dateRange(week) : date(day?.date ?? configuration.generatedAt, template: "EEEEMMMMd"))
+                .font(.caption).foregroundStyle(muted)
+            if applications.isEmpty {
+                Text(insightsText("No app usage reported for this period."))
+                    .font(.subheadline).foregroundStyle(muted)
+            } else {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    ForEach(showingAllApplications ? applications : Array(applications.prefix(5))) { app in
+                        applicationRow(app, maximum: max(1, maximum))
+                    }
+                }
+                if applications.count > 5 {
+                    Button { showingAllApplications.toggle() } label: {
+                        Text(insightsText(showingAllApplications ? "Show fewer apps" : "See all apps"))
+                            .font(.subheadline.weight(.medium)).frame(minHeight: 44)
+                    }.buttonStyle(.plain).foregroundStyle(accent)
+                }
+                Text(insightsText("Tap an app to see its daily and weekly usage."))
+                    .font(.caption).foregroundStyle(muted)
+            }
+            Text(insightsText("App totals may not add up to overall screen time."))
+                .font(.caption).foregroundStyle(muted)
+        }
+    }
+    private func applicationSeconds(_ app: UsageInsightsApplication) -> TimeInterval? {
+        UsageDashboardPresentation.appSeconds(app, day: day?.date, week: weekly ? week.start : nil)
+    }
+    private func applicationComplete(_ app: UsageInsightsApplication) -> Bool {
+        if weekly { return app.usage.weeks.first { $0.start == week.start }?.isComplete == true }
+        return app.usage.days.first { $0.date == day?.date }?.isComplete == true
+    }
+    private func applicationRow(_ app: UsageInsightsApplication, maximum: TimeInterval) -> some View {
+        let seconds = applicationSeconds(app)
+        let selected = selectedApplication == applicationIdentity(app.id)
+        return Button { selectApplication(app.id) } label: {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 12) {
+                    applicationLabel(app.id).id(applicationIdentity(app.id)).font(.subheadline).labelStyle(.titleAndIcon)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(duration(seconds)).font(.subheadline.weight(.medium)).monospacedDigit().foregroundStyle(accent)
+                    Image(systemName: selected ? "checkmark" : "chevron.right").font(.caption).foregroundStyle(muted)
+                        .accessibilityHidden(true)
+                }
+                GeometryReader { geometry in
+                    Capsule().fill(accent.opacity(0.08))
+                    Capsule().fill(accent.opacity(selected ? 1 : 0.45))
+                        .frame(width: max(0, geometry.size.width * (UsageDashboardPresentation.barFraction(seconds, maximum: maximum) ?? 0)))
+                }.frame(height: 3).accessibilityHidden(true)
+                if !applicationComplete(app) {
+                    Text(insightsText(day?.date == usage.today?.date && !weekly ? "Today so far" : "Partial reported coverage"))
+                        .font(.caption2).foregroundStyle(muted)
+                }
+            }.frame(minHeight: dynamicTypeSize.isAccessibilitySize ? 64 : 44)
+                .contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityElement(children: .combine)
+            .accessibilityAddTraits(selected ? .isSelected : [])
+    }
     private func bar(seconds: TimeInterval?, maximum: TimeInterval, selected: Bool, label: String,
                      accessibility: String, complete: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -226,67 +375,6 @@ struct UsageInsightsView: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    private var comparison: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            heading("Compared with the previous week")
-            if let trend = comparisonTrend {
-                HStack(alignment: .center, spacing: 14) {
-                    Image(systemName: trend.differenceMinutes == 0 ? "arrow.right" : (trend.differenceMinutes < 0 ? "arrow.down.right" : "arrow.up.right"))
-                        .font(.system(size: 28, weight: .light)).accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(trend.percentage.map { format("Change: %@%%", signedNumber($0)) }
-                            ?? format("Change: %@", signedMinutes(trend.differenceMinutes)))
-                            .font(.system(.title2, design: .serif)).monospacedDigit()
-                        if trend.percentage != nil { Text(format("Change: %@", signedMinutes(trend.differenceMinutes))).font(.caption) }
-                    }
-                }.foregroundStyle(accent).accessibilityElement(children: .combine)
-            } else {
-                Text(insightsText("No trend yet")).font(.system(.title2, design: .serif))
-                Text(insightsText("A trend needs full reported coverage for both completed periods.")).font(.caption).foregroundStyle(muted)
-            }
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 24) { comparisonFigures }
-                VStack(alignment: .leading, spacing: 18) { comparisonFigures }
-            }
-            Text(insightsText("Today is not included in this comparison.")).font(.caption).foregroundStyle(muted)
-        }
-        .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-        .background(accent.opacity(scheme == .dark ? 0.08 : 0.045), in: RoundedRectangle(cornerRadius: 24))
-    }
-    @ViewBuilder private var comparisonFigures: some View {
-        comparisonFigure(comparisonCurrent, title: weekly ? "Week" : "Last seven completed days")
-        if let previous = comparisonPrevious {
-            comparisonFigure(previous, title: weekly ? "Previous week" : "Previous seven completed days")
-        } else {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(insightsText("Previous week")).font(.caption).foregroundStyle(muted)
-                Text(insightsText("— No data")).font(.system(.title3, design: .serif))
-            }
-        }
-    }
-    private func comparisonFigure(_ period: UsageInsightsPeriod, title: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(insightsText(title)).font(.caption).foregroundStyle(muted)
-            Text(duration(period.seconds)).font(.system(.title3, design: .serif)).monospacedDigit()
-            Text(dateRange(period)).font(.caption2).foregroundStyle(muted)
-            if !period.isComplete { Text(insightsText("Partial reported coverage")).font(.caption2).foregroundStyle(muted) }
-        }.fixedSize(horizontal: false, vertical: true).accessibilityElement(children: .combine)
-    }
-    private func baselineSummary(_ baseline: UsageInsightsBaseline) -> some View {
-        HStack(alignment: .top, spacing: 16) {
-            Rectangle().fill(accent.opacity(0.5)).frame(width: 2)
-            VStack(alignment: .leading, spacing: 9) {
-                heading("Self-reported weekly baseline")
-                Text(duration(Double(baseline.weeklyMinutes) * 60)).font(.system(.title2, design: .serif)).foregroundStyle(accent)
-                Text(format("Recorded on %@", date(baseline.recordedAt, template: "yMMMd"))).font(.caption).foregroundStyle(muted)
-                Text(insightsText("Your estimate, not measured Screen Time or a goal.")).font(.caption).foregroundStyle(muted)
-                if let difference = configuration.baselineDifferenceMinutes {
-                    Text(format("Compared with your estimate: %@", signedMinutes(difference))).font(.subheadline).foregroundStyle(accent)
-                    Text(insightsText("Your estimate is self-reported; this comparison does not measure time saved by Demora.")).font(.caption).foregroundStyle(muted)
-                }
-            }
-        }.fixedSize(horizontal: false, vertical: true).accessibilityElement(children: .combine)
-    }
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 20) {
             Image(systemName: "chart.bar.xaxis").font(.system(size: 46, weight: .ultraLight)).foregroundStyle(accent)
@@ -304,9 +392,10 @@ struct UsageInsightsView: View {
             }.buttonStyle(.plain).accessibilityValue(showingDetails ? insightsText("Expanded") : insightsText("Compact"))
             if showingDetails {
                 Text(insightsText("28 completed days plus today"))
-                Text(format("%d of %d days reported", configuration.reportedDays, configuration.days.count))
+                Text(format("%d of %d days reported", usage.reportedDays, usage.days.count))
                 Text(insightsText("Screen Time may report incomplete or delayed data. Missing days are not counted as zero."))
                 Text(insightsText("Each bar shows reported minutes. A dash means no data, not zero."))
+                Text(insightsText("Per-app usage is reported by iOS; missing days are not counted as zero."))
                 Text(format("%d of %d days with full reported coverage", comparisonCurrent.completeDays, comparisonCurrent.expectedDays))
                 if comparisonTrend?.percentage == nil && comparisonPrevious?.isComplete == true && comparisonPrevious?.seconds == 0 {
                     Text(insightsText("No percentage: the previous period reported zero minutes."))

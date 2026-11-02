@@ -9,7 +9,7 @@ enum AppGroup { static let id = "demora.dashboard.preview." + UUID().uuidString 
 struct UsageDashboardPreview {
     @MainActor static func main() throws {
         let arguments = CommandLine.arguments
-        guard arguments.count == 6 || arguments.count == 7 else { fatalError("output width height appearance language [day/week/empty/partial/large]") }
+        guard arguments.count == 6 || arguments.count == 7 else { fatalError("output width height appearance language [day/week/app/appweek/missingapp/empty/partial/large/trends/apptrends/trendpartial/trendempty/trendlarge/trendbaseline]") }
         let mode = arguments.count == 7 ? arguments[6] : "day"
         let output = arguments[1]
         let width = Double(arguments[2])!
@@ -26,16 +26,36 @@ struct UsageDashboardPreview {
         let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 7, hour: 12))!
         let today = calendar.startOfDay(for: now)
         var accumulator = UsageInsightsAccumulator(now: now, calendar: calendar)
+        var appAccumulator = ApplicationUsageAccumulator(now: now, calendar: calendar)
         for index in -28...0 {
-            if mode == "empty" || (mode == "partial" && index < -3) { continue }
+            if mode == "empty" || mode == "trendempty" || ((mode == "partial" || mode == "trendpartial") && index < -3) { continue }
             let start = calendar.date(byAdding: .day, value: index, to: today)!
             let end = calendar.date(byAdding: .day, value: 1, to: start)!
             let minutes = index == 0 ? 167 : (index < -7 ? 230 : [184, 193, 143, 210, 222, 177, 160][abs(index) % 7])
             accumulator.add(source: 0, start: start, end: end, seconds: Double(minutes * 60), updatedAt: now)
+            appAccumulator.add(source: 0, start: start, end: end, updatedAt: now,
+                applications: [0: Double((index == 0 ? 20 : 20 + abs(index) % 15) * 60),
+                               1: Double((index == 0 ? 48 : 25 + abs(index) % 30) * 60),
+                               2: Double((index == 0 ? 35 : 15 + abs(index) % 10) * 60),
+                               3: 840, 4: 600, 5: 180, 6: 60])
         }
-        let configuration = accumulator.configuration(baseline: nil)
-        let root = UsageInsightsView(configuration: configuration, initiallyWeekly: mode == "week")
-            .dynamicTypeSize(mode == "large" ? .accessibility3 : .large)
+        let baseline = mode == "trendbaseline" ? UsageInsightsBaseline(weeklyMinutes: 1800, recordedAt: calendar.date(byAdding: .day, value: -30, to: now)!) : nil
+        var configuration = accumulator.configuration(baseline: baseline)
+        configuration.applications = appAccumulator.applications()
+        if mode == "missingapp" { configuration.applications.removeAll { $0.id == 0 } }
+        let names = ["Instagram", "YouTube", "Spotify", "Safari", "Messages", "Books", "Maps"]
+        let root = UsageInsightsView(configuration: configuration,
+            initiallyWeekly: mode == "week" || mode == "appweek",
+            initiallySelectedApplication: mode == "app" || mode == "appweek" || mode == "missingapp" || mode == "apptrends" ? 0 : nil,
+            initiallyShowingTrends: ["trends", "apptrends", "trendpartial", "trendempty", "trendlarge", "trendbaseline"].contains(mode),
+            applicationLabel: { id in
+                AnyView(HStack(spacing: 10) {
+                    Image(systemName: ["camera", "play.rectangle", "music.note", "safari", "message", "book", "map"][id])
+                        .frame(width: 28, height: 28).background(Color.gray.opacity(0.1), in: RoundedRectangle(cornerRadius: 7))
+                    Text(names[id])
+                })
+            })
+            .dynamicTypeSize(mode == "large" || mode == "trendlarge" ? .accessibility3 : .large)
             .frame(width: width, height: height)
         let hosting = NSHostingView(rootView: root)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: height),

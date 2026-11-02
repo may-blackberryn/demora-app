@@ -67,6 +67,8 @@ struct UsageInsightsConfiguration: Sendable {
     let previousSevenDays: UsageInsightsPeriod
     let weeks: [UsageInsightsPeriod]
     let baseline: UsageInsightsBaseline?
+    // Ephemeral report-only breakdowns; never encode or export these values.
+    var applications: [UsageInsightsApplication] = []
     var today: UsageInsightsDay? { days.last }
     var reportedDays: Int { days.filter { $0.seconds != nil }.count }
     var trend: UsageInsightsTrend? {
@@ -81,11 +83,17 @@ struct UsageInsightsConfiguration: Sendable {
     }
 }
 
+struct UsageInsightsApplication: Identifiable, Sendable {
+    let id: Int
+    let usage: UsageInsightsConfiguration
+}
+
 struct UsageInsightsAccumulator {
     private struct Sample {
         let end: Date
-        let seconds: TimeInterval
+        let seconds: TimeInterval?
         let updatedAt: Date
+        let reliable: Bool
     }
 
     let now: Date
@@ -94,7 +102,6 @@ struct UsageInsightsAccumulator {
     private let firstDay: Date
     private var sources: Set<Int> = []
     private var samples: [Date: [Int: Sample]] = [:]
-    private var invalidDays: Set<Date> = []
 
     init(now: Date, calendar: Calendar) {
         self.now = now
@@ -117,22 +124,25 @@ struct UsageInsightsAccumulator {
         let day = calendar.startOfDay(for: start)
         guard day >= firstDay, day <= today else { return }
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: day)!
-        guard start == day, end.timeIntervalSince1970.isFinite,
-              end > start, end <= dayEnd,
-              updatedAt.timeIntervalSince1970.isFinite,
-              updatedAt >= start, updatedAt <= now,
-              seconds.isFinite, seconds >= 0,
-              seconds <= min(end, min(now, updatedAt)).timeIntervalSince(start)
-        else {
-            invalidDays.insert(day)
-            return
-        }
-        let candidate = Sample(end: end, seconds: seconds, updatedAt: updatedAt)
+        // Invalid timestamps cannot supersede any known revision. Validity is
+        // attached to the winning source/day snapshot, not a permanent day flag.
+        guard updatedAt.timeIntervalSince1970.isFinite,
+              updatedAt >= start, updatedAt <= now else { return }
+        let intervalValid = start == day && end.timeIntervalSince1970.isFinite
+            && end > start && end <= dayEnd
+        let durationValid = intervalValid && seconds.isFinite && seconds >= 0
+            && seconds <= min(end, min(now, updatedAt)).timeIntervalSince(start)
+        var candidate = Sample(end: end.timeIntervalSince1970.isFinite ? end : dayEnd,
+            seconds: durationValid ? seconds : nil, updatedAt: updatedAt, reliable: durationValid)
         if let old = samples[day]?[source] {
             if candidate.updatedAt < old.updatedAt { return }
             if candidate.updatedAt == old.updatedAt {
                 if candidate.end < old.end { return }
-                if candidate.end == old.end && candidate.seconds <= old.seconds { return }
+                if candidate.end == old.end {
+                    let known = [old.seconds, candidate.seconds].compactMap { $0 }.max()
+                    candidate = Sample(end: candidate.end, seconds: known, updatedAt: updatedAt,
+                        reliable: old.reliable && candidate.reliable && old.seconds == candidate.seconds)
+                }
             }
         }
         samples[day, default: [:]][source] = candidate
@@ -143,17 +153,18 @@ struct UsageInsightsAccumulator {
             let day = calendar.date(byAdding: .day, value: offset, to: firstDay)!
             let end = calendar.date(byAdding: .day, value: 1, to: day)!
             let values = Array((samples[day] ?? [:]).values)
-            let sum = values.reduce(0) { $0 + $1.seconds }
+            let reported = values.compactMap(\.seconds)
+            let sum = reported.reduce(0, +)
             let finite = sum.isFinite
             // "Complete" means a full daily segment reported for every source
             // present in this result, after that day ended. It is not a guarantee
             // of Apple's sync accuracy, nor proof that an absent source had zero use.
             let complete = day < today && !sources.isEmpty
-                && values.count == sources.count && !invalidDays.contains(day)
-                && finite && values.allSatisfy { $0.end == end && $0.updatedAt >= end }
+                && values.count == sources.count && reported.count == sources.count
+                && finite && values.allSatisfy { $0.reliable && $0.end == end && $0.updatedAt >= end }
             return UsageInsightsDay(date: day,
-                seconds: values.isEmpty || !finite ? nil : sum,
-                reportedSources: values.count, expectedSources: sources.count,
+                seconds: reported.isEmpty || !finite ? nil : sum,
+                reportedSources: reported.count, expectedSources: sources.count,
                 isComplete: complete)
         }
         func period(start: Date) -> UsageInsightsPeriod {

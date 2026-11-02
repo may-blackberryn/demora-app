@@ -7,13 +7,14 @@
 
 import SwiftUI
 import DeviceActivity
+import FamilyControls
+import ManagedSettings
 
 struct LimitsUsageReportView: View {
-    /// Bump this to refresh: a changed filter re-runs the extension's query
-    /// in place, WITHOUT killing the extension process (tearing the view down
-    /// and respawning it trips the system's report-extension launch throttle,
-    /// which is what renders blank).
+    /// Change the filter in place rather than deliberately discarding the
+    /// report view. iOS still controls remote rendering and data delivery.
     let refreshedAt: Date
+    let limits: [AppLimit]
 
     // DeviceActivity report extensions can remain alive and cached after their
     // containing app leaves the foreground. Dev and production must therefore
@@ -31,9 +32,22 @@ struct LimitsUsageReportView: View {
         // Start of day → now, so every refresh produces a genuinely different
         // filter (a fixed full-day interval would compare equal and be ignored).
         let dayStart = Calendar.current.startOfDay(for: refreshedAt)
-        let end = max(refreshedAt, dayStart.addingTimeInterval(60))
+        let end = max(refreshedAt, dayStart.addingTimeInterval(0.001))
+        // Ask only for the union of configured limit selections, not the
+        // user's entire application history. These are user-selected tokens,
+        // not measured data exported from the report.
+        let applications = limits.reduce(into: Set<ApplicationToken>()) {
+            $0.formUnion($1.selection.applicationTokens)
+        }
+        let categories = limits.reduce(into: Set<ActivityCategoryToken>()) {
+            $0.formUnion($1.selection.categoryTokens)
+        }
+        let domains = limits.reduce(into: Set<WebDomainToken>()) {
+            $0.formUnion($1.selection.webDomainTokens)
+        }
         return DeviceActivityFilter(segment: .daily(during: DateInterval(start: dayStart, end: end)),
-                                    users: .all, devices: .all)
+                                    users: .all, devices: .all,
+                                    applications: applications, categories: categories, webDomains: domains)
     }
 
     var body: some View {
@@ -58,7 +72,23 @@ struct CompactHomeUsageReport: View {
     @AppStorage("limits.usageNoteDismissed") private var usageNoteDismissed = false
     @State private var refreshedAt = Date()
     @State private var expanded = false
+    @State private var onScreen = false
+    @State private var refreshRequest: UUID?
+    @State private var refreshPolicy = HomeReportRefreshPolicy(initialQueryUptime: ProcessInfo.processInfo.systemUptime)
+    @State private var queryLimits: [AppLimit]
     let limitCount: Int
+    let reloadRequest: UUID?
+
+    init(limits: [AppLimit], reloadRequest: UUID? = nil) {
+        limitCount = limits.count
+        self.reloadRequest = reloadRequest
+        _queryLimits = State(initialValue: limits)
+    }
+
+    private var canRefresh: Bool {
+        onScreen && scenePhase == .active && model.selectedTab == 0
+            && model.authorized && !model.inTutorial
+    }
 
     /// Bounded for any row count: 30 limits or a missing extension cannot leave
     /// several screens of blank space. At accessibility sizes, scroll the rows.
@@ -71,7 +101,7 @@ struct CompactHomeUsageReport: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 DemoraSectionTitle(title: tr("Today's usage"), symbol: "chart.bar.fill")
-                Button { refreshReport() } label: {
+                Button { requestRefresh() } label: {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(accent)
@@ -79,7 +109,7 @@ struct CompactHomeUsageReport: View {
                 }
                 .accessibilityLabel(tr("Refresh"))
             }
-            LimitsUsageReportView(refreshedAt: refreshedAt)
+            LimitsUsageReportView(refreshedAt: refreshedAt, limits: queryLimits)
                 .frame(height: viewportHeight, alignment: .topLeading)
                 .clipped()
             HStack {
@@ -105,18 +135,43 @@ struct CompactHomeUsageReport: View {
             }
         }
         .demoraSurface()
-        .onAppear { refreshReport() }
-        .onChange(of: scenePhase) { phase in
-            if phase == .active { refreshReport() }
+        .onAppear { onScreen = true; requestRefresh() }
+        .onDisappear { onScreen = false; refreshRequest = nil }
+        .onChange(of: canRefresh) { available in
+            if available { requestRefresh() }
+            else { refreshRequest = nil }
         }
-        .onChange(of: appearanceRaw) { _ in refreshReport() }
-        .onChange(of: accentColorRaw) { _ in refreshReport() }
-        .onChange(of: model.state.limits) { _ in refreshReport() }
+        .onChange(of: appearanceRaw) { _ in requestRefresh() }
+        .onChange(of: accentColorRaw) { _ in requestRefresh() }
+        .onChange(of: model.language) { _ in requestRefresh() }
+        .onChange(of: model.state.limits) { _ in requestRefresh() }
+        .onChange(of: reloadRequest) { _ in requestRefresh() }
+        .task(id: refreshRequest) {
+            guard refreshRequest != nil, canRefresh else { return }
+            do {
+                try await Task.sleep(nanoseconds: UInt64(refreshPolicy.delay(at: ProcessInfo.processInfo.systemUptime) * 1_000_000_000))
+                guard !Task.isCancelled, canRefresh else { return }
+                refreshReport()
+                // One bounded soft retry after foreground/tab return or a
+                // manual request. No readiness signal, endless polling or
+                // report recreation; hiding Home cancels pending work.
+                try await Task.sleep(nanoseconds: UInt64(HomeReportRefreshPolicy.retryDelay * 1_000_000_000))
+                guard !Task.isCancelled, canRefresh else { return }
+                refreshReport()
+            } catch { /* Cancellation is expected on hide/new requests. */ }
+        }
+    }
+
+    private func requestRefresh() {
+        guard canRefresh else { return }
+        refreshRequest = UUID()
     }
 
     private func refreshReport() {
-        // Even rapid manual retries change the filter; preserve view identity
-        // so a valid report is not torn down or subjected to launch throttling.
-        refreshedAt = max(Date(), refreshedAt.addingTimeInterval(0.001))
+        // Report windows follow the actual clock, including backward changes.
+        // Do not restart monitoring or touch budgets/credits/shields here.
+        queryLimits = model.state.limits
+        refreshedAt = Date()
+        refreshPolicy.didQuery(at: ProcessInfo.processInfo.systemUptime)
     }
 }

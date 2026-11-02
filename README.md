@@ -119,7 +119,17 @@ Features:
   awaiting a tap, not as a predicted unlock deadline. Today's usage uses a
   compact, bounded scrolling report, with optional expansion. Refresh changes
   the filter without destroying the report identity; an empty report is never
-  treated as evidence of zero use.
+  treated as evidence of zero use. Normal tab switches retain Home's navigation
+  hierarchy rather than removing its remote report. Hidden Home is non-interactive
+  and excluded from accessibility; the legacy tutorial keeps its original routing.
+  The Home query requests the union of configured app/category/site selections.
+  Display refreshes are coalesced, spaced by at least two seconds, and followed
+  by one soft retry three seconds later. They cancel when the report is hidden
+  or the app is inactive; selection snapshots stay unchanged until a visible
+  refresh. Both the arrow and Home pull-to-refresh use this path. Inbox loading
+  resumes on Home return, and retained Usage & trends only refreshes when visible.
+  None of this resets monitors, enforcement or spent usage. Retaining the host
+  hierarchy does not guarantee iOS will keep or render its extension process.
 - Now & Next shows only the next upcoming occurrence of each repeating rule
   in its rolling week; the full recurrence stays available in Calendar.
   Schedules → Schedule conflicts shows potential overlapping rules for the
@@ -183,16 +193,38 @@ Features:
 - Home → Usage & trends renders 28 completed calendar days plus today through
   a separate DeviceActivityReport scene. Its dashboard has daily/weekly modes,
   a large selected-period total, tappable bars, earlier-day navigation and four
-  completed seven-day totals. Selecting a week compares it with its predecessor
-  when both have complete coverage; daily mode compares the latest two periods.
+  completed seven-day totals. Explore trends opens its own page within the
+  report, with a four-week overview, paired daily bars, weekday averages and
+  sample counts, high/low fully reported days, and the biggest comparable app
+  changes. Select a week to compare it with its predecessor; comparisons need
+  complete coverage in both periods, and the oldest week has no invented trend.
+  Trends excludes today and explicitly shows complete/partial/missing coverage.
+  App changes are not claimed to explain or sum to the overall difference.
   A daily average appears only for complete weeks. Warm-paper light/dark styling
   follows the blue/red accent, and narrow or large-text charts scroll rather
   than shrink their touch targets. Longer disclosures are in Usage details;
   the host retains a compact manual-estimate action instead of a settings list.
+  Most used apps ranks the selected day's/week's reported app totals, with
+  Apple's private app labels and an expandable list. Tap an app to scope the
+  total, chart, average and trend to it; All apps returns to overall screen
+  time. Scope identity uses the opaque token, not an enumeration position.
+  An app missing from a refreshed report retains its label with unknown data,
+  never silently substitutes overall totals. Missing app-days are not assumed
+  unused, and only complete per-app periods generate averages/comparisons.
+  Embedded Apple labels are keyed to their selected token so the header follows
+  app switches without resetting the whole DeviceActivityReport.
   Today is separate, absent data is not zero, and incomplete coverage suppresses
   comparisons. Each source/day contributes only its latest daily snapshot;
   segment-level totalActivityDuration is used rather than summing app/category
   entries. Calendar boundaries support daylight-saving transitions.
+  Overall snapshot validity follows its winning revision: stale invalid data
+  cannot poison corrected coverage, while contradictory equal-version totals
+  retain known maxima but suppress complete-coverage claims.
+  Per-app maps use the winning source/day revision; exact duplicate snapshots
+  and tokens repeated in categories never add minutes. Newer revisions replace
+  membership together and can correct durations down. Contradictory equal-version
+  maps suppress complete coverage, while a newer corrected map restores it.
+  App totals are not assumed to sum to overall screen-on time.
   The host filters iPhone or iPad model families, not a physical device identity;
   iCloud Screen Time sharing may include other same-kind devices. iOS controls
   available history and delivery; this is not a permanent usage archive.
@@ -205,12 +237,17 @@ Features:
   The extension's translations are generated from the app catalogs with
   `Tests/GenerateUsageLocalization.py` and checked by its localization harness.
   `Tests/UsageDashboardHarness.py` checks the actual display projections;
+  `Tests/ApplicationUsageHarness.py` checks per-app revision/coverage/ranking
+  and private-label/selection guards;
   `Tests/UsageDashboardPreview.swift` renders synthetic native SwiftUI fixtures
   without reading real usage or changing production/developer preferences.
   API basis (verified 2026-10-06): Apple's
   [DeviceActivityReport sandbox](https://developer.apple.com/documentation/deviceactivity/deviceactivityreport),
   [segment screen-on duration](https://developer.apple.com/documentation/deviceactivity/deviceactivitydata/activitysegment/totalactivityduration),
   and [device-model filter](https://developer.apple.com/documentation/deviceactivity/deviceactivityfilter/devices-swift.struct).
+  Per-app API basis (verified 2026-10-08):
+  [ApplicationActivity](https://developer.apple.com/documentation/deviceactivity/deviceactivitydata/applicationactivity)
+  and [private activity labels](https://developer.apple.com/documentation/familycontrols/displayingactivitylabels).
 
 ## Targets
 

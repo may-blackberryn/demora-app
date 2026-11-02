@@ -60,6 +60,12 @@ struct UsageInsightsView: View {
     @State private var estimateEnabled = false
     @State private var estimateMinutes = 21 * 60
     @State private var saveFailed = false
+    @State private var onScreen = false
+
+    private var canRefresh: Bool {
+        onScreen && scenePhase == .active && model.selectedTab == 0
+            && model.authorized && !model.inTutorial
+    }
 
 #if DEBUG
     private let context = DeviceActivityReport.Context("app.demora.dev.usage-insights")
@@ -141,8 +147,11 @@ struct UsageInsightsView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button(tr("Done")) { showingUsageInfo = false } } }
             }
         }
-        .onAppear { estimate = WeeklyUsageEstimate.load(); refresh() }
-        .onChange(of: scenePhase) { if $0 == .active { estimate = WeeklyUsageEstimate.load(); refresh() } }
+        .onAppear { onScreen = true; estimate = WeeklyUsageEstimate.load() }
+        .onDisappear { onScreen = false }
+        .onChange(of: canRefresh) { visible in
+            if visible { estimate = WeeklyUsageEstimate.load(); refresh() }
+        }
         .onChange(of: appearanceRaw) { _ in refresh() }
         .onChange(of: accentRaw) { _ in refresh() }
         .onChange(of: model.language) { _ in refresh() }
@@ -173,5 +182,8 @@ struct UsageInsightsView: View {
     }
     // Reporting uses actual calendar time, not enforcement's protected clock.
     // A backwards correction must move the query window backwards too.
-    private func refresh() { refreshedAt = Date() }
+    private func refresh() {
+        guard canRefresh else { return }
+        refreshedAt = Date()
+    }
 }

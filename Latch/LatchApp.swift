@@ -101,7 +101,23 @@ struct RootView: View {
 
     private var mainTabView: some View {
         VStack(spacing: 0) {
-            currentTab
+            Group {
+                if model.inTutorial {
+                    // Preserve the legacy tutorial's appearance/disappearance
+                    // routing; its highlighted screens are not persistent tabs.
+                    currentTab
+                } else {
+                    ZStack {
+                        // Keep the Home navigation/report hierarchy alive. A
+                        // tab switch must not discard Apple's remote report.
+                        HomeView()
+                            .opacity(homeSelected ? 1 : 0)
+                            .allowsHitTesting(homeSelected)
+                            .accessibilityHidden(!homeSelected)
+                        if !homeSelected { currentTab }
+                    }
+                }
+            }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             DemoraTabBar(selection: $model.selectedTab,
                          locked: model.inTutorial,
@@ -110,6 +126,8 @@ struct RootView: View {
         }
         .background(Ink.paper.ignoresSafeArea())
     }
+
+    private var homeSelected: Bool { !(1...4).contains(model.selectedTab) }
 
     @ViewBuilder private var currentTab: some View {
         switch model.selectedTab {

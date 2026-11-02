@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 model = ROOT / 'LatchReport/UsageInsightsModel.swift'
 presentation = ROOT / 'LatchReport/UsageDashboardPresentation.swift'
 view = (ROOT / 'LatchReport/UsageInsightsView.swift').read_text()
+trends = (ROOT / 'LatchReport/UsageTrendsView.swift').read_text()
 host = (ROOT / 'Latch/UsageInsightsView.swift').read_text()
 driver = r'''
 import Foundation
@@ -68,7 +69,7 @@ assert 'accessibilityReduceMotion' in view and 'isSelected' in view
 assert 'ScrollView(.horizontal' in view and 'count * (dynamicTypeSize.isAccessibilitySize ? 64 : 44)' in view
 assert 'UsageDashboardPresentation.barFraction' in view
 assert 'fraction == 0' in view and 'dash: [2, 3]' in view
-assert 'ViewThatFits' in view and 'showingDetails.toggle()' in view
+assert 'ViewThatFits' in trends and 'showingDetails.toggle()' in view
 assert 'UsageInsightsTrend.compare(comparisonCurrent, with: previous)' in view
 assert 'reader.scrollTo(id, anchor: .trailing)' in view
 assert 'maxHeight: .infinity' in host and 'reportHeight' not in host

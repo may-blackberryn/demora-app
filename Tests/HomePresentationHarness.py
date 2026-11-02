@@ -187,7 +187,7 @@ assert "await ChangeEngine.wakeUpAllOffMain()" in home_view
 assert ".buttonStyle(.plain).disabled(startingWake)" in home_view
 assert "minHeight: 116" in home_view and '.font(.system(.largeTitle, design: .serif))' in home_view
 assert "if model.inTutorial {\n                                DemoraDayLine" in home_view
-assert "CompactHomeUsageReport(limitCount:" in home_view
+assert "CompactHomeUsageReport(limits:" in home_view
 assert all(token in home_view for token in ("model.tutorial == .applyBoth",
     "model.tutorial == .applyViaContact", "frozenRemaining:", "syncApplyBar()"))
 
@@ -196,7 +196,9 @@ for forbidden in (".id(", "showReport", "reportID", "DispatchQueue", "Timer.publ
     assert forbidden not in host, forbidden
 assert "min(480, expandedHeight)" in host and "min(240, compactHeight" in host
 assert "limitCount) *" not in host  # no unlimited row-count reservation
-assert "expanded.toggle()" in host and "refreshedAt.addingTimeInterval(0.001)" in host
+assert "expanded.toggle()" in host and "refreshedAt = Date()" in host
+assert "HomeReportRefreshPolicy" in host and ".task(id: refreshRequest)" in host
+assert "queryLimits = model.state.limits" in host
 assert "an empty report does not mean zero usage" in host
 assert '"app.demora.dev.limits-usage"' in host
 assert '"app.demora.production.limits-usage"' in host
