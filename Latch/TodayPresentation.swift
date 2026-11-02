@@ -16,7 +16,9 @@ import Foundation
 /// periods, wake-up gates) plus sleep blocks. Names are the user's own rule
 /// names, never app names.
 struct TodayItem: Equatable {
-    enum Kind: Equatable { case block, free, wake }
+    /// `unblock` is a session lifting blocks on chosen apps: shown on the
+    /// thread, but neither a block nor a free period for the Now card.
+    enum Kind: Equatable { case block, free, unblock, wake }
 
     let id: String
     let name: String
@@ -82,8 +84,10 @@ struct NowSummary: Equatable {
         // 1. A wake tap is needed.
         let needsTap = wakes.filter { $0.release == nil }
         if !needsTap.isEmpty {
-            let facts = needsTap.compactMap { wake in
-                wake.waitMinutes.map { Fact.wakeWait(name: wake.name, minutes: $0) }
+            // A zero wait opens on the tap, so it has no wait to state.
+            let facts = needsTap.compactMap { wake -> Fact? in
+                guard let minutes = wake.waitMinutes, minutes > 0 else { return nil }
+                return .wakeWait(name: wake.name, minutes: minutes)
             }
             return NowSummary(hero: .wakeNeeded, facts: Array(facts.prefix(maxFacts)),
                               action: .wakeUp)

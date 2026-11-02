@@ -1,6 +1,7 @@
 //
 //  HomeView.swift
-//  Pending changes with live countdowns, cancel, and override ("apply now").
+//  The Today tab (docs/today-redesign.md), and the legacy Home the guided
+//  tutorial still runs on.
 //
 
 import SwiftUI
@@ -42,10 +43,12 @@ struct ScreenTimeReauthBanner: View {
     }
 }
 
+
 struct HomeView: View {
     @AppAccent private var accent
     @EnvironmentObject var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .largeTitle) private var dateSize: CGFloat = 43
     @State private var overrideTarget: PendingChange?
     @State private var inbox: [IncomingRequest] = []
@@ -60,6 +63,17 @@ struct HomeView: View {
     @State private var wakeSaveFailed = false
     @State private var wakePresentation: [HomeWakePresentation] = []
     @State private var usageRefreshRequest: UUID?
+    // Today. Spent limits and extra-time states are read in event callbacks.
+    @State private var spentLimitIDs: Set<UUID> = []
+    @State private var extraTimes: [UUID: ExtraTimeState] = [:]
+    @State private var showLedger = false
+    @State private var showAddLimit = false
+    @State private var showSession = false
+    @State private var extraPasswordTarget: AppLimit?
+    @State private var extraPhraseTarget: AppLimit?
+    @State private var extraContactTarget: ExtraContactContext?
+
+    private static let inboxAnchor = "today-inbox"
 
     private var needsWakeTap: Bool {
         wakePresentation.contains { $0.wallRelease == nil }
@@ -73,352 +87,17 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 26) {
-                    HStack {
-                        Wordmark(size: 22)
-                            .foregroundStyle(Ink.ink)
-                        Spacer()
-                        if !model.inTutorial {
-                            NavigationLink {
-                                HelpHubView().toolbar(.visible, for: .navigationBar)
-                            } label: {
-                                Image(systemName: "questionmark.circle")
-                                    .font(.title3)
-                            }
-                            .accessibilityLabel(tr("Help"))
-                        }
-                    }
-                    .foregroundStyle(accent)
-                    VStack(alignment: .leading, spacing: 24) {
-                        Text(Date.now, format: .dateTime.weekday(.wide).month(.abbreviated).day())
-                            .font(.system(size: dateSize, weight: .regular, design: .serif))
-                            .tracking(-1.5)
-                            .foregroundStyle(Ink.ink)
-                            .fixedSize(horizontal: false, vertical: true)
-                        TimelineView(.periodic(from: .now, by: 60)) { context in
-                            if model.inTutorial {
-                                DemoraDayLine(date: context.date)
-                            } else {
-                                HomeDayTimeline(date: context.date, state: model.state,
-                                                wakes: wakePresentation)
-                            }
-                        }
-                    }
+            Group {
+                // An interrupted legacy tutorial resumes on the Home it was
+                // written for; everyone else gets Today.
+                if model.inTutorial {
+                    legacyHome
+                } else {
+                    today
                 }
-                .padding(.top, 8)
-                .padding(.bottom, 18)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                if !model.inTutorial {
-                    if needsWakeTap {
-                        Button {
-                            startingWake = true
-                            wakeSaveFailed = false
-                            Task { @MainActor in
-                                _ = await ChangeEngine.wakeUpAllOffMain()
-                                startingWake = false
-                                model.tick()
-                                refreshWakePresentation(state: model.state)
-                                wakeSaveFailed = needsWakeTap
-                            }
-                        } label: {
-                            VStack(spacing: 12) {
-                                Image(systemName: "sunrise")
-                                    .font(.system(size: 34, weight: .ultraLight))
-                                Text(tr("Wake up"))
-                                    .font(.system(.largeTitle, design: .serif))
-                                    .tracking(-0.8)
-                                if startingWake { ProgressView().tint(accent) }
-                            }
-                            .foregroundStyle(accent)
-                            .frame(maxWidth: .infinity, minHeight: 116)
-                            .padding(.vertical, 12)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain).disabled(startingWake)
-                        if wakeSaveFailed {
-                            Text(tr("Wake-up could not be saved. Try again."))
-                                .font(.footnote).foregroundStyle(Ink.danger)
-                                .frame(maxWidth: .infinity)
-                                .multilineTextAlignment(.center)
-                        }
-                    }
-                    if wakePresentation.contains(where: { $0.wallRelease != nil }) {
-                        VStack(spacing: 12) {
-                            ForEach(wakePresentation) { wake in
-                                if let release = wake.wallRelease {
-                                    HStack {
-                                        Label(wake.name, systemImage: "sunrise")
-                                            .fixedSize(horizontal: false, vertical: true)
-                                        Spacer(minLength: 12)
-                                        Text(timerInterval: Date.now...max(Date.now.addingTimeInterval(1), release),
-                                             countsDown: true)
-                                            .font(.system(.title3, design: .serif).monospacedDigit())
-                                            .foregroundStyle(accent)
-                                    }
-                                    .font(.subheadline)
-                                }
-                            }
-                        }
-                        .demoraSurface()
-                    }
-                    if model.state.limits.isEmpty {
-                        Button { model.selectedTab = 1 } label: {
-                            EmptyStateView(title: tr("No limits yet"),
-                                           systemImage: "apps.iphone",
-                                           description: tr("Add a daily time limit."))
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        CompactHomeUsageReport(limits: model.state.limits,
-                                               reloadRequest: usageRefreshRequest)
-                    }
-                    NavigationLink {
-                        UsageInsightsView().toolbar(.visible, for: .navigationBar)
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "chart.xyaxis.line")
-                            Text(tr("Usage & trends")).font(.system(.title3, design: .serif))
-                            Spacer()
-                            Image(systemName: "arrow.up.right").font(.caption)
-                        }
-                        .foregroundStyle(accent).frame(minHeight: 48)
-                    }
-                    .buttonStyle(.plain)
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            Button { model.selectedTab = 2 } label: {
-                              HStack {
-                                DemoraSectionTitle(title: tr("Today's sessions"),
-                                                   symbol: "calendar")
-                                Spacer()
-                                Image(systemName: "arrow.up.right")
-                                    .font(.caption).foregroundStyle(accent)
-                            }
-                            }
-                            .buttonStyle(.plain)
-                            let active = model.state.sessions.filter(\.isActive)
-                            let plannedToday = model.state.planned.filter {
-                                Calendar.current.isDateInToday($0.startsAt)
-                                    && $0.endsAt > Date.now
-                            }
-                            if active.isEmpty && plannedToday.isEmpty {
-                                Text(tr("No sessions today"))
-                                    .font(.subheadline).foregroundStyle(Ink.faint)
-                            } else {
-                                ForEach(active.prefix(3)) { session in
-                                    NavigationLink {
-                                        ScheduledItemDetailView(
-                                            title: session.name, summary: session.kind.label,
-                                            timing: String(format: tr("until %@"), session.endsAt.formatted(
-                                                date: .omitted, time: .shortened)),
-                                            appsTitle: session.kind == .free ? nil
-                                                : (session.kind == .block ? tr("Apps blocked") : tr("Apps unblocked")),
-                                            selection: session.kind == .free ? nil : session.selection)
-                                        .toolbar(.visible, for: .navigationBar)
-                                    } label: {
-                                    HStack {
-                                        Text(session.name)
-                                            .font(.system(.title3, design: .serif))
-                                            .foregroundStyle(Ink.ink)
-                                        Spacer()
-                                        Text(String(format: tr("until %@"), session.endsAt.formatted(
-                                            date: .omitted, time: .shortened)))
-                                            .font(.system(.caption, design: .monospaced))
-                                            .foregroundStyle(Ink.faint)
-                                    }
-                                    .padding(.vertical, 12).padding(.leading, 28)
-                                    .overlay(alignment: .leading) { DemoraTimelineMark() }
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                ForEach(plannedToday.prefix(max(0, 3 - active.count))) { window in
-                                    NavigationLink {
-                                        ScheduledItemDetailView(
-                                            title: window.name, summary: window.kind.label,
-                                            timing: window.startsAt.formatted(date: .abbreviated, time: .shortened),
-                                            appsTitle: window.kind == .free ? nil
-                                                : (window.kind == .blockAllExcept
-                                                   ? tr("Apps that stay usable") : tr("Apps to block")),
-                                            selection: window.kind == .free ? nil : window.selection)
-                                        .toolbar(.visible, for: .navigationBar)
-                                    } label: {
-                                    HStack {
-                                        Text(window.name)
-                                            .font(.system(.title3, design: .serif))
-                                            .foregroundStyle(Ink.ink)
-                                        Spacer()
-                                        Text(window.startsAt.formatted(
-                                            date: .omitted, time: .shortened))
-                                            .font(.system(.caption, design: .monospaced))
-                                            .foregroundStyle(Ink.faint)
-                                    }
-                                    .padding(.vertical, 12).padding(.leading, 28)
-                                    .overlay(alignment: .leading) { DemoraTimelineMark(color: Ink.faint) }
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                        .demoraSurface()
-                }
-                if model.state.isSetUp && !model.authorized {
-                    ScreenTimeReauthBanner().demoraSurface()
-                }
-                if model.enforcementDegraded {
-                    EnforcementBanner().demoraSurface()
-                }
-                if !inbox.isEmpty {
-                    ApprovalInboxSection(requests: inbox) { request, approve in
-                        Task {
-                            do {
-                                try await ContactsRelay.respond(to: request,
-                                                                approve: approve)
-                                inbox.removeAll { $0.id == request.id }
-                            } catch {
-                                // Keep the row — the response didn't go through.
-                                homeNotice = tr("Couldn't send your response — check your connection and try again.")
-                            }
-                        }
-                    }
-                    .demoraSurface()
-                }
-
-                if !activeOutgoing.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(tr("Awaiting approval")).font(.headline)
-                        ForEach(activeOutgoing) { req in
-                            let reqChanges = pendingChanges(for: req)
-                            Button {
-                                #if DEBUG
-                                print("📂 resume req=\(req.requestId.prefix(8)) changeIds=\(req.changeIds.count) reqChanges=\(reqChanges.count)")
-                                #endif
-                                resumeTarget = ResumeTarget(id: req.requestId,
-                                                            changes: reqChanges)
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(reqChanges.count == 1
-                                             ? (reqChanges.first?.summary ?? "")
-                                             : String(format: tr("%d changes"),
-                                                      reqChanges.count))
-                                            .font(.subheadline)
-                                        Text(req.email
-                                             ? tr("Tap to enter the email code")
-                                             : tr("Waiting for approval…"))
-                                            .font(.caption).foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    Image(systemName: req.email
-                                          ? "envelope.badge" : "hourglass")
-                                        .foregroundStyle(.tint)
-                                }
-                            }
-                            .tint(.primary)
-                        }
-                    }
-                    .demoraSurface()
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        DemoraSectionTitle(title: tr("Pending changes"), symbol: "hourglass")
-                        Spacer(minLength: 8)
-                        if !model.state.pending.isEmpty {
-                            Button(selecting ? tr("Done") : tr("Select")) {
-                                selecting.toggle()
-                                if !selecting { selection.removeAll() }
-                            }
-                            .frame(minWidth: 44, minHeight: 44)
-                            .foregroundStyle(accent)
-                            .tutorialHighlight(!selecting
-                                && (model.tutorial == .applyBoth || model.tutorial == .applyViaContact)
-                                && model.tutorialScreen == "home")
-                        }
-                    }
-                    if model.state.pending.isEmpty {
-                        EmptyStateView(
-                            title: tr("No pending changes"),
-                            systemImage: "checkmark.circle",
-                            description: tr("Changes you make will appear here with a countdown.")
-                        )
-                    } else {
-                        ForEach(model.state.pending
-                            .sorted { $0.appliesAt < $1.appliesAt }) { change in
-                            if selecting {
-                                Button {
-                                    if selection.contains(change.id) {
-                                        selection.remove(change.id)
-                                    } else {
-                                        selection.insert(change.id)
-                                    }
-                                } label: {
-                                    HStack(spacing: 12) {
-                                        Image(systemName: selection.contains(change.id)
-                                              ? "checkmark.circle.fill" : "circle")
-                                            .foregroundStyle(.tint)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(change.direction.label)
-                                                .font(.caption.bold())
-                                                .foregroundStyle(change.direction == .stricter
-                                                                 ? .green : .orange)
-                                            Text(change.summary).font(.subheadline)
-                                        }
-                                        Spacer()
-                                    }
-                                }
-                                .tint(.primary)
-                                .tutorialHighlight((model.tutorial == .applyBoth
-                                    || model.tutorial == .applyViaContact)
-                                    && model.tutorialScreen == "home", ring: false)
-                            } else {
-                                PendingChangeRow(
-                                    change: change,
-                                    canOverride: ChangeEngine.hasOverride(
-                                        for: [change], state: model.state),
-                                    frozenRemaining: model.inTutorial
-                                        ? { model.tutorialRemaining(for: change) ?? 0 } : nil,
-                                    reportHole: (model.tutorial == .applyBoth
-                                        || model.tutorial == .applyViaContact)
-                                        && model.tutorialScreen == "home",
-                                    onCancel: { model.cancel(change) },
-                                    onOverride: { overrideTarget = change },
-                                    onDebugApply: { model.applyNow(change) }
-                                )
-                            }
-                        }
-                    }
-                }
-                .demoraSurface()
-                }
-                .padding(.horizontal, 26)
-                .padding(.vertical, 24)
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity)
             }
             .background(Ink.paper.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
-            .safeAreaInset(edge: .bottom) {
-                if selecting && !selection.isEmpty {
-                    HStack {
-                        if !model.inTutorial {
-                            Button(role: .destructive) { bulkCancel() } label: {
-                                Label(String(format: tr("Cancel %d"), selection.count),
-                                      systemImage: "xmark.circle")
-                            }
-                        }
-                        Spacer()
-                        Button { bulkApply() } label: {
-                            Label(String(format: tr("Apply %d now"), selection.count),
-                                  systemImage: "bolt")
-                        }
-                        .tutorialHighlight(model.inTutorial && model.tutorialScreen == "home")
-                    }
-                    .padding()
-                    .background(.bar)
-                }
-            }
             .task(id: model.selectedTab == 0) {
                 guard model.selectedTab == 0 else { return }
                 await loadInbox()
@@ -426,7 +105,7 @@ struct HomeView: View {
                 loadOutgoing()
             }
             .onReceive(model.$state) { state in
-                refreshWakePresentation(state: state)
+                refreshSnapshot(state: state)
                 // Due changes can disappear while this section is selected.
                 // Never leave a stale bulk-action count or stranded Select mode.
                 let pendingIDs = Set(state.pending.map(\.id))
@@ -434,13 +113,13 @@ struct HomeView: View {
                 if pendingIDs.isEmpty { selecting = false }
             }
             .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
-                refreshWakePresentation(state: model.state)
+                refreshSnapshot(state: model.state)
             }
             .onChange(of: scenePhase) { phase in
-                if phase == .active { refreshWakePresentation(state: model.state) }
+                if phase == .active { refreshSnapshot(state: model.state) }
             }
             .onAppear {
-                refreshWakePresentation(state: model.state)
+                refreshSnapshot(state: model.state)
                 loadOutgoing()
                 if model.inTutorial && model.selectedTab == 0 { model.tutorialScreen = "home" }
             }
@@ -456,7 +135,7 @@ struct HomeView: View {
             .refreshable {
                 usageRefreshRequest = UUID()
                 model.tick()
-                refreshWakePresentation(state: model.state)
+                refreshSnapshot(state: model.state)
                 await loadInbox()
                 loadOutgoing()
             }
@@ -485,32 +164,429 @@ struct HomeView: View {
         }
     }
 
+    // MARK: Today (docs/today-redesign.md §5)
+
+    private var today: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: DemoraSpace.sectionGap) {
+                    TodayHeader(date: Date.now, hasRequests: !inbox.isEmpty) {
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+                            proxy.scrollTo(Self.inboxAnchor, anchor: .top)
+                        }
+                    }
+                    let needsPermission = model.state.isSetUp && !model.authorized
+                    if needsPermission || model.enforcementDegraded {
+                        TodayAttentionCard(needsPermission: needsPermission,
+                                           monitoringIncomplete: model.enforcementDegraded)
+                    }
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        let summary = NowSummary.make(state: model.state,
+                                                      blockedLimitIDs: spentLimitIDs,
+                                                      wakes: wakePresentation, now: context.date)
+                        NowCard(summary: summary, now: context.date,
+                                startingWake: startingWake, wakeSaveFailed: wakeSaveFailed,
+                                onWakeUp: wakeUp, onOpen: destination(for: summary))
+                    }
+                    if !inbox.isEmpty {
+                        VStack(alignment: .leading, spacing: DemoraSpace.cardGap) {
+                            ForEach(inbox) { request in
+                                InboxCard(request: request) { respond(to: request, approve: $0) }
+                            }
+                        }
+                        .id(Self.inboxAnchor)
+                    }
+                    limitsSection
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        dayThread(at: context.date)
+                    }
+                    changingSoon
+                    moreLinks
+                }
+                .padding(.horizontal, DemoraSpace.pageGutter)
+                .padding(.top, DemoraSpace.xs)
+                .padding(.bottom, DemoraSpace.xl)
+                .frame(maxWidth: DemoraSpace.maxContentWidth)
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            // One primary action per screen: hidden while Wake up shows.
+            if !needsWakeTap {
+                Button { showSession = true } label: {
+                    Label(tr("Block now"), systemImage: "lock")
+                }
+                .buttonStyle(DemoraPrimaryButtonStyle())
+                .padding(.horizontal, DemoraSpace.pageGutter)
+                .padding(.vertical, DemoraSpace.xs)
+                .frame(maxWidth: DemoraSpace.maxContentWidth)
+                .frame(maxWidth: .infinity)
+                .background(Ink.paper)
+            }
+        }
+        .navigationDestination(isPresented: $showLedger) {
+            ChangesLedgerView(outgoing: activeOutgoing, onRequestsChanged: loadOutgoing)
+        }
+        .sheet(isPresented: $showAddLimit) { LimitEditorView(existing: nil) }
+        .sheet(isPresented: $showSession) { SessionStartView() }
+        .sheet(item: $extraPasswordTarget) { limit in
+            ExtraTimePasswordGate(limitID: limit.id)
+        }
+        .sheet(item: $extraPhraseTarget) { limit in
+            ExtraTimePhraseGate(limitID: limit.id)
+        }
+        .sheet(item: $extraContactTarget) { context in
+            ContactGateView(changes: [], extraContext: context,
+                            onSuccess: { model.tick() })
+        }
+    }
+
+    private var limitsSection: some View {
+        VStack(alignment: .leading, spacing: DemoraSpace.cardGap) {
+            SectionHeader(tr("Your limits")) {
+                if !model.state.limits.isEmpty {
+                    SectionHeaderLink(title: tr("All rules")) { model.selectedTab = 1 }
+                }
+            }
+            if model.state.limits.isEmpty {
+                EmptyStateView(title: tr("Set your first limit"),
+                               systemImage: "apps.iphone",
+                               description: tr("Add a daily time limit."),
+                               actionTitle: tr("Add a daily limit")) { showAddLimit = true }
+            } else {
+                CompactHomeUsageReport(limits: model.state.limits,
+                                       reloadRequest: usageRefreshRequest)
+                ExtraTimeRows(limits: model.state.limits, states: extraTimes) { limit, remaining in
+                    requestExtraTime(for: limit, remaining: remaining)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func dayThread(at now: Date) -> some View {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: now)
+        let day = DateInterval(start: start, end: calendar.date(byAdding: .day, value: 1, to: start)
+                                ?? start.addingTimeInterval(86_400))
+        let result = DayThread.make(items: HomeDaySources.items(state: model.state,
+                                                                wakes: wakePresentation, date: now),
+                                    now: now, day: day)
+        if !result.entries.isEmpty {
+            VStack(alignment: .leading, spacing: DemoraSpace.cardGap) {
+                SectionHeader(tr("Today")) {
+                    // The full calendar lives on Schedules until Rules exists.
+                    SectionHeaderLink(title: tr("Full day")) { model.selectedTab = 2 }
+                }
+                DayThreadView(result: result, now: now)
+            }
+        }
+    }
+
+    @ViewBuilder private var changingSoon: some View {
+        let pending = model.state.pending.sorted { $0.appliesAt < $1.appliesAt }
+        if !pending.isEmpty {
+            VStack(alignment: .leading, spacing: DemoraSpace.cardGap) {
+                SectionHeader(tr("Changing soon")) {
+                    SectionHeaderLink(title: String(format: tr("All %d"), pending.count)) {
+                        showLedger = true
+                    }
+                }
+                ForEach(pending.prefix(2)) { change in
+                    let waiting = ChangeWaiting.find(for: change, in: activeOutgoing,
+                                                     contacts: model.state.overrides.contacts)
+                    ChangeRow(
+                        change: change,
+                        canOverride: ChangeEngine.hasOverride(for: [change], state: model.state),
+                        waiting: waiting,
+                        onCancel: { model.cancel(change) },
+                        onOverride: { overrideTarget = change },
+                        onDebugApply: { model.applyNow(change) },
+                        onOpenRequest: { openRequest(waiting) }
+                    )
+                    .transition(reduceMotion ? .opacity
+                        : .move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: pending.map(\.id))
+        }
+    }
+
+    /// Usage & trends and help stay here until Insights and You exist (§8).
+    private var moreLinks: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            NavigationLink {
+                UsageInsightsView().toolbar(.visible, for: .navigationBar)
+            } label: {
+                moreRow(tr("Usage & trends"), symbol: "chart.xyaxis.line")
+            }
+            Rectangle().fill(Ink.hairline).frame(height: 1)
+                .padding(.leading, DemoraSpace.cardPadding)
+            NavigationLink {
+                HelpHubView().toolbar(.visible, for: .navigationBar)
+            } label: {
+                moreRow(tr("Help"), symbol: "questionmark.circle")
+            }
+        }
+        .buttonStyle(.plain)
+        .paperCard(padding: 0)
+    }
+
+    private func moreRow(_ title: String, symbol: String) -> some View {
+        HStack(spacing: DemoraSpace.s) {
+            Image(systemName: symbol)
+                .foregroundStyle(accent)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+            Text(title).demoraType(.body).foregroundStyle(Ink.ink)
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Ink.inkSoft)
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, DemoraSpace.cardPadding)
+        .frame(minHeight: 52)
+        .contentShape(Rectangle())
+    }
+
+    /// Where tapping the Now card goes until the Rules summary sheets exist.
+    private func destination(for summary: NowSummary) -> (() -> Void)? {
+        switch summary.hero {
+        case .oneBlock, .severalBlocks, .free: return { model.selectedTab = 2 }
+        case .spent: return { model.selectedTab = 1 }
+        case .wakeNeeded, .wakeRunning, .nothing: return nil
+        }
+    }
+
+    private func wakeUp() {
+        startingWake = true
+        wakeSaveFailed = false
+        Task { @MainActor in
+            _ = await ChangeEngine.wakeUpAllOffMain()
+            startingWake = false
+            model.tick()
+            refreshSnapshot(state: model.state)
+            wakeSaveFailed = needsWakeTap
+        }
+    }
+
+    private func respond(to request: IncomingRequest, approve: Bool) {
+        Task {
+            do {
+                try await ContactsRelay.respond(to: request, approve: approve)
+                inbox.removeAll { $0.id == request.id }
+            } catch {
+                // Keep the row — the response didn't go through.
+                homeNotice = tr("Couldn't send your response — check your connection and try again.")
+            }
+        }
+    }
+
+    // MARK: Legacy Home (tutorial only)
+
+    /// The Home the legacy tutorial was written for. It renders exactly as
+    /// before while the tutorial runs; the parts it only showed outside the
+    /// tutorial now live on Today.
+    private var legacyHome: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 26) {
+                HStack {
+                    Wordmark(size: 22)
+                        .foregroundStyle(Ink.ink)
+                    Spacer()
+                }
+                .foregroundStyle(accent)
+                VStack(alignment: .leading, spacing: 24) {
+                    Text(Date.now, format: .dateTime.weekday(.wide).month(.abbreviated).day())
+                        .font(.system(size: dateSize, weight: .regular, design: .serif))
+                        .tracking(-1.5)
+                        .foregroundStyle(Ink.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        DemoraDayLine(date: context.date)
+                    }
+                }
+            }
+            .padding(.top, 8)
+            .padding(.bottom, 18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if model.state.isSetUp && !model.authorized {
+                ScreenTimeReauthBanner().demoraSurface()
+            }
+            if model.enforcementDegraded {
+                EnforcementBanner().demoraSurface()
+            }
+            if !inbox.isEmpty {
+                ApprovalInboxSection(requests: inbox) { request, approve in
+                    respond(to: request, approve: approve)
+                }
+                .demoraSurface()
+            }
+
+            if !activeOutgoing.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(tr("Awaiting approval")).font(.headline)
+                    ForEach(activeOutgoing) { req in
+                        let reqChanges = pendingChanges(for: req)
+                        Button {
+                            #if DEBUG
+                            print("📂 resume req=\(req.requestId.prefix(8)) changeIds=\(req.changeIds.count) reqChanges=\(reqChanges.count)")
+                            #endif
+                            resumeTarget = ResumeTarget(id: req.requestId,
+                                                        changes: reqChanges)
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(reqChanges.count == 1
+                                         ? (reqChanges.first?.summary ?? "")
+                                         : String(format: tr("%d changes"),
+                                                  reqChanges.count))
+                                        .font(.subheadline)
+                                    Text(req.email
+                                         ? tr("Tap to enter the email code")
+                                         : tr("Waiting for approval…"))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: req.email
+                                      ? "envelope.badge" : "hourglass")
+                                    .foregroundStyle(.tint)
+                            }
+                        }
+                        .tint(.primary)
+                    }
+                }
+                .demoraSurface()
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    DemoraSectionTitle(title: tr("Pending changes"), symbol: "hourglass")
+                    Spacer(minLength: 8)
+                    if !model.state.pending.isEmpty {
+                        Button(selecting ? tr("Done") : tr("Select")) {
+                            selecting.toggle()
+                            if !selecting { selection.removeAll() }
+                        }
+                        .frame(minWidth: 44, minHeight: 44)
+                        .foregroundStyle(accent)
+                        .tutorialHighlight(!selecting
+                            && (model.tutorial == .applyBoth || model.tutorial == .applyViaContact)
+                            && model.tutorialScreen == "home")
+                    }
+                }
+                if model.state.pending.isEmpty {
+                    EmptyStateView(
+                        title: tr("No pending changes"),
+                        systemImage: "checkmark.circle",
+                        description: tr("Changes you make will appear here with a countdown.")
+                    )
+                } else {
+                    ForEach(model.state.pending
+                        .sorted { $0.appliesAt < $1.appliesAt }) { change in
+                        if selecting {
+                            Button {
+                                if selection.contains(change.id) {
+                                    selection.remove(change.id)
+                                } else {
+                                    selection.insert(change.id)
+                                }
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: selection.contains(change.id)
+                                          ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(.tint)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(change.direction.label)
+                                            .font(.caption.bold())
+                                            .foregroundStyle(change.direction == .stricter
+                                                             ? .green : .orange)
+                                        Text(change.summary).font(.subheadline)
+                                    }
+                                    Spacer()
+                                }
+                            }
+                            .tint(.primary)
+                            .tutorialHighlight((model.tutorial == .applyBoth
+                                || model.tutorial == .applyViaContact)
+                                && model.tutorialScreen == "home", ring: false)
+                        } else {
+                            PendingChangeRow(
+                                change: change,
+                                canOverride: ChangeEngine.hasOverride(
+                                    for: [change], state: model.state),
+                                frozenRemaining: model.inTutorial
+                                    ? { model.tutorialRemaining(for: change) ?? 0 } : nil,
+                                reportHole: (model.tutorial == .applyBoth
+                                    || model.tutorial == .applyViaContact)
+                                    && model.tutorialScreen == "home",
+                                onCancel: { model.cancel(change) },
+                                onOverride: { overrideTarget = change },
+                                onDebugApply: { model.applyNow(change) }
+                            )
+                        }
+                    }
+                }
+            }
+            .demoraSurface()
+            }
+            .padding(.horizontal, 26)
+            .padding(.vertical, 24)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
+        }
+        .safeAreaInset(edge: .bottom) {
+            if selecting && !selection.isEmpty {
+                HStack {
+                    if !model.inTutorial {
+                        Button(role: .destructive) { bulkCancel() } label: {
+                            Label(String(format: tr("Cancel %d"), selection.count),
+                                  systemImage: "xmark.circle")
+                        }
+                    }
+                    Spacer()
+                    Button { bulkApply() } label: {
+                        Label(String(format: tr("Apply %d now"), selection.count),
+                              systemImage: "bolt")
+                    }
+                    .tutorialHighlight(model.inTutorial && model.tutorialScreen == "home")
+                }
+                .padding()
+                .background(.bar)
+            }
+        }
+    }
+
     /// Status helpers may repair clock anchors or mark unreadable runtime state.
     /// Call them only from events, never while SwiftUI evaluates the body.
     private func refreshWakePresentation(state: LatchState) {
         guard !model.inTutorial else { wakePresentation = []; return }
         let wall = Date(), guarded = TimeGuard.now()
         var entries: [HomeWakePresentation] = []
-        func append(id: String, name: String, start: Int, latest: Int?, status: GlobalWakeStatus) {
+        func append(id: String, name: String, start: Int, wait: Int?, latest: Int?,
+                    status: GlobalWakeStatus) {
             switch status {
             case .needsTap:
                 entries.append(HomeWakePresentation(id: id, name: name,
-                    startMinutes: start, wallRelease: nil))
+                    startMinutes: start, waitMinutes: wait, wallRelease: nil))
             case .waiting(let until):
                 entries.append(HomeWakePresentation(id: id, name: name,
-                    startMinutes: start,
+                    startMinutes: start, waitMinutes: wait,
                     wallRelease: HomeDayProjection.projectedRelease(until: until,
                         wall: wall, guarded: guarded, latestMinutes: latest, calendar: .current)))
             case .inactive, .awake: break
             }
         }
         append(id: "global", name: tr("Wake-up wait"), start: state.wakeRule.startHour * 60,
+               wait: state.wakeRule.waitMinutes,
                latest: state.wakeRule.latest(on: wall),
                status: GlobalWake.status(state: state, at: wall))
         for group in state.dayNightGroups {
             let timing = group.wakeTiming(on: wall)
             append(id: "day-night-\(group.id)", name: group.name,
-                   start: timing.startMinutes, latest: timing.latestMinutes,
+                   start: timing.startMinutes, wait: timing.waitMinutes,
+                   latest: timing.latestMinutes,
                    status: DayNightWake.status(group: group, at: wall, guardedNow: guarded))
         }
         for limit in state.limits {
@@ -520,10 +596,10 @@ struct HomeView: View {
             switch status {
             case .needsTap:
                 append(id: "limit-\(limit.id)", name: limit.name, start: timing.startMinutes,
-                       latest: timing.latestMinutes, status: .needsTap)
+                       wait: timing.waitMinutes, latest: timing.latestMinutes, status: .needsTap)
             case .waiting(let until):
                 append(id: "limit-\(limit.id)", name: limit.name, start: timing.startMinutes,
-                       latest: timing.latestMinutes, status: .waiting(until))
+                       wait: timing.waitMinutes, latest: timing.latestMinutes, status: .waiting(until))
             case .notConfigured, .awake: break
             }
         }
@@ -549,6 +625,46 @@ struct HomeView: View {
         }
         outgoing = ContactsRelay.outgoingRequests()
             .filter { !pendingChanges(for: $0).isEmpty }
+    }
+
+    /// Refreshes what Today reads from outside saved state: the wake snapshot,
+    /// the monitor's spent limits and each limit's extra time. Events only,
+    /// never while SwiftUI evaluates the body.
+    private func refreshSnapshot(state: LatchState) {
+        refreshWakePresentation(state: state)
+        guard !model.inTutorial else { spentLimitIDs = []; extraTimes = [:]; return }
+        spentLimitIDs = SharedStore.loadBlockedLimitIDs()
+        var states: [UUID: ExtraTimeState] = [:]
+        for limit in state.limits where limit.extraTime != nil {
+            states[limit.id] = LimitFeatures.extraTimeState(for: limit)
+        }
+        extraTimes = states
+    }
+
+    /// Opens the limit's next extra-time gate: contact, password, phrase or wait.
+    private func requestExtraTime(for limit: AppLimit, remaining: Int) {
+        switch ExtraTimeRoute.route(for: limit, remaining: remaining) {
+        case .contact(let context): extraContactTarget = context
+        case .password: extraPasswordTarget = limit
+        case .phrase: extraPhraseTarget = limit
+        case .wait:
+            let id = limit.id
+            Task {
+                let started = await ChangeEngine.requestExtraTimeOffMain(limitID: id)
+                model.tick()
+                refreshSnapshot(state: model.state)
+                if !started {
+                    homeNotice = tr("Extra time could not be started safely. Your limit is still in place; try again later.")
+                }
+            }
+        }
+    }
+
+    private func openRequest(_ waiting: ChangeWaiting?) {
+        guard let waiting,
+              let request = activeOutgoing.first(where: { $0.requestId == waiting.requestID })
+        else { return }
+        resumeTarget = ResumeTarget(id: request.requestId, changes: pendingChanges(for: request))
     }
 
     private var selectedChanges: [PendingChange] {
@@ -597,18 +713,11 @@ private struct HomeWakePresentation: Identifiable {
     let id: String
     let name: String
     let startMinutes: Int
+    /// The wait a tap would start, for the Now card. Nil when unknown.
+    var waitMinutes: Int? = nil
     /// A guarded deadline projected onto the wall clock in an event callback.
     /// Nil means a tap is needed, not that a future release can be predicted.
     let wallRelease: Date?
-}
-
-private struct HomeDaySegment {
-    enum Kind { case block, free, wake }
-    let name: String
-    let kind: Kind
-    let start: Double
-    let end: Double
-    let needsTap: Bool
 }
 
 private enum HomeDayProjection {
@@ -621,20 +730,6 @@ private enum HomeDayProjection {
               let ceiling = calendar.date(bySettingHour: latestMinutes / 60,
                 minute: latestMinutes % 60, second: 0, of: wall) else { return release }
         return min(release, ceiling)
-    }
-
-    static func fraction(_ date: Date, in day: DateInterval) -> Double {
-        min(1, max(0, date.timeIntervalSince(day.start) / max(1, day.duration)))
-    }
-
-    static func segment(name: String, kind: HomeDaySegment.Kind,
-                        start: Date, end: Date, day: DateInterval,
-                        needsTap: Bool = false) -> HomeDaySegment? {
-        guard end >= start, end >= day.start, start < day.end,
-              end > day.start || needsTap,
-              end > start || needsTap else { return nil }
-        return HomeDaySegment(name: name, kind: kind,
-            start: fraction(start, in: day), end: fraction(end, in: day), needsTap: needsTap)
     }
 
     /// Include yesterday's overnight tail only when yesterday matched the rule.
@@ -659,145 +754,105 @@ private enum HomeDayProjection {
     }
 }
 
-// MARK: - Home day drawing
+// MARK: - Today's items
 
-private struct HomeDayTimeline: View {
-    @AppAccent private var accent
-    let date: Date
-    let state: LatchState
-    let wakes: [HomeWakePresentation]
-
-    private var day: DateInterval {
-        let calendar = Calendar.current
+/// Today's rule intervals from saved state and the event-side wake snapshot:
+/// the sources the old day line drew, plus sleep blocks. No new scheduling
+/// logic, and nothing here reads guarded clocks or preferences.
+private enum HomeDaySources {
+    static func items(state: LatchState, wakes: [HomeWakePresentation], date: Date,
+                      calendar: Calendar = .current) -> [TodayItem] {
         let start = calendar.startOfDay(for: date)
-        return DateInterval(start: start,
-            end: calendar.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(86400))
-    }
-
-    private var segments: [HomeDaySegment] {
-        let day = day, calendar = Calendar.current
-        var result: [HomeDaySegment] = []
-        func add(_ name: String, _ kind: HomeDaySegment.Kind, _ start: Date, _ end: Date,
-                 needsTap: Bool = false) {
-            if let segment = HomeDayProjection.segment(name: name, kind: kind,
-                start: start, end: end, day: day, needsTap: needsTap) { result.append(segment) }
-        }
+        let day = DateInterval(start: start, end: calendar.date(byAdding: .day, value: 1, to: start)
+                                ?? start.addingTimeInterval(86_400))
+        var items: [TodayItem] = []
         for session in state.sessions {
-            add("\(session.name) · \(session.kind.label)", session.kind == .block ? .block : .free,
-                session.startedAt, session.endsAt)
+            let kind: TodayItem.Kind = session.kind == .block ? .block
+                : (session.kind == .free ? .free : .unblock)
+            items.append(TodayItem(id: "session-\(session.id)", name: session.name,
+                detail: session.kind.label, kind: kind,
+                start: session.startedAt, end: session.endsAt))
         }
         for window in state.planned {
-            add("\(window.name) · \(window.kind.label)", window.kind == .free ? .free : .block,
-                window.startsAt, window.endsAt)
+            items.append(TodayItem(id: "planned-\(window.id)", name: window.name,
+                detail: window.kind.label, kind: window.kind == .free ? .free : .block,
+                start: window.startsAt, end: window.endsAt))
         }
         for schedule in state.schedules {
             for interval in HomeDayProjection.recurring(start: schedule.startMinutes,
                 end: schedule.endMinutes, day: day, calendar: calendar,
                 matches: { schedule.recurrence.matches(dayOf: $0) }) {
-                add("\(schedule.name) · \(schedule.mode.label)", .block, interval.start, interval.end)
+                items.append(TodayItem(id: "schedule-\(schedule.id)", name: schedule.name,
+                    detail: schedule.mode.label, kind: .block,
+                    start: interval.start, end: interval.end))
             }
         }
         for exemption in state.exemptions {
             for interval in HomeDayProjection.recurring(start: exemption.startMinutes,
                 end: exemption.endMinutes, day: day, calendar: calendar,
                 matches: { exemption.recurrence.matches(dayOf: $0) }) {
-                add("\(exemption.name) · \(tr("Free period"))", .free, interval.start, interval.end)
+                items.append(TodayItem(id: "exemption-\(exemption.id)", name: exemption.name,
+                    detail: tr("Free period"), kind: .free,
+                    start: interval.start, end: interval.end))
+            }
+        }
+        // Global sleep runs from its start to the wake hour, as the shield plan reads it.
+        if state.sleepRule.enabled {
+            for interval in HomeDayProjection.recurring(start: state.sleepRule.startMinutes,
+                end: state.wakeRule.startHour * 60, day: day, calendar: calendar,
+                matches: { state.sleepRule.weekdays.contains(calendar.component(.weekday, from: $0)) }) {
+                items.append(TodayItem(id: "global-sleep", name: tr("Sleep"), detail: tr("Sleep"),
+                    kind: .block, start: interval.start, end: interval.end))
+            }
+        }
+        // Mirrors DayNightGroup.sleepIsActive: each evening ends at that night's wake time.
+        for group in state.dayNightGroups where group.sleepEnabled {
+            for offset in [-1, 0] {
+                guard let anchor = calendar.date(byAdding: .day, value: offset, to: day.start),
+                      group.weekdays.contains(calendar.component(.weekday, from: anchor)),
+                      let startsAt = calendar.date(bySettingHour: group.sleepStartMinutes / 60,
+                        minute: group.sleepStartMinutes % 60, second: 0, of: anchor) else { continue }
+                let sameDayEnd = group.wakeTiming(on: anchor).startMinutes
+                let endDay = sameDayEnd > group.sleepStartMinutes ? anchor
+                    : (calendar.date(byAdding: .day, value: 1, to: anchor) ?? anchor)
+                let endMinute = group.wakeTiming(on: endDay).startMinutes
+                guard let endsAt = calendar.date(bySettingHour: endMinute / 60,
+                        minute: endMinute % 60, second: 0, of: endDay),
+                      endsAt > startsAt, startsAt < day.end, endsAt > day.start else { continue }
+                items.append(TodayItem(id: "day-night-sleep-\(group.id)", name: group.name,
+                    detail: tr("Sleep"), kind: .block, start: startsAt, end: endsAt))
             }
         }
         for wake in wakes {
             if let release = wake.wallRelease {
                 // Only the remaining, known wait. Never infer its original tap
                 // from the current configuration, which may have been edited.
-                add("\(wake.name) · \(tr("Wake-up wait"))", .wake, date, release)
+                items.append(TodayItem(id: "wake-\(wake.id)", name: wake.name,
+                    detail: tr("Wake-up wait"), kind: .wake, start: date, end: release))
             } else if let start = calendar.date(bySettingHour: wake.startMinutes / 60,
                 minute: wake.startMinutes % 60, second: 0, of: date) {
-                // Dashed elapsed awaiting-tap interval ends NOW, not at a
-                // fabricated future unlock time. The open dot denotes the tap.
-                add("\(wake.name) · \(tr("Wake-up tap needed"))", .wake,
-                    min(start, date), date, needsTap: true)
+                // An awaiting-tap gate ends now, not at a fabricated unlock time.
+                items.append(TodayItem(id: "wake-\(wake.id)", name: wake.name,
+                    detail: tr("Wake-up tap needed"), kind: .wake,
+                    start: min(start, date), end: date, needsTap: true))
             }
         }
-        return result
+        return items
     }
+}
 
-    var body: some View {
-        let day = day, segments = segments
-        VStack(alignment: .leading, spacing: 8) {
-            Canvas { context, size in
-                var ticks = Path()
-                for hour in 0...24 {
-                    let boundary = hour == 24 ? day.end
-                        : (Calendar.current.date(bySettingHour: hour, minute: 0, second: 0,
-                                                 of: day.start) ?? day.start)
-                    let x = HomeDayProjection.fraction(boundary, in: day) * size.width
-                    ticks.move(to: CGPoint(x: x, y: 0))
-                    ticks.addLine(to: CGPoint(x: x, y: hour % 6 == 0 ? 14 : 6))
-                }
-                context.stroke(ticks, with: .color(Ink.rule), lineWidth: 1)
-                for segment in segments {
-                    let y: CGFloat = segment.kind == .block ? 24 : (segment.kind == .free ? 32 : 40)
-                    let color = segment.kind == .block ? Ink.danger : accent
-                    var line = Path()
-                    line.move(to: CGPoint(x: segment.start * size.width, y: y))
-                    line.addLine(to: CGPoint(x: segment.end * size.width, y: y))
-                    context.stroke(line, with: .color(color),
-                        style: StrokeStyle(lineWidth: 3, lineCap: .round,
-                                           dash: segment.kind == .wake ? [3, 3] : []))
-                    if segment.needsTap {
-                        let dot = CGRect(x: min(size.width - 3, max(3, segment.end * size.width)) - 3,
-                                         y: y - 3, width: 6, height: 6)
-                        context.fill(Path(ellipseIn: dot), with: .color(Ink.paper))
-                        context.stroke(Path(ellipseIn: dot), with: .color(accent), lineWidth: 1)
-                    }
-                }
-                let x = HomeDayProjection.fraction(date, in: day) * size.width
-                var now = Path()
-                now.move(to: CGPoint(x: x, y: 0))
-                now.addLine(to: CGPoint(x: x, y: segments.isEmpty ? 23 : 46))
-                context.stroke(now, with: .color(accent.opacity(0.65)), lineWidth: 1)
-            }
-            .frame(height: segments.isEmpty ? 24 : 48)
-            .accessibilityHidden(true)
-            HStack {
-                Text("00")
-                Spacer()
-                Text(date, style: .time).foregroundStyle(accent)
-                Spacer()
-                Text("24")
-            }
-            .font(.system(.caption2, design: .monospaced)).foregroundStyle(Ink.faint)
-            if !segments.isEmpty {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 16) { legend(segments) }
-                    VStack(alignment: .leading, spacing: 6) { legend(segments) }
-                }
-                .font(.system(.caption2, design: .monospaced)).foregroundStyle(Ink.faint)
-                // VoiceOver retains every named interval, including overlapping
-                // strokes. This is a schedule illustration, not usage data.
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(segments.map { segment in
-                    if segment.needsTap { return segment.name }
-                    let start = day.start.addingTimeInterval(segment.start * day.duration)
-                    let end = day.start.addingTimeInterval(segment.end * day.duration)
-                    return "\(segment.name), \(start.formatted(date: .omitted, time: .shortened))–\(end.formatted(date: .omitted, time: .shortened))"
-                }.joined(separator: "; "))
-            }
-        }
-    }
-
-    @ViewBuilder private func legend(_ segments: [HomeDaySegment]) -> some View {
-        if segments.contains(where: { $0.kind == .block }) {
-            Label(tr("Block"), systemImage: "minus").foregroundStyle(Ink.danger)
-        }
-        if segments.contains(where: { $0.kind == .free }) {
-            Label("\(tr("Unblock")) / \(tr("Free"))", systemImage: "minus").foregroundStyle(accent)
-        }
-        if segments.contains(where: { $0.kind == .wake && !$0.needsTap }) {
-            Label(tr("Wake-up wait"), systemImage: "ellipsis").foregroundStyle(accent)
-        }
-        if segments.contains(where: { $0.kind == .wake && $0.needsTap }) {
-            Label(tr("Wake-up tap needed"), systemImage: "circle").foregroundStyle(accent)
-        }
+extension NowSummary {
+    /// The Now card for saved state (spec §5.3). `blockedLimitIDs` is the
+    /// monitor's spent list, read in an event callback; names are rule names.
+    fileprivate static func make(state: LatchState, blockedLimitIDs: Set<UUID>,
+                                 wakes: [HomeWakePresentation], now: Date) -> NowSummary {
+        make(items: HomeDaySources.items(state: state, wakes: wakes, date: now),
+             spentLimitNames: state.limits
+                .filter { blockedLimitIDs.contains($0.id) || $0.minutes(on: now) == 0 }
+                .map(\.name),
+             wakes: wakes.map { Wake(name: $0.name, waitMinutes: $0.waitMinutes,
+                                     release: $0.wallRelease) },
+             now: now)
     }
 }
 

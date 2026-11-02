@@ -98,24 +98,16 @@ struct CompactHomeUsageReport: View {
     }
 
     var body: some View {
+        // Today's "Your limits" header sits above this card. No refresh
+        // button (Insights I6): pull to refresh and refresh on appear remain.
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                DemoraSectionTitle(title: tr("Today's usage"), symbol: "chart.bar.fill")
-                Button { requestRefresh() } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(accent)
-                        .frame(width: 44, height: 44)
-                }
-                .accessibilityLabel(tr("Refresh"))
-            }
             LimitsUsageReportView(refreshedAt: refreshedAt, limits: queryLimits)
                 .frame(height: viewportHeight, alignment: .topLeading)
                 .clipped()
             HStack {
                 Text("\(tr("Limits")) · \(limitCount)")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(Ink.faint)
+                    .demoraType(.meta)
+                    .foregroundStyle(Ink.inkSoft)
                 Spacer()
                 Button {
                     expanded.toggle()
@@ -130,11 +122,11 @@ struct CompactHomeUsageReport: View {
             }
             if !usageNoteDismissed {
                 DismissibleNote(
-                    text: tr("Usage stays in the Screen Time report. Scroll to see more groups. If it looks empty, try Refresh; an empty report does not mean zero usage."),
+                    text: tr("Usage stays in the Screen Time report. Scroll to see more groups. If it looks empty, pull down to refresh; an empty report does not mean zero usage."),
                     onDismiss: { usageNoteDismissed = true })
             }
         }
-        .demoraSurface()
+        .paperCard()
         .onAppear { onScreen = true; requestRefresh() }
         .onDisappear { onScreen = false; refreshRequest = nil }
         .onChange(of: canRefresh) { available in

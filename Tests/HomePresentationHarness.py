@@ -14,7 +14,7 @@ host = (ROOT / "Latch/LimitsUsageReportView.swift").read_text()
 report = (ROOT / "LatchReport/LimitsUsageView.swift").read_text()
 
 projection = home.split("// MARK: - Home day projection", 1)[1].split(
-    "// MARK: - Home day drawing", 1)[0]
+    "// MARK: - Today's items", 1)[0]
 projection = projection.split("\n", 1)[1]
 # Expose file-private types to the generated test driver's top-level variables;
 # the production function bodies remain unchanged.
@@ -41,29 +41,6 @@ func interval(_ start: Date) -> DateInterval {
     DateInterval(start: start, end: calendar.date(byAdding: .day, value: 1, to: start)!)
 }
 let day = interval(date(2026, 10, 6))
-let spanning = HomeDayProjection.segment(name: "overnight", kind: .block,
-    start: date(2026, 10, 5, 23), end: date(2026, 10, 6, 2), day: day)!
-check(close(spanning.start, 0) && close(spanning.end, 2.0 / 24), "overnight clipped")
-let full = HomeDayProjection.segment(name: "full", kind: .free,
-    start: date(2026, 10, 5), end: date(2026, 10, 8), day: day)!
-check(full.start == 0 && full.end == 1, "multi-day clipped")
-check(HomeDayProjection.segment(name: "old", kind: .block,
-    start: date(2026, 10, 5), end: day.start, day: day) == nil, "past excluded")
-check(HomeDayProjection.segment(name: "future", kind: .block,
-    start: day.end, end: date(2026, 10, 8), day: day) == nil, "next day excluded")
-check(HomeDayProjection.segment(name: "bad", kind: .block,
-    start: date(2026, 10, 6, 3), end: date(2026, 10, 6, 2), day: day) == nil,
-    "reversed excluded")
-let tap = HomeDayProjection.segment(name: "tap", kind: .wake,
-    start: date(2026, 10, 6, 6), end: date(2026, 10, 6, 6), day: day, needsTap: true)!
-check(tap.start == tap.end && tap.needsTap, "boundary tap point retained")
-let awaiting = HomeDayProjection.segment(name: "tap", kind: .wake,
-    start: date(2026, 10, 6, 6), end: date(2026, 10, 6, 9), day: day, needsTap: true)!
-check(close(awaiting.end, 9.0 / 24), "unstarted gate stops now")
-let wait = HomeDayProjection.segment(name: "wait", kind: .wake,
-    start: date(2026, 10, 6, 23), end: date(2026, 10, 7, 2), day: day)!
-check(wait.end == 1 && !wait.needsTap, "running wait clips at midnight")
-
 let tails = HomeDayProjection.recurring(start: 22 * 60, end: 2 * 60,
     day: day, calendar: calendar,
     matches: { calendar.component(.weekday, from: $0) == 2 })
@@ -77,15 +54,10 @@ check(daytime.count == 1 && daytime[0].start == date(2026, 10, 6, 10), "no old d
 for (month, number, hours) in [(3, 8, 23.0), (11, 1, 25.0)] {
     let dst = interval(date(2026, month, number))
     check(dst.duration == hours * 3600, "actual DST day length")
-    let evening = date(2026, month, number, 22)
-    check(close(HomeDayProjection.fraction(evening, in: dst),
-                evening.timeIntervalSince(dst.start) / dst.duration), "DST marker and interval share axis")
     let overnight = HomeDayProjection.recurring(start: 22 * 60, end: 6 * 60,
         day: dst, calendar: calendar, matches: { _ in true })
     check(overnight.count == 2, "DST previous tail and next evening")
 }
-check(HomeDayProjection.fraction(date(2026, 10, 5), in: day) == 0
-      && HomeDayProjection.fraction(date(2026, 10, 8), in: day) == 1, "fraction bounded")
 let wall = date(2026, 10, 6, 9), guarded = date(2026, 10, 6, 7)
 check(HomeDayProjection.projectedRelease(until: guarded.addingTimeInterval(7200),
     wall: wall, guarded: guarded, latestMinutes: 600, calendar: calendar) == date(2026, 10, 6, 10),
@@ -100,10 +72,10 @@ check(HomeDayProjection.projectedRelease(until: guarded.addingTimeInterval(7200)
 // Match only the APIs consumed by the actual event-side snapshot function.
 enum GlobalWakeStatus { case inactive, needsTap, waiting(Date), awake }
 enum WakeState { case notConfigured, needsTap, waiting(Date), awake }
-struct Timing { var startMinutes: Int; var latestMinutes: Int? = nil }
+struct Timing { var startMinutes: Int; var waitMinutes = 0; var latestMinutes: Int? = nil }
 struct Group {
     var id = UUID(); var name: String; var start: Int; var status: GlobalWakeStatus
-    func wakeTiming(on date: Date) -> Timing { Timing(startMinutes: start) }
+    func wakeTiming(on date: Date) -> Timing { Timing(startMinutes: start, waitMinutes: 45) }
 }
 struct LimitWakeSchedule {
     var startMinutes = 0
@@ -114,7 +86,7 @@ struct Limit {
     var wakeSchedule: LimitWakeSchedule?; var status: WakeState
 }
 struct WakeRule {
-    var startHour = 6; var latestMinutes: Int? = nil
+    var startHour = 6; var waitMinutes = 120; var latestMinutes: Int? = nil
     func latest(on date: Date) -> Int? { latestMinutes }
 }
 struct LatchState {
@@ -157,6 +129,10 @@ snapshot.refreshWakePresentation(state: state)
 check(snapshot.wakePresentation.count == 4, "global/new/legacy eligible gates only")
 check(snapshot.wakePresentation.filter { $0.wallRelease == nil }.count == 2,
       "needsTap has no projected release")
+check(snapshot.wakePresentation.first { $0.id == "global" }?.waitMinutes == 120,
+      "the wait a tap starts reaches the Now card")
+check(snapshot.wakePresentation.first { $0.name == "running" }?.waitMinutes == 45,
+      "group wait from its timing for the day")
 for (name, seconds) in [("running", 600.0), ("legacy", 300.0)] {
     let release = snapshot.wakePresentation.first { $0.name == name }!.wallRelease!
     check(abs(release.timeIntervalSince(before) - seconds) < 2,
@@ -166,7 +142,7 @@ snapshot.model.inTutorial = true
 let reads = GlobalWake.reads
 snapshot.refreshWakePresentation(state: state)
 check(snapshot.wakePresentation.isEmpty && GlobalWake.reads == reads, "tutorial avoids real status")
-print("Home projection passed: day clipping, points, recurring anchors, DST, guarded waits/ceiling projection, tutorial isolation")
+print("Home projection passed: recurring anchors, DST, guarded waits/ceiling projection, wake waits, tutorial isolation")
 '''
 
 with tempfile.TemporaryDirectory(prefix="demora-home-presentation-") as directory:
@@ -184,9 +160,15 @@ for forbidden in ("GlobalWake.status(", "DayNightWake.status(",
                   "ChangeEngine.wakeState(", "LimitFeatures.wakeState(", "TimeGuard.now()"):
     assert forbidden not in home_view, forbidden
 assert "await ChangeEngine.wakeUpAllOffMain()" in home_view
-assert ".buttonStyle(.plain).disabled(startingWake)" in home_view
-assert "minHeight: 116" in home_view and '.font(.system(.largeTitle, design: .serif))' in home_view
-assert "if model.inTutorial {\n                                DemoraDayLine" in home_view
+assert "startingWake: startingWake" in home_view and "onWakeUp: wakeUp" in home_view
+today_view = (ROOT / "Latch/TodayView.swift").read_text()
+now_card = today_view.split("struct NowCard: View {", 1)[1].split("\n}\n", 1)[0]
+assert "if summary.action == .wakeUp {" in now_card and ".disabled(startingWake)" in now_card
+assert "if model.inTutorial {\n                    legacyHome" in home_view
+legacy = home_view.split("    private var legacyHome: some View {", 1)[1]
+assert "DemoraDayLine(date: context.date)" in legacy and "PendingChangeRow(" in legacy
+for retired in ("HomeDayTimeline", "Today's sessions", "UsageInsightsView()"):
+    assert retired not in legacy, ("legacy Home keeps only what the tutorial shows", retired)
 assert "CompactHomeUsageReport(limits:" in home_view
 assert all(token in home_view for token in ("model.tutorial == .applyBoth",
     "model.tutorial == .applyViaContact", "frozenRemaining:", "syncApplyBar()"))
@@ -210,4 +192,4 @@ assert "let shown = max(0, r.usedMinutes)" in report
 for forbidden in (".set(", "removeObject", "NotificationCenter", "FileManager",
                   "PreferenceKey", ".onAppear", ".task"):
     assert forbidden not in report, forbidden
-print("Home/report source guards passed: centered wake action, tutorial routing, bounded viewport, stable refresh identity, no report-side writes or usage export")
+print("Home/report source guards passed: Now card wake action, tutorial routing, bounded viewport, stable refresh identity, no report-side writes or usage export")

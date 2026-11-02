@@ -60,6 +60,12 @@ check(s.facts == [.wakeWait(name: "Morning", minutes: 20), .wakeWait(name: "Soci
 s = NowSummary.make(items: [], spentLimitNames: [],
     wakes: [.init(name: "Legacy", waitMinutes: nil, release: nil)], now: now)
 check(s.hero == .wakeNeeded && s.facts.isEmpty, "1: unknown wait shows no invented fact")
+s = NowSummary.make(items: [], spentLimitNames: [],
+    wakes: [.init(name: "Zero", waitMinutes: 0, release: nil)], now: now)
+check(s.hero == .wakeNeeded && s.facts.isEmpty, "1: a zero wait states no wait")
+let unblock = TodayItem(id: "u", name: "Lift", kind: .unblock, start: ny(11, 2, 16), end: ny(11, 2, 18))
+s = NowSummary.make(items: [unblock], spentLimitNames: [], wakes: [], now: now)
+check(s.hero == .nothing, "an unblock session is neither a block nor a free period")
 s = NowSummary.make(items: [study], spentLimitNames: [],
     wakes: [.init(name: "A", release: now.addingTimeInterval(600)),
             .init(name: "B", release: now.addingTimeInterval(1800)),
@@ -310,3 +316,56 @@ assert '$0.changeIds.contains(change.id)' in waiting and 'contacts.first { $0.id
 for forbidden in ('ContactsRelay.outgoingRequests', 'clearOutgoing', 'SharedStore'):
     assert forbidden not in ledger, ('the ledger reuses what Today loads', forbidden)
 print('Ledger source guards passed: countdown projection, grouping on stored appliesAt, Select bar, waiting contact')
+
+# --- Today layout (§5.1–5.8) ------------------------------------------------
+home = (ROOT / 'Latch/HomeView.swift').read_text()
+today_src = (ROOT / 'Latch/TodayView.swift').read_text()
+host = (ROOT / 'Latch/LimitsUsageReportView.swift').read_text()
+body = section(home, 'struct HomeView: View {', '    /// Status helpers')
+today = section(body, '    private var today: some View {', '    // MARK: Legacy Home')
+assert 'if model.inTutorial {\n                    legacyHome\n                } else {\n                    today' in body, \
+    'the legacy tutorial keeps its Home'
+order = ['TodayHeader(', 'TodayAttentionCard(', 'NowCard(', 'InboxCard(', 'limitsSection',
+         'dayThread(at:', 'changingSoon', 'moreLinks']
+positions = [today.index(token) for token in order]
+assert positions == sorted(positions), ('Today order', order)
+assert 'if !needsWakeTap {' in today and 'Label(tr("Block now")' in today and 'SessionStartView()' in today, \
+    'Block now pinned, hidden while Wake up shows'
+assert '.safeAreaInset(edge: .bottom)' in today
+assert 'ChangesLedgerView(outgoing: activeOutgoing, onRequestsChanged: loadOutgoing)' in today
+assert 'LimitEditorView(existing: nil)' in today and 'model.selectedTab = 1 } label' not in today, \
+    'the empty state opens the editor, not a tab switch'
+assert 'ExtraTimePasswordGate(limitID:' in today and 'ExtraTimePhraseGate(limitID:' in today \
+    and 'ContactGateView(changes: [], extraContext: context' in today, 'existing extra-time gates'
+assert 'CompactHomeUsageReport(limits: model.state.limits,\n                                       reloadRequest: usageRefreshRequest)' in body
+assert 'pending.prefix(2)' in body and 'String(format: tr("All %d"), pending.count)' in body
+assert 'UsageInsightsView()' in body and 'HelpHubView()' in body, 'kept at the bottom until Insights/You'
+assert body.count('.task(id: model.selectedTab == 0)') == 1, 'one inbox load per Home, both layouts'
+assert '.refreshable {\n                usageRefreshRequest = UUID()' in body, 'pull to refresh stays'
+for forbidden in ('GlobalWake.status(', 'DayNightWake.status(', 'LimitFeatures.wakeState(',
+                  'LimitFeatures.extraTimeState(', 'SharedStore.loadBlockedLimitIDs(', 'TimeGuard.now()'):
+    assert forbidden not in body, ('read in event callbacks, never in the body', forbidden)
+snapshot = section(home, '    private func refreshSnapshot(state: LatchState) {', '\n    }\n')
+assert 'SharedStore.loadBlockedLimitIDs()' in snapshot and 'LimitFeatures.extraTimeState(for: limit)' in snapshot
+assert 'guard !model.inTutorial else' in snapshot
+for call in ('refreshWakePresentation(state: state)',):
+    assert call in snapshot
+sources = section(home, "private enum HomeDaySources {", "\nextension NowSummary {")
+for forbidden in ('TimeGuard', 'SharedStore', 'Status(', '.status(', 'ApplicationToken', 'selection'):
+    assert forbidden not in sources, ('day sources are rule names and times only', forbidden)
+adapter = section(home, 'extension NowSummary {', '\n}\n')
+assert 'state.limits' in adapter and '.map(\\.name)' in adapter, 'Now card names are rule names'
+# Today's pieces draw; they don't read guarded clocks or saved state.
+views = today_src.split('enum ExtraTimeRoute {', 1)[0] + today_src.split('struct ExtraTimeRows: View {', 1)[1]
+for forbidden in ('TimeGuard.', 'SharedStore.', 'model.queue', 'ChangeEngine.'):
+    assert forbidden not in views, ('Today views must not', forbidden)
+route = section(today_src, 'enum ExtraTimeRoute {', '\n}\n')
+for gate in ('step.contactRequired', 'step.passwordPolicyID != nil', 'step.phrasePolicyID != nil',
+             'ContactsRelay.pendingExtraRequest(for: limit.id)'):
+    assert gate in route, ('extra time keeps every gate', gate)
+assert 'case .ready, .waiting, .active: return (limit, state)' in today_src, 'only ready/waiting/active rows'
+assert 'CountdownText(to: until)' in today_src, 'extra-time wait is a TimeGuard release'
+# Report host: refresh arrow gone (Insights I6), pull-to-refresh and refresh-on-appear kept.
+assert 'arrow.clockwise' not in host and 'tr("Refresh")' not in host
+assert '.onAppear { onScreen = true; requestRefresh() }' in host and '.onChange(of: reloadRequest)' in host
+print('Today layout guards passed: section order, legacy tutorial routing, pinned Block now, event-only reads, rule names only, report refresh')
