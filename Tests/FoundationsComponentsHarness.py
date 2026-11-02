@@ -163,6 +163,18 @@ with tempfile.TemporaryDirectory(prefix='demora-day-chips-') as directory:
     subprocess.run(['swiftc', str(source), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
 
+# 2c. Review fix: EmptyStateView is its own paper card, so no screen wraps it
+# in another surface (a second outline and extra padding).
+wrapped = re.compile(r'EmptyStateView\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)\s*\.(demoraSurface|paperCard)\(')
+empty_calls = 0
+for path in (ROOT / 'Latch').glob('*.swift'):
+    text = path.read_text()
+    empty_calls += len(re.findall(r'\bEmptyStateView\(', text))
+    assert not wrapped.search(text), (path.name, 'EmptyStateView wrapped in another surface')
+assert empty_calls >= 3, empty_calls
+assert wrapped.search('EmptyStateView(title: tr("a"),\n description: String(format: tr("b"), x))\n .demoraSurface()'), \
+    'wrapper pattern self-test'
+
 # 3. HoldButton: 1.2 s hold, accessible fallback, cancel on release.
 hold = section(components, 'struct HoldButton: View {', '\n}\n')
 assert 'var duration: TimeInterval = 1.2' in hold

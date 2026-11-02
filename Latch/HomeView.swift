@@ -168,7 +168,6 @@ struct HomeView: View {
                             EmptyStateView(title: tr("No limits yet"),
                                            systemImage: "apps.iphone",
                                            description: tr("Add a daily time limit."))
-                                .demoraSurface()
                         }
                         .buttonStyle(.plain)
                     } else {
