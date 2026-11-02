@@ -2,7 +2,7 @@
 
 ## Start here
 - **State:** foundations and the Today build (`docs/today-redesign.md`) are on
-  `design/full-redesign`; the Today build is seven commits after `8d62b11`.
+  `design/full-redesign`; the Today build is nine commits after `8d62b11`.
   Nothing is pushed. Verify passes: all existing harnesses, the new
   `TodayPresentationHarness`, the localization check, `git diff --check`, and
   unsigned arm64 Debug and Release builds of the Latch scheme.
@@ -56,7 +56,7 @@
 | Session | Scope | Commits | Status |
 | --- | --- | --- | --- |
 | Foundations build | Tokens, type, components, text case, tab bar; three review fixes | `7af8f65`, `46181bc`, `b15b244`, `d448215`, `5fad6e0`; fixes `3d25eda`, `23ba309`, `a59969f` | Done, reviewed and fixed |
-| Today build | Pure logic, change receipt, Changes ledger, Today layout, report restyle, extra time moved | `82181d3`, `f3cbd3f`, `2548ac8`, `e16fe23`, `3180864`, `f38951e` | Done; awaiting the main session's review |
+| Today build | Pure logic, change receipt, Changes ledger, Today layout, report restyle, extra time moved | `82181d3`, `f3cbd3f`, `2548ac8`, `e16fe23`, `3180864`, `f38951e`; review fix `d2f8329` | Done, self-reviewed and fixed; awaiting the main session's review |
 
 ## Foundations build (2026-11-02)
 | Decision | Why | Done? |
@@ -106,19 +106,19 @@
 | "Your apps open at" uses the latest of the running wake waits | Some apps open earlier, but the sentence says when your apps (all of them) open | Yes |
 | A wake group with a 0-minute wait shows no "wait" fact | A 0-minute wait opens on the tap; "wait 1 minute" would be invented | Yes |
 | Unblock sessions are their own item kind: on the day thread, but neither a block nor a free period in the Now card | An unblock session lifts blocks on chosen apps; calling it a free period would overstate it | Yes |
-| The Now card names rules active by their schedule; it doesn't work out which rule wins for each app | Per-app precedence depends on opaque selections and is the shield's job; the card never names apps | Limit |
-| "Used up" = the monitor's blocked list (read in an event callback) plus 0-minute limits | Same rule `ExtraTimeState` uses for "spent"; the host never sees usage | Yes |
+| The Now card drops blocks under an active free rule on a higher layer (sleep 0, recurring 1, planned 2, session 3); on the same layer, and for schedule priorities you chose, it keeps the block | Matches how the shield plan layers them without re-implementing per-app precedence, which depends on opaque selections | Limit — same-layer ranks and promotions not resolved |
+| "Used up" mirrors the shield's baseline, read in event callbacks: the monitor's blocked list and 0-minute limits, minus limits with extra time running; a blocked split portion reads "used up for now" with no "Resets at midnight" | Same sets `ShieldController.apply` uses; the host never sees usage | Yes |
 | Sleep blocks join the day sources: global sleep from its start to the wake hour (as the shield plan reads it); day & night groups mirror `sleepIsActive` | Spec lists sleep in rows 3 and in the thread; the old day line had no sleep, so this reuses the existing rule logic as intervals | Yes |
 | Times on another day carry their weekday ("until Tue 07:00"); a week or more away carries the date | Otherwise a block past midnight reads "until 07:00", which looks like this morning | Yes |
 | Tapping the Now card opens Schedules (blocks, free periods) or Limits (used up) | The Rules summary sheets don't exist yet; wake states aren't tappable | Interim — Rules build |
 | Now-card countdowns use `Text(timerInterval:)`; extra-time waits use `CountdownText` | Block ends and projected wake releases are wall-clock; the extra-time release is a TimeGuard deadline | Yes |
 | Day thread: at most 5 items, keeping everything on now and upcoming first, then the most recent past; "now" sits before the first upcoming item; "Full day" always shows and opens Schedules | Today is about now and next; the calendar lives on Schedules until Rules exists | Interim — Rules build |
 | Ledger groups and landing times use the stored `appliesAt` (spec); the countdown keeps its TimeGuard projection; "Later" starts 7 days ahead; due changes count as "Within the hour" | Spec §5.9 and §5.10; the two only differ after a clock change | Yes |
-| Receipt: looser changes and removals always hold to confirm, even with no wait | T3 ties the hold to looser changes; a 0-minute looser wait is still a loosening | Yes — owner may check |
+| Receipt: looser changes always hold to confirm, even with no wait; stricter removals (a contact, a recurring free period) confirm with one tap | T3 and plan D9's 2026-11-02 correction; a 0-minute looser wait is still a loosening | Yes — owner may check |
 | Receipt never says "about" | The preview uses the same policy and clock offset as the queue, so it can't differ from the stored time by a minute | Yes |
 | Receipt refreshes its "Takes effect" each minute while open; a refusal (already pending, monitoring limit) shows on the receipt and clears the app-wide alert | §5.10: keep the sheet and show the message inline | Yes |
 | The legacy tutorial keeps queueing directly from the limit editor and recurring list, and keeps its inline delay hints | Its steps advance on the queued change and highlight specific buttons; a receipt sheet would break the scripted flow | Yes |
-| Receipt copy says "You can cancel it from Today" while the tab is still labelled Home | Approved copy; the tab rename comes with the four-tab switch | Flag for owner |
+| Receipt copy says "You can cancel it from Today" while the tab is still labelled Home; the app-wide "already pending" notice still says "Home tab" | Approved copy; the tab rename comes with the four-tab switch, when both should be reread | Flag for owner |
 | HoldButton's success haptic and `model.queue`'s success haptic both fire on a held confirm | Changing `AppModel.queue` would change every other editor's feedback | Limit |
 | `ChangeRow` takes `PendingChangeRow`'s inputs plus the waiting request; the legacy tutorial Home keeps `PendingChangeRow` | The tutorial Home must render unchanged | Yes — retire with the tutorial |
 | Bulk cancel in the ledger asks once ("Cancel these changes?"); a single Cancel stays immediate | Spec §5.9 | Yes |
@@ -136,3 +136,15 @@
 | The report localization generator now also scans `LimitsUsageView.swift` | Its copy ("No limits yet", "Blocked") was never translated | Yes |
 | Home's bulk-apply notice is now translated | Its key had no entry in any table (the tables held an older wording) | Yes |
 | No visual check of anything | No iOS Simulator runtime on this Mac and no device in this session | Limit |
+
+## Today review fixes
+A fresh reviewer read the whole Today diff. Fixed (`d2f8329`), each with a regression check in `TodayPresentationHarness`:
+
+| Bug | Fix | Test |
+| --- | --- | --- |
+| Extra-time rows read the sent contact request (which decodes saved state and reads TimeGuard) while drawing | Today reads it in `refreshSnapshot` and passes a set to the rows | Source guard: no `ContactsRelay.` in `ExtraTimeRows` |
+| A free session over a recurring block still said "<block> is on until …" | Items carry their effect layer; an active free rule on a higher layer clears lower blocks | Native: free session over recurring → free period; later-layer block survives a planned free window; same layer keeps the block; a finished free session clears nothing |
+| A limit with extra time running still read "used up for today"; a blocked split portion read "Nothing is blocked" | Spent sets mirror `ShieldController.apply`; portions read "used up for now" | Native: portion only / day wins over portion / mixed; source guard on the snapshot reads |
+| "Add a daily time limit." (first-limit card) had no translation in any table | Added in all seven | Every `tr()` key in the Today files is checked in all seven tables |
+
+Not changed: removing a contact or a free period confirms with one tap (plan D9 correction); the ledger groups by the stored `appliesAt` (spec §5.9), so after a clock change its group can disagree with the countdown — logged above.
