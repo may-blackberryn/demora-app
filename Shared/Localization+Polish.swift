@@ -1380,4 +1380,6 @@ let polishStrings: [String: String] = [
     "Split the day": "Podziel dzień",
     "Then runs for %d min.": "Potem trwa %d min.",
     "This change could not be saved. Review it and try again.": "Nie udało się zapisać tej zmiany. Sprawdź ją i spróbuj ponownie.",
+    // Cancel in Changes (docs/rules-redesign.md §8)
+    "A change for this setting is already pending. Cancel it in Changes first if you want something different.": "Zmiana tego ustawienia już czeka. Jeśli chcesz czegoś innego, najpierw anuluj ją w Zmianach.",
 ]

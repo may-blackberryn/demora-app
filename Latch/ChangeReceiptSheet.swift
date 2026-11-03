@@ -152,7 +152,7 @@ struct ChangeReceiptSheet: View {
             dismiss()
         } else {
             notice = model.queueNotice
-                ?? tr("A change for this setting is already pending. Cancel it on the Home tab first if you want something different.")
+                ?? tr("A change for this setting is already pending. Cancel it in Changes first if you want something different.")
             model.queueNotice = nil
             model.queueNoticeIsCapacity = false
         }

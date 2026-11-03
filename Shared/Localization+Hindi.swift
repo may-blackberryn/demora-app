@@ -1380,4 +1380,6 @@ let hindiStrings: [String: String] = [
     "Split the day": "दिन बाँटें",
     "Then runs for %d min.": "फिर %d मिनट चलेगा।",
     "This change could not be saved. Review it and try again.": "यह बदलाव सहेजा नहीं जा सका। इसे देखकर फिर कोशिश करें।",
+    // Cancel in Changes (docs/rules-redesign.md §8)
+    "A change for this setting is already pending. Cancel it in Changes first if you want something different.": "इस सेटिंग के लिए एक बदलाव पहले से बाकी है। कुछ और चाहिए तो पहले उसे बदलावों में रद्द करें।",
 ]

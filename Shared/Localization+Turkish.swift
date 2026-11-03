@@ -1380,4 +1380,6 @@ let turkishStrings: [String: String] = [
     "Split the day": "Günü böl",
     "Then runs for %d min.": "Sonra %d dk sürer.",
     "This change could not be saved. Review it and try again.": "Bu değişiklik kaydedilemedi. Gözden geçirip yeniden dene.",
+    // Cancel in Changes (docs/rules-redesign.md §8)
+    "A change for this setting is already pending. Cancel it in Changes first if you want something different.": "Bu ayar için zaten bekleyen bir değişiklik var. Farklı bir şey istiyorsan önce Değişiklikler'den iptal et.",
 ]

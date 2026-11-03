@@ -474,7 +474,7 @@ struct ScheduledItemDetailView: View {
                         }
                         .disabled(scheduleChangePending(schedule.id, in: model.state))
                         if scheduleChangePending(schedule.id, in: model.state) {
-                            Text(tr("A change for this setting is already pending. Cancel it on the Home tab first if you want something different."))
+                            Text(tr("A change for this setting is already pending. Cancel it in Changes first if you want something different."))
                                 .font(.footnote).foregroundStyle(Ink.faint)
                         }
                     }
@@ -553,6 +553,7 @@ struct ActiveBadge: View {
 struct SessionsListView: View {
     @EnvironmentObject var model: AppModel
     @State private var showAdd = false
+    @State private var receipt: ChangeReceiptRequest?
 
     var body: some View {
         ScrollView {
@@ -581,7 +582,7 @@ struct SessionsListView: View {
                         }
                         .buttonStyle(.plain)
                         Button(tr("End early…")) {
-                            model.queue(.endSessionEarly(id: session.id))
+                            receipt = ChangeReceiptRequest(action: .endSessionEarly(id: session.id))
                         }
                         .buttonStyle(.bordered).controlSize(.small)
                     }
@@ -604,6 +605,7 @@ struct SessionsListView: View {
         .casedNavigationTitle(tr("Sessions"))
         .refreshable { model.tick() }
         .sheet(isPresented: $showAdd) { SessionStartView() }
+        .changeReceipt($receipt)
     }
 
     /// Same session-info page the "now & next" rows push — shows what the
@@ -729,7 +731,7 @@ struct RecurringListView: View {
                         .tutorialHighlight(model.tutorial == .removeSchedule
                                            && model.tutorialScreen == "recurring")
                         if scheduleChangePending(sched.id, in: model.state) {
-                            Text(tr("A change for this setting is already pending. Cancel it on the Home tab first if you want something different."))
+                            Text(tr("A change for this setting is already pending. Cancel it in Changes first if you want something different."))
                                 .font(.footnote).foregroundStyle(Ink.faint)
                         }
                     }

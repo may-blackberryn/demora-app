@@ -1379,4 +1379,6 @@ let portugueseStrings: [String: String] = [
     "Split the day": "Dividir o dia",
     "Then runs for %d min.": "Depois dura %d min.",
     "This change could not be saved. Review it and try again.": "Não foi possível salvar esta mudança. Revise e tente de novo.",
+    // Cancel in Changes (docs/rules-redesign.md §8)
+    "A change for this setting is already pending. Cancel it in Changes first if you want something different.": "Já há uma mudança pendente para esta configuração. Cancele-a primeiro em Alterações se quiser algo diferente.",
 ]

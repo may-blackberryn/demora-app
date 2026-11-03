@@ -504,7 +504,7 @@ final class AppModel: ObservableObject {
             let capacityNotice = MonitorRegistration.rejectionMessage
             queueNoticeIsCapacity = capacityNotice != nil
             queueNotice = capacityNotice
-                ?? tr("A change for this setting is already pending. Cancel it on the Home tab first if you want something different.")
+                ?? tr("A change for this setting is already pending. Cancel it in Changes first if you want something different.")
         }
         return change
     }

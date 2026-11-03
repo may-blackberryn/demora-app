@@ -6,7 +6,7 @@ import FamilyControls
 struct DayNightSchedulesView: View {
     @EnvironmentObject private var model: AppModel
     @State private var editing: DayNightGroup?
-    @State private var removing: DayNightGroup?
+    @State private var receipt: ChangeReceiptRequest?
     @State private var waking = false
     @State private var wakeFailed = false
 
@@ -64,7 +64,9 @@ struct DayNightSchedulesView: View {
                             Text(tr("A change for this group is pending. Its current rules stay in place until that change applies."))
                                 .font(.footnote).foregroundStyle(Ink.faint)
                         }
-                        Button(tr("Remove group"), role: .destructive) { removing = group }
+                        Button(tr("Remove group"), role: .destructive) {
+                            receipt = ChangeReceiptRequest(action: .removeDayNightGroup(id: group.id))
+                        }
                             .disabled(hasPendingCollectionChange)
                     }
                     .demoraSurface()
@@ -107,23 +109,7 @@ struct DayNightSchedulesView: View {
         .sheet(item: $editing) { group in
             DayNightQueuedEditor(group: group)
         }
-        .alert(tr("Remove day/night group?"), isPresented: Binding(
-            get: { removing != nil }, set: { if !$0 { removing = nil } }
-        )) {
-            Button(tr("Queue change"), role: .destructive) {
-                guard let group = removing, !hasPendingCollectionChange,
-                      model.state.dayNightGroups.contains(where: { $0.id == group.id }) else { return }
-                model.queue(.removeDayNightGroup(id: group.id))
-                removing = nil
-            }
-            Button(tr("Cancel"), role: .cancel) { removing = nil }
-        } message: {
-            if let group = removing {
-                let (direction, delay) = model.preview(.removeDayNightGroup(id: group.id))
-                Text(group.name + "\n" + String(format: tr("%@ — takes effect in %@"),
-                                               direction.label, delay.shortDelayLabel))
-            }
-        }
+        .changeReceipt($receipt)
     }
 
     private var hasPendingCollectionChange: Bool {

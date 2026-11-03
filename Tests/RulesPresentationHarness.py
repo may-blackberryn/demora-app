@@ -643,6 +643,20 @@ for name in ('struct WakeBlockEditor: View {', 'struct SleepBlockEditor: View {'
     assert 'takes effect in' not in body and 'model.queue(' not in body and 'RuleEditorPage(' in body, name
 print('Editor guards passed: receipt-only, lifted validity, store-free day & night editor, no inline delays')
 
+# --- Step 5: remaining removals behind the receipt, "Cancel it in Changes" --
+for name in ('Latch/AppModel.swift', 'Latch/ChangeReceiptSheet.swift', 'Latch/SchedulesView.swift'):
+    text = (ROOT / name).read_text()
+    assert 'Cancel it on the Home tab first' not in text, name
+    assert 'Cancel it in Changes first if you want something different.' in text, name
+sessions_list = section((ROOT / 'Latch/SchedulesView.swift').read_text(), 'struct SessionsListView: View {',
+                        '\nstruct PlannedListView')
+assert 'receipt = ChangeReceiptRequest(action: .endSessionEarly(id: session.id))' in sessions_list
+assert 'model.queue(' not in sessions_list and '.changeReceipt($receipt)' in sessions_list
+day_night_page = section(day_night, 'struct DayNightSchedulesView: View {', '\nprivate struct DayNightLiveWakeStatus')
+assert 'receipt = ChangeReceiptRequest(action: .removeDayNightGroup(id: group.id))' in day_night_page
+assert 'model.queue(' not in day_night_page and 'takes effect in' not in day_night_page
+print('Step 5 guards passed: Changes copy, End early and Remove group behind the receipt')
+
 files = [p for p in ('Latch/RulesView.swift', 'Latch/RuleSummarySheet.swift', 'Latch/RuleEditors.swift')
          if (ROOT / p).exists()]
 keys = set()
