@@ -99,13 +99,6 @@ struct LimitsView: View {
                         .demoraSurface()
                     }
                 }
-                if !model.inTutorial {
-                    VStack(alignment: .leading, spacing: 12) {
-                        DemoraSectionTitle(title: tr("General blocks"),
-                                           symbol: "shield.lefthalf.filled")
-                        GeneralBlockingCards()
-                    }
-                }
                 }
                 .padding(.horizontal, 26)
                 .padding(.vertical, 24)

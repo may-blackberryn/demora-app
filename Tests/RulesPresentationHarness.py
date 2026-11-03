@@ -452,9 +452,9 @@ check(line(.dayNight(group.id)) == "Wake \(seven) + \(RuleText.minutes(20, local
 check(line(.planned(trip.id)).hasPrefix("Sat 7 Nov") && line(.planned(trip.id)).contains("→ Sun")
       && line(.planned(trip.id)).hasSuffix("· only 1 app"), "planned (\(line(.planned(trip.id))))")
 check(line(.session(focus.id)) == "Block · 1 app", "session")
-check(line(.appDeletion) == "Any app" && line(.adultWebsites) == "Apple's filter" && line(.websites) == "1 site",
+check(line(.appDeletion) == "Any app" && line(.adultWebsites) == "Apple's filter" && line(.websites) == "1 website",
       "always on")
-check(RuleText.counts(RuleCounts(apps: 2, categories: 0, sites: 3), translate: id) == "2 apps, 3 sites", "counts")
+check(RuleText.counts(RuleCounts(apps: 2, categories: 0, sites: 3), translate: id) == "2 apps, 3 websites", "counts")
 check(RuleText.counts(RuleCounts(), translate: id) == "Nothing selected", "no counts")
 check(line(.limit(newLimit.id)) == "10 min a day · 1 app", "queued addition reads its queued action")
 var weekCal = ny; weekCal.locale = en; weekCal.firstWeekday = 2
@@ -549,3 +549,61 @@ with tempfile.TemporaryDirectory(prefix='demora-rules-') as directory:
                     str(folder / 'RulesPresentation.swift'), str(folder / 'main.swift'),
                     '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True, env={**os.environ, 'TZ': 'America/New_York'})
+
+# --- Rules screens: routing, event-only reads, translations ----------------
+STRING = r'"((?:[^"\\]|\\.)*)"'
+
+
+def section(text, start, end):
+    assert start in text, ('missing', start)
+    return text.split(start, 1)[1].split(end, 1)[0]
+
+
+app = (ROOT / 'Latch/LatchApp.swift').read_text()
+assert 'case 1:\n            if model.inTutorial { LimitsView() } else { RulesView() }' in app, \
+    'Rules sits behind tab 1; the legacy tutorial keeps Limits (R10)'
+rules = (ROOT / 'Latch/RulesView.swift').read_text()
+reads = section(rules, 'enum RuleLiveReads {', '\n}\n')
+outside = rules.replace(reads, '')
+for runtime in ('SharedStore.', 'TimeGuard.', 'LimitFeatures.', 'DayNightWake.', 'GlobalWake.',
+                'SchedulePrecedence.entries'):
+    assert runtime not in outside, ('Rules reads runtime state only in RuleLiveReads', runtime)
+    assert runtime in reads or runtime == 'TimeGuard.', runtime
+assert '.onReceive(model.$state) { refresh($0) }' in rules and '.onAppear { refresh(model.state) }' in rules
+for forbidden in ('model.queue(', 'ChangeEngine.queue', 'applyNow'):
+    assert forbidden not in rules, ('Rules never queues directly', forbidden)
+assert 'if !model.inTutorial {\n                    Button { showChooser = true }' in rules, 'New rule hidden in the tutorial'
+assert 'RuleCatalog.sections(state: state, now: now)' in rules and 'RulePending.index(state.pending)' in rules
+ledger = (ROOT / 'Latch/ChangesLedgerView.swift').read_text()
+assert 'var scrollTo: PendingChange.ID? = nil' in ledger and 'proxy.scrollTo(scrollTo, anchor: .center)' in ledger
+assert '.id(change.id)' in ledger
+
+files = [p for p in ('Latch/RulesView.swift', 'Latch/RuleSummarySheet.swift', 'Latch/RuleEditors.swift')
+         if (ROOT / p).exists()]
+keys = set()
+for name in files:
+    text = (ROOT / name).read_text()
+    for call in re.findall(r'\btr\((?:[^()"]|"(?:[^"\\]|\\.)*")*\)', text):
+        keys.update(re.findall(STRING, call))
+copy = section(rules, 'static func copy(_ kind: NewRuleKind)', '\n    }\n')
+keys.update(k for k in re.findall(STRING, copy) if ' ' in k or k[0].isupper())
+keys = {k for k in keys if k not in ('hourglass', 'play.circle', 'repeat', 'calendar.badge.clock',
+                                     'sun.horizon', 'globe')}
+keys.update(re.findall(r'translate\(' + STRING + r'\)', presentation))
+keys.update(k for k in re.findall(r'return ' + STRING, presentation) if '\\(' not in k)
+assert len(keys) > 80, len(keys)
+TABLES = {'es': '', 'de': '+German', 'fr': '+French', 'pt': '+Portuguese',
+          'pl': '+Polish', 'tr': '+Turkish', 'hi': '+Hindi'}
+entry = re.compile(r'^\s*' + STRING + r'\s*:\s*' + STRING + r',?\s*$', re.M)
+for code, suffix in TABLES.items():
+    pairs = entry.findall((ROOT / f'Shared/Localization{suffix}.swift').read_text())
+    seen = [k for k, _ in pairs]
+    duplicates = sorted({k for k in seen if seen.count(k) > 1})
+    assert not duplicates, (code, 'duplicate keys crash the dictionary literal', duplicates)
+    table = dict(pairs)
+    missing = sorted(k for k in keys if k not in table)
+    assert not missing, (code, 'untranslated', missing)
+    for key in keys:
+        for spec in ('%@', '%d'):
+            assert key.count(spec) == table[key].count(spec), (code, key, spec)
+print(f'Rules source guards passed: tab routing, event-only reads, no direct queue; {len(keys)} strings × 7 tables')

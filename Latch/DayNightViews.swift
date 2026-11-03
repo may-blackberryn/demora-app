@@ -222,7 +222,7 @@ private struct DayNightLiveWakeStatus: View {
     }
 }
 
-private struct DayNightQueuedEditor: View {
+struct DayNightQueuedEditor: View {
     let group: DayNightGroup
     @EnvironmentObject private var model: AppModel
 

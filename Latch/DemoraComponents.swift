@@ -448,6 +448,9 @@ struct EmptyStateView: View {
     let description: String
     var actionTitle: String? = nil
     var action: (() -> Void)? = nil
+    /// An optional second, equal-weight choice (Rules' first use offers two).
+    var secondaryTitle: String? = nil
+    var secondaryAction: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: DemoraSpace.s) {
@@ -468,6 +471,14 @@ struct EmptyStateView: View {
             .accessibilityElement(children: .combine)
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
+                    .buttonStyle(.plain)
+                    .font(DemoraType.button)
+                    .foregroundStyle(accent)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            if let secondaryTitle, let secondaryAction {
+                Button(secondaryTitle, action: secondaryAction)
                     .buttonStyle(.plain)
                     .font(DemoraType.button)
                     .foregroundStyle(accent)

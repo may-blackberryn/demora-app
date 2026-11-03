@@ -600,7 +600,7 @@ enum RuleText {
                          : String(format: translate("%d categories"), counts.categories))
         }
         if counts.sites > 0 {
-            parts.append(counts.sites == 1 ? translate("1 site") : String(format: translate("%d sites"), counts.sites))
+            parts.append(counts.sites == 1 ? translate("1 website") : String(format: translate("%d websites"), counts.sites))
         }
         return parts.isEmpty ? translate("Nothing selected") : parts.joined(separator: ", ")
     }

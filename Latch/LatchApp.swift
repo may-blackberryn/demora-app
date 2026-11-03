@@ -131,7 +131,10 @@ struct RootView: View {
 
     @ViewBuilder private var currentTab: some View {
         switch model.selectedTab {
-        case 1: LimitsView()
+        // Rules replaces Limits; the legacy tutorial keeps the screens its
+        // steps were written for (docs/rules-redesign.md §8, R10).
+        case 1:
+            if model.inTutorial { LimitsView() } else { RulesView() }
         case 2: SchedulesView()
         case 3: SettingsView()
         case 4: DelaysOverridesTabView()

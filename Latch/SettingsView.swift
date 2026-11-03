@@ -849,10 +849,6 @@ struct RulesGridView: View {
                 }
                 .tutorialHighlight(model.tutorial == .addContact
                                    && model.tutorialScreen == "rules")
-                NavigationLink { GeneralBlockingView() } label: {
-                    GridCard(symbol: "shield", title: tr("General blocking"),
-                             subtitle: tr("deletion, websites"))
-                }
             }
             .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
         }
@@ -862,62 +858,9 @@ struct RulesGridView: View {
     }
 }
 
-// MARK: - General blocking grid
-
-struct GeneralBlockingView: View {
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                GeneralBlockingCards()
-                Text(tr("Stop apps from being deleted, limit adult websites, or block specific sites by domain. Every change here goes through your delays."))
-                    .font(.footnote).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
-        }
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("General blocking"))
-    }
-}
-
-struct GeneralBlockingCards: View {
-    @EnvironmentObject var model: AppModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-                    NavigationLink {
-                        BlockToggleEditor(
-                            navTitle: tr("App deletion"),
-                            title: tr("Block app deletion"),
-                            isOn: { $0.blockAppRemoval },
-                            makeAction: { .setBlockAppRemoval($0) },
-                            footer: tr("When on, deleting ANY app from this iPhone is blocked — including Demora itself, so blocks can't be bypassed by uninstalling."))
-                    } label: {
-                        GridCard(symbol: "trash.slash", title: tr("App deletion"),
-                                 subtitle: model.state.blockAppRemoval ? tr("On") : tr("Off"))
-                    }
-                    NavigationLink {
-                        BlockToggleEditor(
-                            navTitle: tr("Adult websites"),
-                            title: tr("Block adult websites"),
-                            isOn: { $0.blockAdultWebsites },
-                            makeAction: { .setBlockAdultWebsites($0) },
-                            footer: tr("Uses Apple's built-in filter to limit adult websites in Safari and other apps."))
-                    } label: {
-                        GridCard(symbol: "eye.slash", title: tr("Adult websites"),
-                                 subtitle: model.state.blockAdultWebsites ? tr("On") : tr("Off"))
-                    }
-                    NavigationLink { WebsiteBlockerEditor() } label: {
-                        GridCard(symbol: "globe", title: tr("Website blocker"),
-                                 subtitle: model.state.blockedDomains.isEmpty
-                                    ? tr("Off")
-                                    : String(format: tr("%d sites"),
-                                             model.state.blockedDomains.count))
-                    }
-        }
-        .buttonStyle(.plain)
-    }
-}
+// MARK: - Always-on rules
+// App deletion, adult websites and the website list live in Rules → Always
+// on (docs/rules-redesign.md §8).
 
 /// A queued on/off blocking toggle (app deletion, adult websites). Reads its
 /// value live from state so the status reflects the latest applied change.
@@ -967,6 +910,13 @@ struct BlockToggleEditor: View {
 struct WebsiteBlockerEditor: View {
     @EnvironmentObject var model: AppModel
     @State private var newDomain = ""
+    @FocusState private var addFocused: Bool
+    /// Opened from New rule → Website: the address field starts focused.
+    let focusAdd: Bool
+
+    init(focusAdd: Bool = false) {
+        self.focusAdd = focusAdd
+    }
 
     private var blockedDomains: [String] { model.state.blockedDomains }
 
@@ -994,6 +944,7 @@ struct WebsiteBlockerEditor: View {
                 }
                 HStack {
                     TextField(tr("e.g. reddit.com"), text: $newDomain)
+                        .focused($addFocused)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
@@ -1013,6 +964,7 @@ struct WebsiteBlockerEditor: View {
         }
         .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(tr("Website blocker"))
+        .onAppear { if focusAdd { addFocused = true } }
     }
 }
 

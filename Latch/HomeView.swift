@@ -740,7 +740,8 @@ private struct HomeWakePresentation: Identifiable {
     let wallRelease: Date?
 }
 
-private enum HomeDayProjection {
+/// Shared with Rules, which projects wake releases the same way.
+enum HomeDayProjection {
     /// Display the earlier of the preserved guarded wait and the rule's known
     /// wall-clock ceiling. This never changes the saved deadline or gate state.
     static func projectedRelease(until: Date, wall: Date, guarded: Date,

@@ -120,6 +120,7 @@ struct HomeView: View {
     var body: some View { Text("home \(lifetime.number)") }
 }
 struct LimitsView: View { var body: some View { Text("limits") } }
+struct RulesView: View { var body: some View { Text("rules") } }
 struct SchedulesView: View { var body: some View { Text("schedules") } }
 struct SettingsView: View { var body: some View { Text("settings") } }
 struct DelaysOverridesTabView: View { var body: some View { Text("delays") } }

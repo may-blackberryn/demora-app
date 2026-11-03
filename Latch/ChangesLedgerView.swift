@@ -164,6 +164,9 @@ struct ChangesLedgerView: View {
     let outgoing: [ContactsRelay.OutgoingRequest]
     /// Reloads `outgoing` after a contact sheet closes.
     let onRequestsChanged: () -> Void
+    /// A change to bring into view when the ledger opens (from a rule's
+    /// pending line or summary sheet).
+    var scrollTo: PendingChange.ID? = nil
     @State private var selecting = false
     @State private var selection: Set<UUID> = []
     @State private var overrideTarget: PendingChange?
@@ -179,7 +182,7 @@ struct ChangesLedgerView: View {
         let groups = LedgerGrouping.groups(model.state.pending, date: \.appliesAt,
                                            now: Date(), calendar: calendar)
             .map { LedgerSection(bucket: $0.bucket, changes: $0.items) }
-        return ScrollView {
+        return ScrollViewReader { proxy in ScrollView {
             VStack(alignment: .leading, spacing: DemoraSpace.sectionGap) {
                 Text(tr("Changes"))
                     .demoraType(.pageTitle)
@@ -195,6 +198,7 @@ struct ChangesLedgerView: View {
                         SectionHeader(title(group.bucket))
                         ForEach(group.changes) { change in
                             row(change)
+                                .id(change.id)
                                 .transition(reduceMotion ? .opacity
                                     : .move(edge: .trailing).combined(with: .opacity))
                         }
@@ -207,6 +211,11 @@ struct ChangesLedgerView: View {
             .frame(maxWidth: .infinity)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.25),
                        value: model.state.pending.map(\.id))
+        }
+        .onAppear {
+            guard let scrollTo else { return }
+            DispatchQueue.main.async { proxy.scrollTo(scrollTo, anchor: .center) }
+        }
         }
         .background(Ink.paper.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
