@@ -69,6 +69,8 @@ struct HomeView: View {
     @State private var extraRequestPending: Set<UUID> = []
     @State private var extraTimes: [UUID: ExtraTimeState] = [:]
     @State private var showLedger = false
+    @State private var ledgerTarget: PendingChange.ID?
+    @State private var ruleSheet: RuleSummaryRequest?
     @State private var showAddLimit = false
     @State private var showSession = false
     @State private var extraPasswordTarget: AppLimit?
@@ -189,7 +191,7 @@ struct HomeView: View {
                                                       wakes: wakePresentation, now: context.date)
                         NowCard(summary: summary, now: context.date,
                                 startingWake: startingWake, wakeSaveFailed: wakeSaveFailed,
-                                onWakeUp: wakeUp, onOpen: destination(for: summary))
+                                onWakeUp: wakeUp, onOpen: destination(for: summary, now: context.date))
                     }
                     if !inbox.isEmpty {
                         VStack(alignment: .leading, spacing: DemoraSpace.cardGap) {
@@ -228,7 +230,12 @@ struct HomeView: View {
             }
         }
         .navigationDestination(isPresented: $showLedger) {
-            ChangesLedgerView(outgoing: activeOutgoing, onRequestsChanged: loadOutgoing)
+            ChangesLedgerView(outgoing: activeOutgoing, onRequestsChanged: loadOutgoing,
+                              scrollTo: ledgerTarget)
+        }
+        .ruleSummary($ruleSheet) { id in
+            ledgerTarget = id
+            showLedger = true
         }
         .sheet(isPresented: $showAddLimit) { LimitEditorView(existing: nil) }
         .sheet(isPresented: $showSession) { SessionStartView() }
@@ -281,7 +288,9 @@ struct HomeView: View {
                     // The full calendar lives on Schedules until Rules exists.
                     SectionHeaderLink(title: tr("Full day")) { model.selectedTab = 2 }
                 }
-                DayThreadView(result: result, now: now)
+                DayThreadView(result: result, now: now) { item in
+                    if let ref = RuleRef(todayItemID: item.id) { ruleSheet = RuleSummaryRequest(ref: ref) }
+                }
             }
         }
     }
@@ -292,6 +301,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: DemoraSpace.cardGap) {
                 SectionHeader(tr("Changing soon")) {
                     SectionHeaderLink(title: String(format: tr("All %d"), pending.count)) {
+                        ledgerTarget = nil
                         showLedger = true
                     }
                 }
@@ -353,12 +363,29 @@ struct HomeView: View {
         .contentShape(Rectangle())
     }
 
-    /// Where tapping the Now card goes until the Rules summary sheets exist.
-    private func destination(for summary: NowSummary) -> (() -> Void)? {
+    /// Tapping the Now card opens the rule behind its sentence; several
+    /// blocks or used-up limits open Rules (docs/rules-redesign.md §8).
+    private func destination(for summary: NowSummary, now: Date) -> (() -> Void)? {
+        let items = HomeDaySources.items(state: model.state, wakes: wakePresentation, date: now)
+        func open(_ item: TodayItem?) -> () -> Void {
+            guard let item, let ref = RuleRef(todayItemID: item.id) else { return { model.selectedTab = 1 } }
+            return { ruleSheet = RuleSummaryRequest(ref: ref) }
+        }
         switch summary.hero {
-        case .oneBlock, .severalBlocks, .free: return { model.selectedTab = 2 }
-        case .spent: return { model.selectedTab = 1 }
-        case .wakeNeeded, .wakeRunning, .nothing: return nil
+        case .oneBlock(let name, let until):
+            return open(items.first { $0.kind == .block && $0.name == name && $0.end == until && $0.isActive(at: now) })
+        case .free(let until):
+            return open(items.first { $0.kind == .free && $0.end == until && $0.isActive(at: now) })
+        case .spent(let names, _):
+            let limits = model.state.limits.filter { names.contains($0.name) }
+            if names.count == 1, limits.count == 1, let limit = limits.first {
+                return { ruleSheet = RuleSummaryRequest(ref: .limit(limit.id)) }
+            }
+            return { model.selectedTab = 1 }
+        case .severalBlocks:
+            return { model.selectedTab = 1 }
+        case .wakeNeeded, .wakeRunning, .nothing:
+            return nil
         }
     }
 

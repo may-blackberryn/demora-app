@@ -891,7 +891,7 @@ private func scheduleChangePending(_ id: UUID, in state: LatchState) -> Bool {
 
 /// Only the selection is editable. Read the current rule for validation so a
 /// stale sheet cannot recreate a deleted schedule or overwrite other fields.
-private struct ScheduleSelectionEditorView: View {
+struct ScheduleSelectionEditorView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     let schedule: BlockSchedule
@@ -1457,6 +1457,14 @@ struct CalendarView: View {
     @AppStorage("weekStartMonday") private var weekStartMonday = false
     @State private var anchor = Date()
     @State private var selected = Calendar.current.startOfDay(for: Date())
+    @State private var summary: RuleSummaryRequest?
+    /// Opens a waiting change in Changes. Without one (the Schedules tab),
+    /// "See in Changes" goes to Today, where Changing soon lists it.
+    let onSeeChange: ((PendingChange.ID) -> Void)?
+
+    init(onSeeChange: ((PendingChange.ID) -> Void)? = nil) {
+        self.onSeeChange = onSeeChange
+    }
 
     private var cal: Calendar {
         var c = Calendar.current
@@ -1475,6 +1483,9 @@ struct CalendarView: View {
         .onAppear {
             if model.inTutorial { model.tutorialScreen = "calendar" }
             model.tutorialDidOpenCalendar()
+        }
+        .ruleSummary($summary) { id in
+            if let onSeeChange { onSeeChange(id) } else { model.selectedTab = 0 }
         }
     }
 
@@ -1542,29 +1553,41 @@ struct CalendarView: View {
                     .font(.subheadline).foregroundStyle(.secondary)
             } else {
                 ForEach(evs) { e in
-                    NavigationLink {
-                        ScheduledItemDetailView(title: e.name, summary: e.summary,
-                                                timing: e.detail, appsTitle: e.appsTitle,
-                                                selection: e.selection,
-                                                scheduleID: e.scheduleID)
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: e.symbol).foregroundStyle(e.color)
-                                .frame(width: 22)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(e.name).font(.subheadline).foregroundStyle(Ink.ink)
-                                Text(e.detail).font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption).foregroundStyle(Ink.faint)
+                    // Outside the legacy tutorial an item opens its rule's
+                    // summary sheet (docs/rules-redesign.md §5.8).
+                    if !model.inTutorial, let ref = e.ref {
+                        Button { summary = RuleSummaryRequest(ref: ref) } label: { eventRow(e) }
+                            .buttonStyle(.plain)
+                    } else {
+                        NavigationLink {
+                            ScheduledItemDetailView(title: e.name, summary: e.summary,
+                                                    timing: e.detail, appsTitle: e.appsTitle,
+                                                    selection: e.selection,
+                                                    scheduleID: e.scheduleID)
+                        } label: {
+                            eventRow(e)
                         }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func eventRow(_ e: DayEvent) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: e.symbol).foregroundStyle(e.color)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(e.name).font(.subheadline).foregroundStyle(Ink.ink)
+                Text(e.detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption).foregroundStyle(Ink.faint)
+        }
+        .contentShape(Rectangle())
     }
 
     struct DayEvent: Identifiable {
@@ -1577,6 +1600,7 @@ struct CalendarView: View {
         var appsTitle: String? = nil
         var selection: FamilyActivitySelection? = nil
         var scheduleID: UUID? = nil
+        var ref: RuleRef? = nil
     }
 
     private func events(on day: Date) -> [DayEvent] {
@@ -1588,13 +1612,13 @@ struct CalendarView: View {
                 summary: s.mode.label,
                 appsTitle: s.mode == .blockAllExcept
                     ? tr("Apps that stay usable") : tr("Apps to block"),
-                selection: s.selection, scheduleID: s.id))
+                selection: s.selection, scheduleID: s.id, ref: .schedule(s.id)))
         }
         for e in model.state.exemptions where e.recurrence.matches(dayOf: day) {
             out.append(DayEvent(symbol: "leaf", name: e.name,
                 detail: "\(minutesLabel(e.startMinutes))–\(minutesLabel(e.endMinutes)) · \(tr("Free period"))",
                 color: accent,
-                summary: tr("Free period")))
+                summary: tr("Free period"), ref: .exemption(e.id)))
         }
         for w in model.state.planned
         where cal.isDate(w.startsAt, inSameDayAs: day)
@@ -1607,7 +1631,7 @@ struct CalendarView: View {
                 appsTitle: w.kind == .free ? nil
                     : (w.kind == .blockAllExcept
                        ? tr("Apps that stay usable") : tr("Apps to block")),
-                selection: w.kind == .free ? nil : w.selection))
+                selection: w.kind == .free ? nil : w.selection, ref: .planned(w.id)))
         }
         if cal.isDateInToday(day) {
             for s in model.state.sessions where s.isActive {
@@ -1620,7 +1644,7 @@ struct CalendarView: View {
                         : tr("Unblocking the selected apps"),
                     appsTitle: s.kind == .block
                         ? tr("Apps blocked") : tr("Apps unblocked"),
-                    selection: s.selection))
+                    selection: s.selection, ref: .session(s.id)))
             }
         }
         return out

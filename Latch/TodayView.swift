@@ -375,6 +375,8 @@ struct DayThreadView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     let result: DayThread.Result
     let now: Date
+    /// Opens the rule behind an item (its summary sheet).
+    var onOpen: ((TodayItem) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -420,7 +422,7 @@ struct DayThreadView: View {
                 .fixedSize(horizontal: false, vertical: true)
             chip(entry)
         }
-        Group {
+        let content = Group {
             if typeSize.isAccessibilitySize {
                 // The time column moves above each item at the largest sizes.
                 VStack(alignment: .leading, spacing: DemoraSpace.xxs) { time; item }
@@ -442,7 +444,16 @@ struct DayThreadView: View {
                 }
             }
         }
-        .accessibilityElement(children: .combine)
+        if let onOpen {
+            Button { onOpen(entry.item) } label: {
+                content.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityHint(tr("Shows what this rule does"))
+        } else {
+            content.accessibilityElement(children: .combine)
+        }
     }
 
     private func dotColor(_ entry: DayThread.Entry) -> Color {

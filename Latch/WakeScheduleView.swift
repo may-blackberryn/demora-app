@@ -78,7 +78,7 @@ private struct GroupWakeAction: View {
     }
 }
 
-private struct GroupWakeDelayEditor: View {
+struct GroupWakeDelayEditor: View {
     let limitID: UUID
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss

@@ -862,49 +862,6 @@ struct RulesGridView: View {
 // App deletion, adult websites and the website list live in Rules → Always
 // on (docs/rules-redesign.md §8).
 
-/// A queued on/off blocking toggle (app deletion, adult websites). Reads its
-/// value live from state so the status reflects the latest applied change.
-struct BlockToggleEditor: View {
-    @AppAccent private var accent
-    @EnvironmentObject var model: AppModel
-    let navTitle: String
-    let title: String
-    let isOn: (LatchState) -> Bool
-    let makeAction: (Bool) -> ChangeAction
-    let footer: String
-
-    var body: some View {
-        let on = isOn(model.state)
-        let action = makeAction(!on)
-        let (dir, delay) = model.preview(action)
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Text(title)
-                    Spacer()
-                    Text(on ? tr("On") : tr("Off"))
-                        .foregroundStyle(on ? accent : Ink.faint)
-                }
-                .font(.headline)
-                Button(on ? tr("Queue: turn off") : tr("Queue: turn on")) {
-                    model.queue(action)
-                }
-                .buttonStyle(.borderedProminent)
-                Label(String(format: tr("%@ — takes effect in %@"),
-                             dir.label, delay.shortDelayLabel),
-                      systemImage: "clock")
-                    .font(.footnote).foregroundStyle(Ink.faint)
-                Text(footer)
-                    .font(.footnote).foregroundStyle(Ink.faint)
-            }
-            .demoraSurface()
-            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
-        }
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(navTitle)
-    }
-}
-
 /// Manual website blocklist — type raw domains instead of relying on Apple's
 /// site picker. Adds/removes are queued through the usual delays.
 struct WebsiteBlockerEditor: View {

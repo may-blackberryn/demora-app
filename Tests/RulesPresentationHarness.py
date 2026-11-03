@@ -178,6 +178,19 @@ check(RulePending.blocksEdit(of: .dayNight(group.id), pending: [change(.upsertDa
 check(RulePending.blocksEdit(of: .legacyWake, pending: [change(.setSleepRule(SleepBlockRule()))]),
       "legacy wake and sleep wait for each other")
 
+// MARK: Today item IDs (HomeDaySources) → rules
+let u = UUID()
+check(RuleRef(todayItemID: "session-\(u)") == .session(u), "session item")
+check(RuleRef(todayItemID: "planned-\(u)") == .planned(u), "planned item")
+check(RuleRef(todayItemID: "schedule-\(u)") == .schedule(u), "recurring item")
+check(RuleRef(todayItemID: "exemption-\(u)") == .exemption(u), "free period item")
+check(RuleRef(todayItemID: "global-sleep") == .legacySleep, "global sleep")
+check(RuleRef(todayItemID: "day-night-sleep-\(u)") == .dayNight(u), "group sleep")
+check(RuleRef(todayItemID: "wake-global") == .legacyWake, "global wake")
+check(RuleRef(todayItemID: "wake-day-night-\(u)") == .dayNight(u), "group wake")
+check(RuleRef(todayItemID: "wake-limit-\(u)") == .limit(u), "limit wake")
+check(RuleRef(todayItemID: "schedule-nope") == nil && RuleRef(todayItemID: "x") == nil, "unknown item")
+
 // MARK: Catalog
 state = LatchState()
 check(RuleCatalog.isFirstUse(RuleCatalog.sections(state: state, now: now)), "first use: only Always on")
@@ -578,6 +591,24 @@ ledger = (ROOT / 'Latch/ChangesLedgerView.swift').read_text()
 assert 'var scrollTo: PendingChange.ID? = nil' in ledger and 'proxy.scrollTo(scrollTo, anchor: .center)' in ledger
 assert '.id(change.id)' in ledger
 
+sheet = (ROOT / 'Latch/RuleSummarySheet.swift').read_text()
+assert 'switch RuleCatalog.source(of: ref, state: state)' in sheet, 'reads the live rule on every render'
+assert 'model.queue(' not in sheet and 'ChangeEngine.' not in sheet, 'every change goes through the receipt'
+for action in ('.removeLimit(id: id)', '.removeSchedule(id: id)', '.removeExemption(id: id)',
+               '.removePlanned(id: id)', '.endSessionEarly(id: id)', '.removeDayNightGroup(id: id)',
+               '.setBlockAppRemoval(!on)', '.setBlockAdultWebsites(!on)'):
+    assert f'receipt = ChangeReceiptRequest(action: {action})' in sheet, action
+assert sheet.count('.disabled(blocked)') >= 10, 'Edit and Remove wait for a pending change'
+assert 'RulePending.blocksEdit(of: ref, pending: model.state.pending)' in sheet
+sheet_reads = section(sheet, '    private func refresh() {', '\n    }\n')
+assert 'RuleLiveReads.read(state: model.state)' in sheet_reads and 'LimitFeatures.extraTimeState' in sheet_reads
+assert sheet.replace(sheet_reads, '').count('LimitFeatures.') == 0, 'extra time is read in events only'
+assert 'model.selectedTab = 0' in sheet and 'requestExtraTime' not in sheet, 'extra time starts on Today only (T5)'
+home_src = (ROOT / 'Latch/HomeView.swift').read_text()
+assert 'if let ref = RuleRef(todayItemID: item.id) { ruleSheet = RuleSummaryRequest(ref: ref) }' in home_src
+assert 'onOpen: destination(for: summary, now: context.date)' in home_src
+print('Summary sheet guards passed: live source, receipt-only actions, pending guard, event reads, Today links')
+
 files = [p for p in ('Latch/RulesView.swift', 'Latch/RuleSummarySheet.swift', 'Latch/RuleEditors.swift')
          if (ROOT / p).exists()]
 keys = set()
@@ -590,6 +621,10 @@ keys.update(k for k in re.findall(STRING, copy) if ' ' in k or k[0].isupper())
 keys = {k for k in keys if k not in ('hourglass', 'play.circle', 'repeat', 'calendar.badge.clock',
                                      'sun.horizon', 'globe')}
 keys.update(re.findall(r'translate\(' + STRING + r'\)', presentation))
+if (ROOT / 'Latch/RuleSummarySheet.swift').exists():
+    sheet_src = (ROOT / 'Latch/RuleSummarySheet.swift').read_text()
+    keys.update(k for k in re.findall(r'return ' + STRING, sheet_src)
+                if '\\(' not in k and not re.fullmatch(r'[a-z-]+', k))
 keys.update(k for k in re.findall(r'return ' + STRING, presentation) if '\\(' not in k)
 assert len(keys) > 80, len(keys)
 TABLES = {'es': '', 'de': '+German', 'fr': '+French', 'pt': '+Portuguese',

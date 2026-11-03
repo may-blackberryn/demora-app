@@ -35,7 +35,7 @@ struct RulesView: View {
     @State private var showChooser = false
     @State private var chosen: NewRuleKind?
     @State private var newRule: NewRuleKind?
-    @State private var editingLimit: AppLimit?
+    @State private var summary: RuleSummaryRequest?
     @State private var recheckInFlight = false
     @State private var recheckMessage: String?
 
@@ -88,7 +88,7 @@ struct RulesView: View {
             }
         }
         .sheet(item: $newRule) { kind in editor(for: kind) }
-        .sheet(item: $editingLimit) { LimitEditorView(existing: $0) }
+        .ruleSummary($summary) { id in path.append(.ledger(id)) }
         .alert(tr("Limit recheck"), isPresented: Binding(
             get: { recheckMessage != nil },
             set: { if !$0 { recheckMessage = nil } }
@@ -253,14 +253,7 @@ struct RulesView: View {
     }
 
     private func open(_ ref: RuleRef) {
-        switch ref {
-        case .limit(let id):
-            editingLimit = model.state.limits.first { $0.id == id }
-        case .websites:
-            path.append(.websites(focusAdd: false))
-        default:
-            break
-        }
+        summary = RuleSummaryRequest(ref: ref)
     }
 
     @ViewBuilder private func editor(for kind: NewRuleKind) -> some View {
@@ -276,7 +269,7 @@ struct RulesView: View {
 
     @ViewBuilder private func destination(_ route: RulesRoute) -> some View {
         switch route {
-        case .calendar: CalendarView()
+        case .calendar: CalendarView(onSeeChange: { id in path.append(.ledger(id)) })
         case .conflicts: ScheduleConflictsView()
         case .waits: DelayPolicySettingsView()
         case .websites(let focusAdd): WebsiteBlockerEditor(focusAdd: focusAdd)

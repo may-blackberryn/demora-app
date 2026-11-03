@@ -46,6 +46,26 @@ enum RuleRef: Hashable {
     }
 }
 
+extension RuleRef {
+    /// The rule behind one of Today's items (`HomeDaySources` IDs), so the Now
+    /// card and the day thread open the same summary sheet.
+    init?(todayItemID id: String) {
+        func uuid(_ prefix: String) -> UUID? {
+            id.hasPrefix(prefix) ? UUID(uuidString: String(id.dropFirst(prefix.count))) : nil
+        }
+        if id == "global-sleep" { self = .legacySleep }
+        else if id == "wake-global" { self = .legacyWake }
+        else if let value = uuid("day-night-sleep-") { self = .dayNight(value) }
+        else if let value = uuid("wake-day-night-") { self = .dayNight(value) }
+        else if let value = uuid("wake-limit-") { self = .limit(value) }
+        else if let value = uuid("session-") { self = .session(value) }
+        else if let value = uuid("planned-") { self = .planned(value) }
+        else if let value = uuid("schedule-") { self = .schedule(value) }
+        else if let value = uuid("exemption-") { self = .exemption(value) }
+        else { return nil }
+    }
+}
+
 enum RuleKind: Equatable {
     case limit, repeatingBlock, freePeriod, dayNight, planned, session, alwaysOn, waits
 }

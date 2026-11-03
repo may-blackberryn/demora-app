@@ -360,7 +360,7 @@ assert positions == sorted(positions), ('Today order', order)
 assert 'if !needsWakeTap {' in today and 'Label(tr("Block now")' in today and 'SessionStartView()' in today, \
     'Block now pinned, hidden while Wake up shows'
 assert '.safeAreaInset(edge: .bottom)' in today
-assert 'ChangesLedgerView(outgoing: activeOutgoing, onRequestsChanged: loadOutgoing)' in today
+assert 'ChangesLedgerView(outgoing: activeOutgoing, onRequestsChanged: loadOutgoing,\n                              scrollTo: ledgerTarget)' in today
 assert 'LimitEditorView(existing: nil)' in today and 'model.selectedTab = 1 } label' not in today, \
     'the empty state opens the editor, not a tab switch'
 assert 'ExtraTimePasswordGate(limitID:' in today and 'ExtraTimePhraseGate(limitID:' in today \
