@@ -64,11 +64,13 @@ class MigrationDelayPresentationTests(unittest.TestCase):
         self.assertIn("NavigationLink { DelayPolicySettingsView() }", rows)
         self.assertIn("model.state.delayPolicy", rows)
         self.assertIn(".setDelayPolicy(policy.normalized)", self.editor)
-        self.assertIn('Button(tr("Queue change"))', self.editor)
-        self.assertIn("if model.queue(action) != nil { dismiss() }", self.editor)
+        # Rules build: the editor ends on the change receipt, which queues.
+        self.assertIn("receipt = ChangeReceiptRequest(action: action)", self.editor)
+        self.assertIn(".changeReceipt($receipt) { dismiss() }", self.editor)
+        self.assertNotIn("model.queue(", self.editor)
         self.assertIn("policy = model.state.delayPolicy", self.editor)
         self.assertIn("policy.normalized != model.state.delayPolicy.normalized", self.editor)
-        self.assertIn(".disabled(pending)", self.editor)
+        self.assertIn("waiting: pending", self.editor)
 
     def test_queue_uses_current_policy_and_only_appends_new_deadline(self):
         model = between(source("Latch/AppModel.swift"),

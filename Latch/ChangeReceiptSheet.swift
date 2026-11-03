@@ -12,6 +12,11 @@ import SwiftUI
 struct ChangeReceiptRequest: Identifiable {
     let id = UUID()
     let action: ChangeAction
+    /// One more line under "Takes effect", e.g. "Then runs for 60 min."
+    var note: String? = nil
+    /// Checked again just before queueing (the day & night editor re-runs its
+    /// collection guards); false keeps the receipt open with a notice.
+    var canQueue: (() -> Bool)? = nil
 }
 
 extension View {
@@ -32,7 +37,8 @@ private struct ChangeReceiptPresenter: ViewModifier {
         content.sheet(item: $request, onDismiss: {
             if queued { queued = false; onQueued() }
         }) { request in
-            ChangeReceiptSheet(action: request.action) { queued = true }
+            ChangeReceiptSheet(action: request.action, note: request.note,
+                               canQueue: request.canQueue) { queued = true }
         }
     }
 }
@@ -43,6 +49,8 @@ struct ChangeReceiptSheet: View {
     @Environment(\.locale) private var locale
     @AppLoosen private var loosen
     let action: ChangeAction
+    var note: String? = nil
+    var canQueue: (() -> Bool)? = nil
     let onQueued: () -> Void
     @State private var notice: String?
 
@@ -80,6 +88,12 @@ struct ChangeReceiptSheet: View {
                     if let wait = plan.wait {
                         row(tr("Wait"), ReceiptPlan.waitText(wait, locale: locale))
                     }
+                }
+                if let note {
+                    Text(note)
+                        .demoraType(.meta)
+                        .foregroundStyle(Ink.ink)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if plan.wait != nil {
                     Text(tr("Until then nothing changes. You can cancel it from Today."))
@@ -129,6 +143,10 @@ struct ChangeReceiptSheet: View {
     /// Queues through the normal change engine. A refusal (already pending,
     /// monitoring capacity) stays on the receipt instead of the app-wide alert.
     private func commit() {
+        if let canQueue, !canQueue() {
+            notice = tr("This change could not be saved. Review it and try again.")
+            return
+        }
         if model.queue(action) != nil {
             onQueued()
             dismiss()

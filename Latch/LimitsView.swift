@@ -110,8 +110,8 @@ struct LimitsView: View {
             .onAppear {
                 if model.inTutorial && model.selectedTab == 1 { model.tutorialScreen = "limits" }
             }
-            .sheet(isPresented: $showAdd) { LimitEditorView(existing: nil) }
-            .sheet(item: $editTarget) { LimitEditorView(existing: $0) }
+            .sheet(isPresented: $showAdd) { TutorialLimitEditorView(existing: nil) }
+            .sheet(item: $editTarget) { TutorialLimitEditorView(existing: $0) }
             .alert(tr("Limit recheck"), isPresented: Binding(
                 get: { recheckMessage != nil },
                 set: { if !$0 { recheckMessage = nil } }
@@ -162,34 +162,6 @@ struct LimitsView: View {
 }
 
 
-private struct BoundaryWeekdaysEditor: View {
-    @AppAccent private var accent
-    @Binding var weekdays: Set<Int>
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(tr("Days")).font(.headline)
-            HStack(spacing: 5) {
-                ForEach(1...7, id: \.self) { day in
-                    Button {
-                        if weekdays.contains(day) { weekdays.remove(day) }
-                        else { weekdays.insert(day) }
-                    } label: {
-                        Text(Calendar.current.veryShortWeekdaySymbols[day - 1])
-                            .font(.caption.bold())
-                            .frame(maxWidth: .infinity, minHeight: 36)
-                            .foregroundStyle(weekdays.contains(day) ? .white : Ink.ink)
-                            .background(weekdays.contains(day) ? accent
-                                        : Ink.ink.opacity(0.06), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .demoraSurface()
-    }
-}
-
 private struct BoundaryScopeEditor: View {
     @AppAccent private var accent
     @EnvironmentObject var model: AppModel
@@ -198,7 +170,6 @@ private struct BoundaryScopeEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(tr("What to block")).font(.headline)
             ForEach(BoundaryBlockMode.allCases) { mode in
                 Button {
                     scope.mode = mode
@@ -260,17 +231,21 @@ private struct BoundaryScopeEditor: View {
                 }
             }
         }
-        .demoraSurface()
         .sheet(isPresented: $showPicker) {
             AppPickerSheet(selection: $scope.selection)
         }
     }
 }
 
+/// Legacy wake-up, reachable only from its card. All guards are the old
+/// editor's: one wake/sleep change at a time, wake ≠ sleep start, `isValid`.
 struct WakeBlockEditor: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    var presentation: EditorPresentation = .pushed
     @State private var rule = WakeBlockRule()
+    @State private var loaded = false
+    @State private var receipt: ChangeReceiptRequest?
 
     private func localizedWeekday(_ day: Int) -> String {
         var calendar = Calendar.current
@@ -279,110 +254,100 @@ struct WakeBlockEditor: View {
     }
 
     private var boundaryChangePending: Bool {
-        model.state.pending.contains {
-            switch $0.action {
-            case .setWakeRule, .setSleepRule: return true
-            default: return false
-            }
-        }
+        RulePending.blocksEdit(of: .legacyWake, pending: model.state.pending)
+    }
+
+    private var clashesWithSleep: Bool {
+        model.state.sleepRule.enabled && model.state.sleepRule.startMinutes == rule.startHour * 60
+    }
+
+    private var problem: String? {
+        if clashesWithSleep { return tr("Wake-up time must differ from when sleep begins.") }
+        if !rule.isValid(in: model.state) { return tr("Choose at least one app.") }
+        return nil
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Toggle(tr("Enable wake-up blocking"), isOn: $rule.enabled)
-                    .demoraSurface()
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(tr("Wake-up day begins")).font(.headline)
-                    Picker(tr("Wake-up day begins"), selection: $rule.startHour) {
-                        ForEach([0, 3, 6, 9], id: \.self) { hour in
-                            Text(String(format: "%02d:00", hour)).tag(hour)
-                        }
+        RuleEditorPage(title: tr("Wake up"), presentation: presentation,
+                       isDirty: loaded && rule != model.state.wakeRule,
+                       problem: problem,
+                       canReview: loaded && rule != model.state.wakeRule && problem == nil,
+                       waiting: boundaryChangePending,
+                       onReview: { receipt = ChangeReceiptRequest(action: .setWakeRule(rule)) }) {
+            EditorSection(tr("Wake-up")) {
+                Toggle(tr("Enable wake-up blocking"), isOn: $rule.enabled).frame(minHeight: 44)
+                Text(tr("Wake-up day begins")).demoraType(.body).foregroundStyle(Ink.ink)
+                Picker(tr("Wake-up day begins"), selection: $rule.startHour) {
+                    ForEach([0, 3, 6, 9], id: \.self) { hour in
+                        Text(String(format: "%02d:00", hour)).tag(hour)
                     }
-                    .pickerStyle(.segmented)
-                    Text(tr("Sleep blocking ends at this time, even if the wake-up tap is off."))
-                        .font(.footnote).foregroundStyle(Ink.faint)
                 }
-                .demoraSurface()
+                .pickerStyle(.segmented)
+                EditorNote(text: tr("Sleep blocking ends at this time, even if the wake-up tap is off."))
                 if rule.enabled {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(tr("Wait after tapping Wake up"))
-                            .font(.subheadline.weight(.semibold))
-                        DurationPicker(minutes: $rule.waitMinutes,
-                                       maxHours: 24, minMinutes: 0)
-                        WakeCeilingPicker(latestMinutes: $rule.latestMinutes,
-                                          startMinutes: rule.startHour * 60)
-                    }
-                    .demoraSurface()
-                    BoundaryWeekdaysEditor(weekdays: $rule.weekdays)
-                    DisclosureGroup(tr("Customize wake-up by day")) {
-                        ForEach(rule.weekdays.sorted(), id: \.self) { day in
-                            VStack(alignment: .leading, spacing: 10) {
-                                Toggle(localizedWeekday(day), isOn: Binding(
-                                    get: { rule.weekdayLatestMinutes?[day] != nil },
-                                    set: { enabled in
-                                        if enabled {
-                                            var overrides = rule.weekdayLatestMinutes ?? [:]
-                                            overrides[day] = rule.latestMinutes ?? min(1410, max(720, rule.startHour * 60 + 30))
-                                            rule.weekdayLatestMinutes = overrides
-                                        } else { rule.weekdayLatestMinutes?.removeValue(forKey: day) }
-                                    }))
-                                if rule.weekdayLatestMinutes?[day] != nil {
-                                    WakeCeilingPicker(latestMinutes: Binding(
-                                        get: { rule.weekdayLatestMinutes?[day] },
-                                        set: { value in rule.weekdayLatestMinutes?[day] = value }),
-                                        startMinutes: rule.startHour * 60)
-                                }
-                            }.padding(.vertical, 8)
-                        }
-                    }
-                    BoundaryScopeEditor(scope: $rule.scope)
-                }
-                if rule != model.state.wakeRule {
-                    if boundaryChangePending {
-                        Text(tr("Wait for the pending wake/sleep change before editing another."))
-                            .font(.footnote).foregroundStyle(Ink.faint)
-                    }
-                    if model.state.sleepRule.enabled
-                        && model.state.sleepRule.startMinutes == rule.startHour * 60 {
-                        Text(tr("Wake-up time must differ from when sleep begins."))
-                            .font(.footnote).foregroundStyle(Ink.danger)
-                    }
-                    let (direction, delay) = model.preview(.setWakeRule(rule))
-                    Label(String(format: tr("%@ — takes effect in %@"),
-                                 direction.label, delay.shortDelayLabel),
-                          systemImage: "clock")
-                        .font(.footnote).foregroundStyle(Ink.faint)
-                    Button(tr("Queue change")) {
-                        if model.queue(.setWakeRule(rule)) != nil { dismiss() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(boundaryChangePending || !rule.isValid(in: model.state)
-                              || (model.state.sleepRule.enabled
-                                  && model.state.sleepRule.startMinutes
-                                     == rule.startHour * 60))
+                    Text(tr("Wait after tapping Wake up")).demoraType(.body).foregroundStyle(Ink.ink)
+                    DurationControl(minutes: $rule.waitMinutes, range: 0...1440)
+                    WakeCeilingPicker(latestMinutes: $rule.latestMinutes,
+                                      startMinutes: rule.startHour * 60)
                 }
             }
-            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
+            if rule.enabled {
+                EditorSection(tr("Days")) {
+                    DayChips(selection: $rule.weekdays)
+                    EditorRow(title: tr("Different times per day"),
+                              value: tr((rule.weekdayLatestMinutes ?? [:]).isEmpty ? "Off" : "On")) {
+                        EditorSubPage(title: tr("Customize wake-up by day")) {
+                            EditorSection(tr("Wake-up")) { perDay }
+                        }
+                    }
+                }
+                EditorSection(tr("What")) {
+                    BoundaryScopeEditor(scope: $rule.scope)
+                }
+            }
         }
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Wake up"))
-        .onAppear { rule = model.state.wakeRule }
+        .changeReceipt($receipt) { dismiss() }
+        .onAppear {
+            guard !loaded else { return }
+            rule = model.state.wakeRule
+            loaded = true
+        }
+    }
+
+    @ViewBuilder private var perDay: some View {
+        ForEach(rule.weekdays.sorted(), id: \.self) { day in
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle(localizedWeekday(day), isOn: Binding(
+                    get: { rule.weekdayLatestMinutes?[day] != nil },
+                    set: { enabled in
+                        if enabled {
+                            var overrides = rule.weekdayLatestMinutes ?? [:]
+                            overrides[day] = rule.latestMinutes ?? min(1410, max(720, rule.startHour * 60 + 30))
+                            rule.weekdayLatestMinutes = overrides
+                        } else { rule.weekdayLatestMinutes?.removeValue(forKey: day) }
+                    }))
+                if rule.weekdayLatestMinutes?[day] != nil {
+                    WakeCeilingPicker(latestMinutes: Binding(
+                        get: { rule.weekdayLatestMinutes?[day] },
+                        set: { value in rule.weekdayLatestMinutes?[day] = value }),
+                        startMinutes: rule.startHour * 60)
+                }
+            }.padding(.vertical, 8)
+        }
     }
 }
 
+/// Legacy sleep, reachable only from its card. Guards unchanged.
 struct SleepBlockEditor: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    var presentation: EditorPresentation = .pushed
     @State private var rule = SleepBlockRule()
+    @State private var loaded = false
+    @State private var receipt: ChangeReceiptRequest?
 
     private var boundaryChangePending: Bool {
-        model.state.pending.contains {
-            switch $0.action {
-            case .setWakeRule, .setSleepRule: return true
-            default: return false
-            }
-        }
+        RulePending.blocksEdit(of: .legacySleep, pending: model.state.pending)
     }
 
     private var hour: Binding<Int> {
@@ -395,59 +360,53 @@ struct SleepBlockEditor: View {
                 set: { rule.startMinutes = (rule.startMinutes / 60) * 60 + $0 })
     }
 
+    private var valid: Bool {
+        rule.isValid(in: model.state, wakeHour: model.state.wakeRule.startHour)
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Toggle(tr("Enable sleep blocking"), isOn: $rule.enabled)
-                    .demoraSurface()
+        RuleEditorPage(title: tr("Sleep"), presentation: presentation,
+                       isDirty: loaded && rule != model.state.sleepRule,
+                       problem: valid ? nil : tr("Choose at least one app."),
+                       canReview: loaded && rule != model.state.sleepRule && valid,
+                       waiting: boundaryChangePending,
+                       onReview: { receipt = ChangeReceiptRequest(action: .setSleepRule(rule)) }) {
+            EditorSection(tr("Sleep")) {
+                Toggle(tr("Enable sleep blocking"), isOn: $rule.enabled).frame(minHeight: 44)
                 if rule.enabled {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(tr("Sleep begins")).font(.headline)
-                        HStack {
-                            Picker(tr("Hour"), selection: hour) {
-                                ForEach(0..<24, id: \.self) {
-                                    Text(String(format: "%02d", $0)).tag($0)
-                                }
-                            }
-                            Picker(tr("Minute"), selection: minute) {
-                                ForEach(rule.startMinutes / 60 == 23
-                                        ? [0, 15, 30] : [0, 15, 30, 45], id: \.self) {
-                                    Text(String(format: "%02d", $0)).tag($0)
-                                }
+                    Text(tr("Sleep begins")).demoraType(.body).foregroundStyle(Ink.ink)
+                    HStack {
+                        Picker(tr("Hour"), selection: hour) {
+                            ForEach(0..<24, id: \.self) {
+                                Text(String(format: "%02d", $0)).tag($0)
                             }
                         }
-                        Text(String(format: tr("Ends at %02d:00, when the wake-up day begins."),
-                                    model.state.wakeRule.startHour))
-                            .font(.footnote).foregroundStyle(Ink.faint)
+                        Picker(tr("Minute"), selection: minute) {
+                            ForEach(rule.startMinutes / 60 == 23
+                                    ? [0, 15, 30] : [0, 15, 30, 45], id: \.self) {
+                                Text(String(format: "%02d", $0)).tag($0)
+                            }
+                        }
                     }
-                    .demoraSurface()
-                    BoundaryWeekdaysEditor(weekdays: $rule.weekdays)
-                    BoundaryScopeEditor(scope: $rule.scope)
-                }
-                if rule != model.state.sleepRule {
-                    if boundaryChangePending {
-                        Text(tr("Wait for the pending wake/sleep change before editing another."))
-                            .font(.footnote).foregroundStyle(Ink.faint)
-                    }
-                    let (direction, delay) = model.preview(.setSleepRule(rule))
-                    Label(String(format: tr("%@ — takes effect in %@"),
-                                 direction.label, delay.shortDelayLabel),
-                          systemImage: "clock")
-                        .font(.footnote).foregroundStyle(Ink.faint)
-                    Button(tr("Queue change")) {
-                        if model.queue(.setSleepRule(rule)) != nil { dismiss() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(boundaryChangePending
-                              || !rule.isValid(in: model.state,
-                                            wakeHour: model.state.wakeRule.startHour))
+                    EditorNote(text: String(format: tr("Ends at %02d:00, when the wake-up day begins."),
+                                            model.state.wakeRule.startHour))
                 }
             }
-            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
+            if rule.enabled {
+                EditorSection(tr("Days")) {
+                    DayChips(selection: $rule.weekdays)
+                }
+                EditorSection(tr("What")) {
+                    BoundaryScopeEditor(scope: $rule.scope)
+                }
+            }
         }
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Sleep"))
-        .onAppear { rule = model.state.sleepRule }
+        .changeReceipt($receipt) { dismiss() }
+        .onAppear {
+            guard !loaded else { return }
+            rule = model.state.sleepRule
+            loaded = true
+        }
     }
 }
 
@@ -572,7 +531,10 @@ struct SelectedAppsView: View {
     }
 }
 
-struct LimitEditorView: View {
+/// The limit editor the legacy tutorial's steps were written for (they
+/// highlight its Remove button and queue directly). Everyone else uses
+/// `LimitEditorView` (RuleEditors.swift). Retired with the tutorial (R10).
+struct TutorialLimitEditorView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
 

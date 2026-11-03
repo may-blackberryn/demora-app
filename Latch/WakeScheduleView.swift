@@ -78,6 +78,8 @@ private struct GroupWakeAction: View {
     }
 }
 
+/// Per-limit wake-up (R7): only for limits that already use one. Its own
+/// change (`.setGroupWakeSchedule`), separate from the limit editor.
 struct GroupWakeDelayEditor: View {
     let limitID: UUID
     @EnvironmentObject private var model: AppModel
@@ -86,6 +88,7 @@ struct GroupWakeDelayEditor: View {
     @State private var minutes = 10
     @State private var schedule = LimitWakeSchedule()
     @State private var loaded = false
+    @State private var receipt: ChangeReceiptRequest?
 
     private var limit: AppLimit? { model.state.limits.first { $0.id == limitID } }
     private var action: ChangeAction { .setGroupWakeSchedule(id: limitID, minutes: enabled ? minutes : nil, schedule: schedule) }
@@ -98,38 +101,23 @@ struct GroupWakeDelayEditor: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                DemoraPageTitle(title: limit?.name ?? tr("Group wake-up"))
-                Toggle(tr("Require wake-up tap"), isOn: $enabled)
+        RuleEditorPage(title: limit?.name ?? tr("Group wake-up"), presentation: .pushed,
+                       isDirty: loaded && changed,
+                       canReview: limit != nil && changed && !isPending && schedule.isValid,
+                       waiting: isPending,
+                       onReview: { receipt = ChangeReceiptRequest(action: action) }) {
+            EditorSection(tr("Wake-up")) {
+                Toggle(tr("Ask me to tap Wake up"), isOn: $enabled).frame(minHeight: 44)
                 if enabled {
                     WakeTimingEditor(startMinutes: $schedule.startMinutes, waitMinutes: $minutes,
                                      weekdays: $schedule.weekdays, dayTimings: $schedule.dayTimings,
                                      latestMinutes: $schedule.latestMinutes)
                 }
-                Text(tr("A new wait applies to the next tap. A latest wake-up time can end today's gate once this delayed change applies. Turning this off still follows your less-strict delay."))
-                    .font(.footnote).foregroundStyle(Ink.faint)
-                Text(tr("Usage already spent, split budgets and extra-time grants are not reset by this change."))
-                    .font(.footnote).foregroundStyle(Ink.faint)
-                if isPending {
-                    Text(tr("Wait for this group's pending change before editing its wake-up wait."))
-                        .foregroundStyle(Ink.faint)
-                }
-                if changed {
-                    let (direction, delay) = model.preview(action)
-                    Text(String(format: tr("%@ — takes effect in %@"), direction.label, delay.shortDelayLabel))
-                        .font(.footnote).foregroundStyle(Ink.faint)
-                }
-                Button(tr("Queue change")) {
-                    if model.queue(action) != nil { dismiss() }
-                }
-                .buttonStyle(DemoraPrimaryButtonStyle())
-                .disabled(limit == nil || !changed || isPending || !schedule.isValid)
             }
-            .padding(24).frame(maxWidth: 640).frame(maxWidth: .infinity)
+            EditorNote(text: tr("A new wait applies to the next tap. A latest wake-up time can end today's gate once this delayed change applies. Turning this off still follows your less-strict delay.")
+                       + " " + tr("Usage already spent, split budgets and extra-time grants are not reset by this change."))
         }
-        .paper()
-        .casedNavigationTitle(tr("Group wake-up"))
+        .changeReceipt($receipt) { dismiss() }
         .onAppear {
             guard !loaded else { return }
             loaded = true

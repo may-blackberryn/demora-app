@@ -78,41 +78,29 @@ struct DelayPolicyNavigationRows: View {
     }
 }
 
+/// Your waits (§5.7 K). The new policy follows the current one; countdowns
+/// already running keep their time.
 struct DelayPolicySettingsView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var policy = DelayPolicy()
     @State private var loaded = false
+    @State private var receipt: ChangeReceiptRequest?
     private var action: ChangeAction { .setDelayPolicy(policy.normalized) }
     private var pending: Bool {
         model.state.pending.contains { ChangeEngine.conflictKey($0.action) == "delayPolicy" }
     }
+    private var changed: Bool {
+        loaded && policy.isValid && policy.normalized != model.state.delayPolicy.normalized
+    }
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                DemoraPageTitle(title: tr("How changes wait"))
-                Text(tr("Changing your delay mode follows your current delays. Countdowns already running keep their original deadline."))
-                    .font(.subheadline).foregroundStyle(Ink.faint)
-                DelayPolicyPicker(policy: $policy)
-                if pending {
-                    Text(tr("A change for this setting is already pending. Cancel it on the Home tab first if you want something different."))
-                        .font(.footnote).foregroundStyle(Ink.faint)
-                }
-                if policy.isValid && policy.normalized != model.state.delayPolicy.normalized {
-                    let (direction, delay) = model.preview(action)
-                    Label(String(format: tr("%@ — takes effect in %@"),
-                                 direction.label, delay.shortDelayLabel), systemImage: "clock")
-                        .font(.footnote).foregroundStyle(Ink.faint)
-                    Button(tr("Queue change")) {
-                        if model.queue(action) != nil { dismiss() }
-                    }
-                    .buttonStyle(DemoraPrimaryButtonStyle()).disabled(pending)
-                }
-            }
-            .padding(26).frame(maxWidth: 640).frame(maxWidth: .infinity)
+        RuleEditorPage(title: tr("Your waits"), presentation: .pushed,
+                       isDirty: changed, canReview: changed, waiting: pending,
+                       onReview: { receipt = ChangeReceiptRequest(action: action) }) {
+            EditorNote(text: tr("New waits follow your current waits. Countdowns already running keep their time."))
+            DelayPolicyPicker(policy: $policy)
         }
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Delays"))
+        .changeReceipt($receipt) { dismiss() }
         .onAppear {
             guard !loaded else { return }
             policy = model.state.delayPolicy

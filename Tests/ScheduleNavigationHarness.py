@@ -24,7 +24,11 @@ assert 'tr("Free periods")' not in sessions + destinations
 assert 'case .recurring: ScheduleEditorView()' in root
 # Free periods are still a session kind and recurring editor option. Existing
 # recurring exemptions remain in Recurring, not a redundant top-level menu.
-assert 'Text(tr("Free")).tag(SessionKind.free)' in source
+# The session editor moved to RuleEditors.swift with the Rules build; free
+# periods stay a session kind there.
+editors = (ROOT / "Latch/RuleEditors.swift").read_text()
+assert 'Text(tr("Free")).tag(SessionKind.free)' in editors
+assert 'Picker(tr("Type"), selection: $isFree)' in editors
 assert 'Picker(tr("Type"), selection: $isFree)' in source
 assert 'ForEach(model.state.exemptions)' in source
 assert "WakeScheduleView()" in day_night and "SleepBlockEditor()" in day_night

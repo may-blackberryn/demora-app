@@ -609,6 +609,40 @@ assert 'if let ref = RuleRef(todayItemID: item.id) { ruleSheet = RuleSummaryRequ
 assert 'onOpen: destination(for: summary, now: context.date)' in home_src
 print('Summary sheet guards passed: live source, receipt-only actions, pending guard, event reads, Today links')
 
+# --- Editors (§5.7): receipt only, validity lifted, no inline delay text ----
+editors_src = (ROOT / 'Latch/RuleEditors.swift').read_text()
+assert 'model.queue(' not in editors_src and 'ChangeEngine.queue' not in editors_src, \
+    'rebuilt editors queue only through the receipt'
+for name, call in (('LimitEditorView', 'EditorValidation.limit('), ('ScheduleEditorView', 'EditorValidation.repeating('),
+                   ('PlannedEditorView', 'EditorValidation.planned('), ('SessionStartView', 'EditorValidation.session(')):
+    assert call in section(editors_src, f'struct {name}: View {{', '\n// MARK:') or call in editors_src, name
+assert 'note: String(format: tr("Then runs for %d min."), minutes)' in editors_src
+assert 'current.acceptsSelection(selection)' in editors_src, 'apps edit keeps acceptsSelection'
+day_night = (ROOT / 'Latch/DayNightViews.swift').read_text()
+group_editor = section(day_night, 'struct DayNightGroupEditor: View {', '\nprivate struct DayNightExplanation')
+for api in ('let isDemo: Bool', 'let canChooseApps: Bool', 'let canSave: (DayNightGroup) -> Bool',
+            'let onSave: (DayNightGroup) -> Bool', 'let onReview: ((DayNightGroup) -> Void)?'):
+    assert api in group_editor, ('draft-only editor API kept (R11)', api)
+assert 'model' not in group_editor.replace('// ', ''), 'the shared editor stays store-free'
+assert 'if !isDemo && canChooseApps {' in group_editor, 'demos never open the real picker'
+queued = section(day_night, 'struct DayNightQueuedEditor: View {', '\n/// Embeddable onboarding')
+assert 'guard acceptable(draft) else { return }' in queued and 'canQueue: { acceptable(draft) }' in queued, \
+    'collection guards run before the receipt and again before queueing'
+assert 'DayNightGroup.isValidCollection(' in queued and 'model.queue(' not in queued
+setup = section(day_night, 'struct DayNightSetupDraftView: View {', '\n/// A local draft')
+assert 'model' not in setup and 'groups = replacement' in setup, 'onboarding still saves drafts only'
+receipt_src = (ROOT / 'Latch/ChangeReceiptSheet.swift').read_text()
+assert 'if let canQueue, !canQueue() {' in receipt_src
+owned = ['Latch/RuleEditors.swift', 'Latch/RulesView.swift', 'Latch/RuleSummarySheet.swift',
+         'Latch/DelayPolicyViews.swift', 'Latch/ScheduleConflictsView.swift', 'Latch/WakeScheduleView.swift']
+for name in owned:
+    assert 'takes effect in %@' not in (ROOT / name).read_text(), ('no inline delay text (R12)', name)
+legacy = (ROOT / 'Latch/LimitsView.swift').read_text()
+for name in ('struct WakeBlockEditor: View {', 'struct SleepBlockEditor: View {'):
+    body = section(legacy, name, '\n}\n')
+    assert 'takes effect in' not in body and 'model.queue(' not in body and 'RuleEditorPage(' in body, name
+print('Editor guards passed: receipt-only, lifted validity, store-free day & night editor, no inline delays')
+
 files = [p for p in ('Latch/RulesView.swift', 'Latch/RuleSummarySheet.swift', 'Latch/RuleEditors.swift')
          if (ROOT / p).exists()]
 keys = set()

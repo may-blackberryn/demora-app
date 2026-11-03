@@ -9,6 +9,43 @@ struct WakeTimingEditor: View {
     @Binding var latestMinutes: Int?
     var showsWeekdays = true
     var showsWait = true
+    /// The day & night editor shows per-day times on a sub-page instead.
+    var showsPerDay = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            WakeClockPicker(minutes: $startMinutes)
+            if showsWait {
+                Text(tr("Wait after tapping Wake up")).font(.subheadline.weight(.semibold))
+                DurationControl(minutes: $waitMinutes, range: 0...1440)
+                WakeCeilingPicker(latestMinutes: $latestMinutes, startMinutes: startMinutes)
+            }
+            if showsWeekdays {
+                Text(tr("Weekdays")).font(.headline)
+                DayChips(selection: $weekdays)
+            }
+            if showsPerDay {
+                DisclosureGroup(tr("Customize wake-up by day")) {
+                    WakeDayTimingsEditor(startMinutes: startMinutes, waitMinutes: waitMinutes,
+                                         weekdays: weekdays, dayTimings: $dayTimings,
+                                         latestMinutes: latestMinutes, showsWait: showsWait)
+                        .padding(.top, 12)
+                }
+            }
+            Text(tr("A running wait keeps its deadline, but never extends past its configured latest wake-up time. Other blocks still apply."))
+                .font(.footnote).foregroundStyle(Ink.faint)
+        }
+    }
+}
+
+/// Custom wake-up times for single days. Days without one use the defaults.
+struct WakeDayTimingsEditor: View {
+    let startMinutes: Int
+    let waitMinutes: Int
+    let weekdays: Set<Int>
+    @Binding var dayTimings: [Int: WakeDayTiming]
+    let latestMinutes: Int?
+    var showsWait = true
 
     private var weekdayNames: [String] {
         var calendar = Calendar(identifier: .gregorian)
@@ -17,51 +54,31 @@ struct WakeTimingEditor: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            WakeClockPicker(minutes: $startMinutes)
-            if showsWait {
-                Text(tr("Wait after tapping Wake up")).font(.subheadline.weight(.semibold))
-                DurationPicker(minutes: $waitMinutes, maxHours: 24, minMinutes: 0)
-                WakeCeilingPicker(latestMinutes: $latestMinutes, startMinutes: startMinutes)
-            }
-            if showsWeekdays {
-                Text(tr("Weekdays")).font(.headline)
-                ForEach(1...7, id: \.self) { day in
-                    Toggle(weekdayNames[day - 1], isOn: Binding(
-                        get: { weekdays.contains(day) },
-                        set: { if $0 { weekdays.insert(day) } else { weekdays.remove(day) } }))
-                }
-            }
-            DisclosureGroup(tr("Customize wake-up by day")) {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text(tr("Days without custom times use the default start, wait and latest time above."))
-                        .font(.footnote).foregroundStyle(Ink.faint)
-                    ForEach(weekdays.sorted(), id: \.self) { day in
-                        VStack(alignment: .leading, spacing: 12) {
-                            Toggle(weekdayNames[day - 1], isOn: Binding(
-                                get: { dayTimings[day] != nil },
-                                set: { customized in
-                                    if customized { dayTimings[day] = WakeDayTiming(startMinutes: startMinutes, waitMinutes: waitMinutes, latestMinutes: latestMinutes) }
-                                    else { dayTimings.removeValue(forKey: day) }
-                                }))
-                            if dayTimings[day] != nil {
-                                WakeClockPicker(minutes: timing(day, \.startMinutes))
-                                if showsWait {
-                                    Text(tr("Wait after tapping Wake up")).font(.subheadline)
-                                    DurationPicker(minutes: timing(day, \.waitMinutes), maxHours: 24, minMinutes: 0)
-                                    WakeCeilingPicker(latestMinutes: Binding(
-                                        get: { dayTimings[day]?.latestMinutes },
-                                        set: { dayTimings[day]?.latestMinutes = $0 }),
-                                        startMinutes: dayTimings[day]?.startMinutes ?? startMinutes)
-                                }
-                            }
-                        }
-                        Divider()
-                    }
-                }.padding(.top, 12)
-            }
-            Text(tr("A running wait keeps its deadline, but never extends past its configured latest wake-up time. Other blocks still apply."))
+        VStack(alignment: .leading, spacing: 18) {
+            Text(tr("Days without custom times use the default start, wait and latest time above."))
                 .font(.footnote).foregroundStyle(Ink.faint)
+            ForEach(weekdays.sorted(), id: \.self) { day in
+                VStack(alignment: .leading, spacing: 12) {
+                    Toggle(weekdayNames[day - 1], isOn: Binding(
+                        get: { dayTimings[day] != nil },
+                        set: { customized in
+                            if customized { dayTimings[day] = WakeDayTiming(startMinutes: startMinutes, waitMinutes: waitMinutes, latestMinutes: latestMinutes) }
+                            else { dayTimings.removeValue(forKey: day) }
+                        }))
+                    if dayTimings[day] != nil {
+                        WakeClockPicker(minutes: timing(day, \.startMinutes))
+                        if showsWait {
+                            Text(tr("Wait after tapping Wake up")).font(.subheadline)
+                            DurationControl(minutes: timing(day, \.waitMinutes), range: 0...1440)
+                            WakeCeilingPicker(latestMinutes: Binding(
+                                get: { dayTimings[day]?.latestMinutes },
+                                set: { dayTimings[day]?.latestMinutes = $0 }),
+                                startMinutes: dayTimings[day]?.startMinutes ?? startMinutes)
+                        }
+                    }
+                }
+                Divider()
+            }
         }
     }
 

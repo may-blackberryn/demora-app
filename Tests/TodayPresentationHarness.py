@@ -266,13 +266,19 @@ presenter = section(receipt, 'private struct ChangeReceiptPresenter: ViewModifie
 assert 'if queued { queued = false; onQueued() }' in presenter, 'the editor closes after the receipt'
 
 limits = (ROOT / 'Latch/LimitsView.swift').read_text()
-editor = section(limits, 'struct LimitEditorView: View {', '\nstruct ExtraTimePasswordGate')
+# Rules build: the legacy tutorial keeps its own limit editor (it queues
+# directly, as its steps expect); everyone else uses the rebuilt editor,
+# which only ever queues through the receipt. Removing moved to the sheet.
+editor = section(limits, 'struct TutorialLimitEditorView: View {', '\nstruct ExtraTimePasswordGate')
 submit = section(editor, 'private func submit(_ action: ChangeAction) {', '\n    }\n')
 assert 'if model.inTutorial {' in submit and 'receipt = ChangeReceiptRequest(action: action)' in submit
-assert editor.count('model.queue(') == 1, 'the limit editor queues only through submit (tutorial) or the receipt'
+assert editor.count('model.queue(') == 1, 'the tutorial editor queues only through submit'
 assert 'submit(.removeLimit(id: existing.id))' in editor
-assert 'submit(existing != nil ? .configureLimit(draftLimit) : .addLimit(draftLimit))' in editor
-assert '.changeReceipt($receipt) { dismiss() }' in editor
+rebuilt = section((ROOT / 'Latch/RuleEditors.swift').read_text(), 'struct LimitEditorView: View {',
+                  '\nprivate struct WeekdayBudgetsPage')
+assert 'model.queue(' not in rebuilt, 'the rebuilt limit editor queues only through the receipt'
+assert 'receipt = ChangeReceiptRequest(action: existing != nil ? .configureLimit(draftLimit)' in rebuilt
+assert '.changeReceipt($receipt) { dismiss() }' in rebuilt
 
 schedules = (ROOT / 'Latch/SchedulesView.swift').read_text()
 for action in ('.removePlanned(', '.removeExemption('):

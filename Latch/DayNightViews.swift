@@ -225,6 +225,8 @@ private struct DayNightLiveWakeStatus: View {
 struct DayNightQueuedEditor: View {
     let group: DayNightGroup
     @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var receipt: ChangeReceiptRequest?
 
     private var hasPendingChange: Bool {
         model.state.pending.contains {
@@ -235,29 +237,31 @@ struct DayNightQueuedEditor: View {
         }
     }
 
+    /// The collection guards run before the receipt opens and again just
+    /// before the change is queued.
+    private func acceptable(_ draft: DayNightGroup) -> Bool {
+        !hasPendingChange
+            && draft.isValid(limits: model.state.limits)
+            && DayNightGroup.isValidCollection(
+                dayNightReplacing(draft, in: model.state.dayNightGroups),
+                limits: model.state.limits)
+    }
+
     var body: some View {
         DayNightGroupEditor(
             group: group, limits: model.state.limits, groups: model.state.dayNightGroups,
-            canChooseApps: model.authorized, saveTitle: tr("Queue change"),
-            saveExplanation: { draft in
-                if hasPendingChange {
-                    return tr("Wait for the pending day/night change before adding, editing or removing another group.")
-                }
-                let (direction, delay) = model.preview(.upsertDayNightGroup(draft))
-                return String(format: tr("%@ — takes effect in %@"), direction.label, delay.shortDelayLabel)
-            },
+            canChooseApps: model.authorized, waiting: hasPendingChange,
             canSave: { draft in
                 !hasPendingChange
                     && model.state.dayNightGroups.first(where: { $0.id == draft.id }) != draft
             },
-            onSave: { draft in
-                guard !hasPendingChange,
-                      draft.isValid(limits: model.state.limits),
-                      DayNightGroup.isValidCollection(
-                        dayNightReplacing(draft, in: model.state.dayNightGroups),
-                        limits: model.state.limits) else { return false }
-                return model.queue(.upsertDayNightGroup(draft)) != nil
-            })
+            onReview: { draft in
+                guard acceptable(draft) else { return }
+                receipt = ChangeReceiptRequest(action: .upsertDayNightGroup(draft),
+                                               canQueue: { acceptable(draft) })
+            },
+            onSave: { _ in false })
+        .changeReceipt($receipt) { dismiss() }
     }
 }
 
@@ -329,6 +333,8 @@ struct DayNightSetupDraftView: View {
 
 /// A local draft with an explicit save callback; dismissing or using the picker
 /// cannot mutate an existing rule. Demo callers must pass an isolated binding.
+/// Onboarding and the upgrade welcome save drafts with `onSave`; the live
+/// wrapper passes `onReview`, which opens the change receipt (R11).
 struct DayNightGroupEditor: View {
     let limits: [AppLimit]
     let groups: [DayNightGroup]
@@ -336,26 +342,34 @@ struct DayNightGroupEditor: View {
     let canChooseApps: Bool
     let saveTitle: String?
     let saveExplanation: ((DayNightGroup) -> String?)?
+    let waiting: Bool
     let canSave: (DayNightGroup) -> Bool
+    let onReview: ((DayNightGroup) -> Void)?
     let onSave: (DayNightGroup) -> Bool
     @Environment(\.dismiss) private var dismiss
     @State private var draft: DayNightGroup
+    private let original: DayNightGroup
     @State private var showPicker = false
     @State private var saveRejected = false
 
     init(group: DayNightGroup, limits: [AppLimit], groups: [DayNightGroup] = [],
          isDemo: Bool = false, canChooseApps: Bool = true, saveTitle: String? = nil,
          saveExplanation: ((DayNightGroup) -> String?)? = nil,
+         waiting: Bool = false,
          canSave: @escaping (DayNightGroup) -> Bool = { _ in true },
+         onReview: ((DayNightGroup) -> Void)? = nil,
          onSave: @escaping (DayNightGroup) -> Bool) {
         self._draft = State(initialValue: group)
+        self.original = group
         self.limits = limits
         self.groups = groups
         self.isDemo = isDemo
         self.canChooseApps = canChooseApps
         self.saveTitle = saveTitle
         self.saveExplanation = saveExplanation
+        self.waiting = waiting
         self.canSave = canSave
+        self.onReview = onReview
         self.onSave = onSave
     }
 
@@ -371,86 +385,102 @@ struct DayNightGroupEditor: View {
                             limits: limits, isDemo: isDemo)
     }
 
+    /// The first problem, in the old editor's words.
+    private var problem: String? {
+        if normalizedDraft.name.count > 80 { return tr("Use a name of 80 characters or fewer.") }
+        if let error = dayNightCollectionError(dayNightReplacing(normalizedDraft, in: groups), limits: limits) {
+            return error
+        }
+        if !valid {
+            return tr("Choose a name, at least one boundary, weekdays and a valid app scope. Sleep and wake-up times must differ.")
+        }
+        if saveRejected {
+            return tr("This group could not be saved. Review pending changes and your app selection, then try again.")
+        }
+        return saveExplanation?(normalizedDraft)
+    }
+
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    #if DEBUG
-                    if isDemo { DeveloperDemoNotice() }
-                    #endif
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(tr("Name")).font(.headline)
-                        TextField(tr("e.g. Social apps at night"), text: $draft.name)
-                            .textFieldStyle(.roundedBorder)
-                        if normalizedDraft.name.count > 80 {
-                            Text(tr("Use a name of 80 characters or fewer."))
-                                .font(.footnote).foregroundStyle(Ink.danger)
+        RuleEditorPage(title: original.name.isEmpty ? tr("Day & night") : original.name,
+                       isDirty: draft != original,
+                       problem: problem,
+                       canReview: valid && canSave(normalizedDraft),
+                       waiting: waiting,
+                       help: [tr("Give each group its own wake-up wait and sleep time."),
+                              tr("One Wake up tap on Home starts every eligible group's wait together. Each group unlocks after its own wait; sleep blocking ends at its wake-up start time."),
+                              tr("Overlapping rules use the strictest boundary. An exception here does not bypass another group or limit."),
+                              tr("An all-other-apps fallback automatically excludes apps targeted by your named selected groups. Category-based groups cannot be combined with this fallback.")],
+                       reviewTitle: onReview != nil ? tr("Review change") : (saveTitle ?? tr("Save")),
+                       onReview: save) {
+            #if DEBUG
+            if isDemo { DeveloperDemoNotice() }
+            #endif
+            EditorSection(tr("Name")) {
+                TextField(tr("e.g. Social apps at night"), text: $draft.name)
+                    .demoraType(.cardTitle)
+                    .frame(minHeight: 44)
+            }
+            scopeEditor
+            wakeEditor
+            sleepEditor
+            EditorSection(tr("Days")) {
+                DayChips(selection: $draft.weekdays)
+                EditorNote(text: tr("Days apply to the morning you wake and the evening sleep starts."))
+                EditorRow(title: tr("Different times per day"),
+                          value: tr(draft.weekdayWakeTimings.isEmpty ? "Off" : "On")) {
+                    EditorSubPage(title: tr("Different times per day")) {
+                        EditorSection(tr("Wake-up")) {
+                            WakeDayTimingsEditor(startMinutes: draft.defaultWakeStart,
+                                                 waitMinutes: draft.waitMinutes,
+                                                 weekdays: draft.weekdays,
+                                                 dayTimings: $draft.weekdayWakeTimings,
+                                                 latestMinutes: draft.wakeLatestMinutes,
+                                                 showsWait: draft.wakeEnabled)
                         }
                     }
-                    .demoraSurface()
-                    timingEditor
-                    weekdayEditor
-                    scopeEditor
-                    if !valid {
-                        Text(tr("Choose a name, at least one boundary, weekdays and a valid app scope. Sleep and wake-up times must differ."))
-                            .font(.footnote).foregroundStyle(Ink.danger)
-                    }
-                    if let error = dayNightCollectionError(
-                        dayNightReplacing(normalizedDraft, in: groups), limits: limits) {
-                        Text(error).font(.footnote).foregroundStyle(Ink.danger)
-                    }
-                    if let explanation = saveExplanation?(normalizedDraft) {
-                        Label(explanation, systemImage: "clock")
-                            .font(.footnote).foregroundStyle(Ink.faint)
-                    }
-                    if saveRejected {
-                        Text(tr("This group could not be saved. Review pending changes and your app selection, then try again."))
-                            .font(.footnote).foregroundStyle(Ink.danger)
-                    }
-                    Text(tr("Overlapping rules use the strictest boundary. An exception here does not bypass another group or limit."))
-                        .font(.footnote).foregroundStyle(Ink.faint)
-                }
-                .padding(24).frame(maxWidth: 640).frame(maxWidth: .infinity)
-            }
-            .paper()
-            .casedNavigationTitle(tr("Day/night group"))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(tr("Cancel")) { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(saveTitle ?? tr("Save")) {
-                        guard valid, canSave(normalizedDraft) else { return }
-                        if onSave(normalizedDraft) { dismiss() }
-                        else { saveRejected = true }
-                    }
-                    .disabled(!valid || !canSave(normalizedDraft))
                 }
             }
-            .sheet(isPresented: $showPicker) {
-                // Defense in depth: a demo never creates a real system picker,
-                // even if its presentation flag is accidentally set.
-                if !isDemo && canChooseApps {
-                    AppPickerSheet(selection: $draft.scope.selection)
-                }
+        }
+        .sheet(isPresented: $showPicker) {
+            // Defense in depth: a demo never creates a real system picker,
+            // even if its presentation flag is accidentally set.
+            if !isDemo && canChooseApps {
+                AppPickerSheet(selection: $draft.scope.selection)
             }
         }
     }
 
-    private var timingEditor: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Toggle(tr("Require wake-up tap"), isOn: $draft.wakeEnabled)
+    private func save() {
+        guard valid, canSave(normalizedDraft) else { return }
+        if let onReview {
+            onReview(normalizedDraft)
+        } else if onSave(normalizedDraft) {
+            dismiss()
+        } else {
+            saveRejected = true
+        }
+    }
+
+    private var wakeEditor: some View {
+        EditorSection(tr("Wake-up")) {
+            Toggle(tr("Ask me to tap Wake up"), isOn: $draft.wakeEnabled)
+                .frame(minHeight: 44)
             WakeTimingEditor(startMinutes: Binding(get: { draft.defaultWakeStart },
                                                   set: { draft.wakeStartMinutes = $0 }),
                              waitMinutes: $draft.waitMinutes, weekdays: $draft.weekdays,
                              dayTimings: $draft.weekdayWakeTimings,
                              latestMinutes: $draft.wakeLatestMinutes,
-                             showsWeekdays: false, showsWait: draft.wakeEnabled)
-            Text(tr("Sleep blocking ends at this time, even if the wake-up tap is off."))
-                .font(.footnote).foregroundStyle(Ink.faint)
+                             showsWeekdays: false, showsWait: draft.wakeEnabled, showsPerDay: false)
+            EditorNote(text: tr("Sleep blocking ends at this time, even if the wake-up tap is off."))
+        }
+    }
+
+    private var sleepEditor: some View {
+        EditorSection(tr("Sleep")) {
             Toggle(tr("Enable sleep blocking"), isOn: $draft.sleepEnabled)
+                .frame(minHeight: 44)
             if draft.sleepEnabled {
-                Text(tr("Sleep begins")).font(.headline)
+                Text(tr("Sleep begins")).demoraType(.body).foregroundStyle(Ink.ink)
                 HStack {
                     Picker(tr("Hour"), selection: sleepHour) {
                         ForEach(0..<24, id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
@@ -461,11 +491,9 @@ struct DayNightGroupEditor: View {
                         }
                     }
                 }
-                Text(tr("Sleep ends at the following wake-up start, using that day's custom time if set."))
-                    .font(.footnote).foregroundStyle(Ink.faint)
+                EditorNote(text: tr("Sleep ends at the following wake-up start, using that day's custom time if set."))
             }
         }
-        .demoraSurface()
     }
 
     private var sleepHour: Binding<Int> {
@@ -480,83 +508,60 @@ struct DayNightGroupEditor: View {
         })
     }
 
-    private var weekdayEditor: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(tr("Weekdays")).font(.headline)
-            ForEach(1...7, id: \.self) { day in
-                Toggle(dayNightWeekdayNames[day - 1], isOn: Binding(
-                    get: { draft.weekdays.contains(day) },
-                    set: { selected in
-                        if selected { draft.weekdays.insert(day) }
-                        else { draft.weekdays.remove(day) }
-                    }))
-            }
-            Text(tr("Weekdays apply to the wake-up morning and the evening when sleep begins."))
-                .font(.footnote).foregroundStyle(Ink.faint)
-        }
-        .demoraSurface()
-    }
-
     private var scopeEditor: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(tr("Apps")).font(.headline)
+        EditorSection(tr("What")) {
             Picker(tr("App scope"), selection: $draft.scope.mode) {
-                Text(tr("Selected limits and extra apps")).tag(DayNightScopeMode.selected)
-                Text(tr("All other apps except…")).tag(DayNightScopeMode.allOtherApps)
+                Text(tr("Chosen limits and apps")).tag(DayNightScopeMode.selected)
+                Text(tr("Everything except…")).tag(DayNightScopeMode.allOtherApps)
             }
-            .pickerStyle(.menu)
-            Text(draft.scope.mode == .selected
+            .pickerStyle(.segmented)
+            EditorNote(text: draft.scope.mode == .selected
                  ? tr("Check existing limits and choose extra apps for this group's boundaries.")
                  : tr("The fallback automatically excludes apps targeted by your other named day/night groups. Check limits and choose individual apps for additional exceptions. Other rules still apply."))
-                .font(.footnote).foregroundStyle(Ink.faint)
             Text(draft.scope.mode == .selected ? tr("Existing limits") : tr("Limits to exclude"))
-                .font(.subheadline.weight(.semibold))
+                .demoraType(.label).foregroundStyle(Ink.inkSoft)
             if limits.isEmpty {
-                Text(tr("No existing limits. You can choose apps below."))
-                    .font(.footnote).foregroundStyle(Ink.faint)
+                EditorNote(text: tr("No existing limits. You can choose apps below."))
             }
             ForEach(limits) { limit in
                 limitChecklistRow(limit)
             }
             let selectedIDs = draft.scope.limitIDs.union(draft.scope.excludedLimitIDs)
             if !selectedIDs.isSubset(of: Set(limits.map(\.id))) {
-                Text(tr("Some selected limits no longer exist. Remove their references before saving."))
-                    .font(.footnote).foregroundStyle(Ink.danger)
+                EditorNote(text: tr("Some selected limits no longer exist. Remove their references before saving."),
+                           warning: true)
                 Button(tr("Remove missing limits")) {
                     let available = Set(limits.map(\.id))
                     draft.scope.limitIDs.formIntersection(available)
                     draft.scope.excludedLimitIDs.formIntersection(available)
                 }
+                .frame(minHeight: 44)
             }
             Text(draft.scope.mode == .selected ? tr("Extra apps") : tr("Apps to exclude"))
-                .font(.subheadline.weight(.semibold))
+                .demoraType(.label).foregroundStyle(Ink.inkSoft)
             if isDemo {
-                Text(tr("Demo: select sample limits above. The real app picker is not opened."))
-                    .font(.footnote).foregroundStyle(Ink.faint)
+                EditorNote(text: tr("Demo: select sample limits above. The real app picker is not opened."))
             } else {
                 Button(tr("Choose apps")) { if canChooseApps { showPicker = true } }
                     .disabled(!canChooseApps)
+                    .frame(minHeight: 44)
                 if !canChooseApps {
-                    Text(tr("App selection is unavailable until Screen Time access is allowed."))
-                        .font(.footnote).foregroundStyle(Ink.faint)
+                    EditorNote(text: tr("App selection is unavailable until Screen Time access is allowed."))
                 }
             }
             SelectedAppsView(selection: draft.scope.selection)
             if draft.scope.mode == .allOtherApps {
-                Text(tr("Only one all-other-apps fallback is allowed."))
-                    .font(.footnote).foregroundStyle(Ink.faint)
-                Text(tr("Category exceptions are not supported. Choose individual apps or limits without categories; choosing a category cannot allow all of its apps."))
-                    .font(.footnote).foregroundStyle(Ink.faint)
+                EditorNote(text: tr("Only one all-other-apps fallback is allowed."))
+                EditorNote(text: tr("Category exceptions are not supported. Choose individual apps or limits without categories; choosing a category cannot allow all of its apps."))
                 if !draft.scope.selection.categoryTokens.isEmpty {
-                    Text(tr("Remove category exceptions before saving this fallback group."))
-                        .font(.footnote).foregroundStyle(Ink.danger)
+                    EditorNote(text: tr("Remove category exceptions before saving this fallback group."), warning: true)
                     Button(tr("Remove category exceptions")) {
                         draft.scope.selection.categoryTokens.removeAll()
                     }
+                    .frame(minHeight: 44)
                 }
             }
         }
-        .demoraSurface()
     }
 
     private func limitChecklistRow(_ limit: AppLimit) -> some View {

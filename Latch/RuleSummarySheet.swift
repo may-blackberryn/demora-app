@@ -540,8 +540,8 @@ struct RuleSummarySheet: View {
         case .limit(let limit): LimitEditorView(existing: limit)
         case .scheduleApps(let schedule): ScheduleSelectionEditorView(schedule: schedule)
         case .dayNight(let group): DayNightQueuedEditor(group: group)
-        case .legacyWake: NavigationStack { WakeBlockEditor() }
-        case .legacySleep: NavigationStack { SleepBlockEditor() }
+        case .legacyWake: WakeBlockEditor(presentation: .sheet)
+        case .legacySleep: SleepBlockEditor(presentation: .sheet)
         }
     }
 

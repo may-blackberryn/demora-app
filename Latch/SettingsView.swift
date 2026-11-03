@@ -863,10 +863,13 @@ struct RulesGridView: View {
 // on (docs/rules-redesign.md §8).
 
 /// Manual website blocklist — type raw domains instead of relying on Apple's
-/// site picker. Adds/removes are queued through the usual delays.
+/// site picker. Adds and removes go through the change receipt.
 struct WebsiteBlockerEditor: View {
+    @AppAccent private var accent
+    @AppLoosen private var loosen
     @EnvironmentObject var model: AppModel
     @State private var newDomain = ""
+    @State private var receipt: ChangeReceiptRequest?
     @FocusState private var addFocused: Bool
     /// Opened from New rule → Website: the address field starts focused.
     let focusAdd: Bool
@@ -883,45 +886,92 @@ struct WebsiteBlockerEditor: View {
             && !blockedDomains.contains { $0.caseInsensitiveCompare(d) == .orderedSame }
     }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(tr("Blocked sites")).font(.headline)
-                ForEach(blockedDomains, id: \.self) { domain in
-                    HStack {
-                        Text(domain)
-                        Spacer()
-                        Button(tr("Queue: remove")) {
-                            model.queue(.removeBlockedDomain(domain))
-                        }
-                        .font(.footnote)
-                        .buttonStyle(.borderless)
-                    }
-                    .demoraSurface()
-                }
-                HStack {
-                    TextField(tr("e.g. reddit.com"), text: $newDomain)
-                        .focused($addFocused)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                        .textFieldStyle(.roundedBorder)
-                    Button(tr("Add")) {
-                        model.queue(.addBlockedDomain(newDomain))
-                        newDomain = ""
-                    }
-                    .disabled(!canAdd)
-                    .buttonStyle(.borderedProminent)
-                }
-                .demoraSurface()
-                Text(tr("Block specific websites by typing their domain — no need for Apple's site picker, which often comes up empty. Note: blocking sites also turns on Apple's adult-content filter. Adding a site is gated by your delays; removing one waits the longer delay."))
-                    .font(.footnote).foregroundStyle(Ink.faint)
+    /// Saved sites, then sites whose addition is still waiting.
+    private var rows: [String] {
+        let waiting = model.state.pending.compactMap { change -> String? in
+            if case .addBlockedDomain(let domain) = change.action,
+               !blockedDomains.contains(where: { $0.caseInsensitiveCompare(domain) == .orderedSame }) {
+                return domain
             }
-            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
+            return nil
+        }
+        return blockedDomains + waiting
+    }
+
+    var body: some View {
+        let pending = RulePending.domains(model.state.pending)
+        ScrollView {
+            VStack(alignment: .leading, spacing: DemoraSpace.sectionGap) {
+                VStack(alignment: .leading, spacing: DemoraSpace.s) {
+                    HStack(spacing: DemoraSpace.s) {
+                        TextField(tr("e.g. reddit.com"), text: $newDomain)
+                            .focused($addFocused)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                            .frame(minHeight: 44)
+                        Button(tr("Add")) {
+                            receipt = ChangeReceiptRequest(action: .addBlockedDomain(newDomain))
+                        }
+                        .disabled(!canAdd)
+                        .font(DemoraType.button)
+                        .foregroundStyle(canAdd ? accent : Ink.inkSoft)
+                        .frame(minHeight: 44)
+                    }
+                }
+                .paperCard()
+                if !rows.isEmpty {
+                    VStack(alignment: .leading, spacing: DemoraSpace.cardGap) {
+                        SectionHeader(tr("Blocked sites"))
+                        ForEach(rows, id: \.self) { domain in
+                            row(domain, pending: pending[domain.lowercased()])
+                        }
+                    }
+                }
+                EditorNote(text: tr("Blocking any site also turns on Apple's adult-content filter."))
+            }
+            .padding(.horizontal, DemoraSpace.pageGutter)
+            .padding(.vertical, DemoraSpace.l)
+            .frame(maxWidth: DemoraSpace.maxContentWidth)
+            .frame(maxWidth: .infinity)
         }
         .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Website blocker"))
+        .casedNavigationTitle(tr("Websites"))
+        .navigationBarTitleDisplayMode(.inline)
+        .changeReceipt($receipt) { newDomain = "" }
         .onAppear { if focusAdd { addFocused = true } }
+    }
+
+    private func row(_ domain: String, pending: PendingChange?) -> some View {
+        let saved = blockedDomains.contains(domain)
+        return VStack(alignment: .leading, spacing: DemoraSpace.xxs) {
+            HStack(spacing: DemoraSpace.s) {
+                Text(domain)
+                    .demoraType(.body)
+                    .foregroundStyle(saved ? Ink.ink : Ink.inkSoft)
+                Spacer(minLength: DemoraSpace.xs)
+                if saved && pending == nil {
+                    Button(tr("Remove")) {
+                        receipt = ChangeReceiptRequest(action: .removeBlockedDomain(domain))
+                    }
+                    .buttonStyle(.plain)
+                    .font(DemoraType.button)
+                    .foregroundStyle(loosen)
+                    .frame(minHeight: 44)
+                }
+            }
+            if let pending {
+                HStack(spacing: DemoraSpace.xxs) {
+                    Image(systemName: "clock").accessibilityHidden(true)
+                    Text(tr(RulePending.labelKey(RulePending.label(change: pending, state: model.state))))
+                    CountdownText(to: pending.appliesAt, style: nil).monospacedDigit()
+                }
+                .demoraType(.meta)
+                .foregroundStyle(pending.direction == .lenient ? loosen : accent)
+            }
+        }
+        .frame(minHeight: 44)
+        .paperCard()
     }
 }
 
