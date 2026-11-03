@@ -1,7 +1,10 @@
 //
 //  LimitsView.swift
-//  Active app limits. Adding, editing, and removing all go through
-//  the change engine (and therefore through a delay).
+//  The legacy tutorial's Limits screen (Rules replaced it for everyone
+//  else; docs/rules-redesign.md §8, R10), plus shared limit pieces: the
+//  legacy wake/sleep editors, the duration wheels, selected-apps list,
+//  app picker and extra-time password gate. The tutorial screens retire at
+//  the four-tab switch.
 //
 
 import SwiftUI
