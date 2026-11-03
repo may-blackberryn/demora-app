@@ -138,20 +138,6 @@ enum RulePending {
         return result
     }
 
-    /// Pending add or remove per website, by lowercased domain.
-    static func domains(_ pending: [PendingChange]) -> [String: PendingChange] {
-        var result: [String: PendingChange] = [:]
-        for change in pending {
-            switch change.action {
-            case .addBlockedDomain(let domain), .removeBlockedDomain(let domain):
-                result[domain.lowercased()] = change
-            default:
-                continue
-            }
-        }
-        return result
-    }
-
     enum Label: Equatable { case loosens, tightens, removed, added, starts }
 
     /// "Removed in", "Added in", "Starts in", otherwise by direction.
@@ -499,6 +485,23 @@ enum RuleCatalog {
     static func hasLegacySleep(_ state: LatchState) -> Bool {
         state.sleepRule != SleepBlockRule()
             || state.pending.contains { if case .setSleepRule = $0.action { return true }; return false }
+    }
+
+    /// A queued session start becomes a session with a new ID when it
+    /// applies. Given the queued change the sheet remembered, follow it to
+    /// that session (same name, kind and apps, started after it was queued).
+    /// Every other ref is itself.
+    static func resolve(_ ref: RuleRef, state: LatchState, remembered: PendingChange?) -> RuleRef {
+        guard case .queuedSession(let changeID) = ref,
+              !state.pending.contains(where: { $0.id == changeID }),
+              let remembered, remembered.id == changeID,
+              case .startSession(let name, let kind, let selection, _) = remembered.action,
+              let started = state.sessions.last(where: {
+                  $0.name == name && $0.kind == kind && $0.selection == selection
+                      && $0.startedAt >= remembered.createdAt
+              })
+        else { return ref }
+        return .session(started.id)
     }
 
     /// The saved or queued rule behind a ref, for the summary sheet. Nil means

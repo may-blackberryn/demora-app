@@ -153,7 +153,6 @@ let lateDomain = change(.removeBlockedDomain("b.com"), applies: at(11, 3, 10))
 let index = RulePending.index([lateDomain, early, change(.removeLimit(id: social.id))])
 check(index[.websites]?.id == early.id, "several website changes: the first to land")
 check(index[.limit(social.id)] != nil && index.count == 2, "one entry per rule")
-check(RulePending.domains([early, lateDomain]).keys.sorted() == ["a.com", "b.com"], "per-domain lines")
 
 // Labels: add vs edit vs remove; day & night upsert of an existing vs a new id.
 state.dayNightGroups = [group]
@@ -231,6 +230,23 @@ check(RuleCatalog.source(of: .limit(newLimit.id), state: state) == .waiting(stat
 check(RuleCatalog.source(of: .limit(social.id), state: state) == .live, "saved rule: live")
 check(RuleCatalog.source(of: .limit(UUID()), state: state) == .gone, "removed rule: gone")
 check(RuleCatalog.source(of: .queuedSession(UUID()), state: state) == .gone, "applied session start: gone")
+// Review fix: an open sheet follows a queued Block now into its session.
+var applied = state
+applied.pending.removeAll { $0.id == start.id }
+let begun = BlockSession(name: "Deep", kind: .block, selection: apps("a"),
+                         startedAt: start.createdAt.addingTimeInterval(300), endsAt: at(11, 9))
+applied.sessions.append(begun)
+check(RuleCatalog.resolve(.queuedSession(start.id), state: applied, remembered: start) == .session(begun.id),
+      "applied Block now: the sheet follows its session")
+check(RuleCatalog.resolve(.queuedSession(start.id), state: state, remembered: start) == .queuedSession(start.id),
+      "still waiting: unchanged")
+var other = applied
+other.sessions = [BlockSession(name: "Deep", kind: .block, selection: apps("a"),
+                               startedAt: start.createdAt.addingTimeInterval(-60), endsAt: at(11, 9))]
+check(RuleCatalog.resolve(.queuedSession(start.id), state: other, remembered: start) == .queuedSession(start.id),
+      "an older same-named session isn't this one")
+check(RuleCatalog.resolve(.queuedSession(start.id), state: applied, remembered: nil) == .queuedSession(start.id),
+      "nothing remembered: unchanged")
 
 // MARK: Live chips
 func chip(_ ref: RuleRef, at date: Date = now, blocked: Set<UUID> = [], wake: [RuleRef: Date] = [:]) -> RuleChip? {
@@ -593,6 +609,8 @@ assert '.id(change.id)' in ledger
 
 sheet = (ROOT / 'Latch/RuleSummarySheet.swift').read_text()
 assert 'switch RuleCatalog.source(of: ref, state: state)' in sheet, 'reads the live rule on every render'
+# Review fix: the published state is read, not the one about to be replaced.
+assert '.onReceive(model.$state) { refresh($0) }' in sheet
 assert 'model.queue(' not in sheet and 'ChangeEngine.' not in sheet, 'every change goes through the receipt'
 for action in ('.removeLimit(id: id)', '.removeSchedule(id: id)', '.removeExemption(id: id)',
                '.removePlanned(id: id)', '.endSessionEarly(id: id)', '.removeDayNightGroup(id: id)',
@@ -600,8 +618,8 @@ for action in ('.removeLimit(id: id)', '.removeSchedule(id: id)', '.removeExempt
     assert f'receipt = ChangeReceiptRequest(action: {action})' in sheet, action
 assert sheet.count('.disabled(blocked)') >= 10, 'Edit and Remove wait for a pending change'
 assert 'RulePending.blocksEdit(of: ref, pending: model.state.pending)' in sheet
-sheet_reads = section(sheet, '    private func refresh() {', '\n    }\n')
-assert 'RuleLiveReads.read(state: model.state)' in sheet_reads and 'LimitFeatures.extraTimeState' in sheet_reads
+sheet_reads = section(sheet, '    private func refresh(_ state: LatchState) {', '\n    }\n')
+assert 'RuleLiveReads.read(state: state)' in sheet_reads and 'LimitFeatures.extraTimeState' in sheet_reads
 assert sheet.replace(sheet_reads, '').count('LimitFeatures.') == 0, 'extra time is read in events only'
 assert 'model.selectedTab = 0' in sheet and 'requestExtraTime' not in sheet, 'extra time starts on Today only (T5)'
 home_src = (ROOT / 'Latch/HomeView.swift').read_text()
@@ -615,7 +633,7 @@ assert 'model.queue(' not in editors_src and 'ChangeEngine.queue' not in editors
     'rebuilt editors queue only through the receipt'
 for name, call in (('LimitEditorView', 'EditorValidation.limit('), ('ScheduleEditorView', 'EditorValidation.repeating('),
                    ('PlannedEditorView', 'EditorValidation.planned('), ('SessionStartView', 'EditorValidation.session(')):
-    assert call in section(editors_src, f'struct {name}: View {{', '\n// MARK:') or call in editors_src, name
+    assert call in section(editors_src, f'struct {name}: View {{', '\n// MARK:'), name
 assert 'note: String(format: tr("Then runs for %d min."), minutes)' in editors_src
 assert 'current.acceptsSelection(selection)' in editors_src, 'apps edit keeps acceptsSelection'
 day_night = (ROOT / 'Latch/DayNightViews.swift').read_text()
@@ -655,6 +673,37 @@ assert 'model.queue(' not in sessions_list and '.changeReceipt($receipt)' in ses
 day_night_page = section(day_night, 'struct DayNightSchedulesView: View {', '\nprivate struct DayNightLiveWakeStatus')
 assert 'receipt = ChangeReceiptRequest(action: .removeDayNightGroup(id: group.id))' in day_night_page
 assert 'model.queue(' not in day_night_page and 'takes effect in' not in day_night_page
+# --- Review fixes (see docs/redesign-review.md "Rules review fixes") --------
+# 1. An unlabelled trailing closure after `actionTitle:` lands on the new
+#    `secondaryAction` and the button disappears: label every action.
+calls = 0
+for path in (ROOT / 'Latch').glob('*.swift'):
+    text = path.read_text()
+    for match in re.finditer(r'EmptyStateView\(', text):
+        depth, k = 0, match.end() - 1
+        while True:
+            depth += {'(': 1, ')': -1}.get(text[k], 0)
+            k += 1
+            if depth == 0:
+                break
+        call, after = text[match.start():k], text[k:k + 40].lstrip()
+        if 'actionTitle:' in call:
+            calls += 1
+            assert 'action:' in call.replace('actionTitle:', ''), (path.name, 'unlabelled action')
+            assert not after.startswith('{'), (path.name, 'trailing closure after an EmptyStateView with actions')
+assert calls >= 2, calls
+# 4. Extra-time rows read steps through bounds-checked helpers only.
+extra_page = section(editors_src, 'private struct ExtraTimePage: View {', '\n// MARK:')
+assert extra_page.count('steps[index]') == 3 and 'steps.indices.contains(index) ? steps[index]' in extra_page
+# 5. Legacy editors name the real reason.
+wake_editor = section(legacy, 'struct WakeBlockEditor: View {', '\n}\n')
+assert 'tr("Choose a latest time after the wake-up day begins.")' in wake_editor
+sleep_editor = section(legacy, 'struct SleepBlockEditor: View {', '\n}\n')
+assert 'rule.startMinutes == model.state.wakeRule.startHour * 60' in sleep_editor
+# 6. Websites queue the address the engine will save, once.
+websites = section((ROOT / 'Latch/SettingsView.swift').read_text(), 'struct WebsiteBlockerEditor: View {', '\n}\n')
+assert 'action: .addBlockedDomain(ChangeEngine.normalizeDomain(newDomain))' in websites
+assert '!rows.contains { ChangeEngine.normalizeDomain($0) == d }' in websites
 print('Step 5 guards passed: Changes copy, End early and Remove group behind the receipt')
 
 files = [p for p in ('Latch/RulesView.swift', 'Latch/RuleSummarySheet.swift', 'Latch/RuleEditors.swift')

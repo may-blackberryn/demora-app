@@ -262,7 +262,8 @@ struct HomeView: View {
                 EmptyStateView(title: tr("Set your first limit"),
                                systemImage: "apps.iphone",
                                description: tr("Add a daily time limit."),
-                               actionTitle: tr("Add a daily limit")) { showAddLimit = true }
+                               actionTitle: tr("Add a daily limit"),
+                               action: { showAddLimit = true })
             } else {
                 CompactHomeUsageReport(limits: model.state.limits,
                                        reloadRequest: usageRefreshRequest)

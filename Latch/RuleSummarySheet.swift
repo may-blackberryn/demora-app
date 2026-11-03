@@ -34,7 +34,7 @@ private struct RuleSummaryPresenter: ViewModifier {
         content.sheet(item: $request, onDismiss: {
             if let id = seeChange { seeChange = nil; onSeeChange(id) }
         }) { request in
-            RuleSummarySheet(ref: request.ref) { seeChange = $0 }
+            RuleSummarySheet(requested: request.ref) { seeChange = $0 }
         }
     }
 }
@@ -63,13 +63,18 @@ private enum SummaryRoute: Hashable {
 }
 
 struct RuleSummarySheet: View {
+    /// A queued Block now becomes its session once it starts, so an open
+    /// sheet follows it instead of reading "removed".
+    private var ref: RuleRef {
+        RuleCatalog.resolve(requested, state: model.state, remembered: rememberedStart)
+    }
     @AppAccent private var accent
     @AppLoosen private var loosen
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
     @Environment(\.dynamicTypeSize) private var typeSize
-    let ref: RuleRef
+    let requested: RuleRef
     /// Closes the sheet and asks the caller to open this change in Changes.
     let onSeeChange: (PendingChange.ID) -> Void
     @State private var receipt: ChangeReceiptRequest?
@@ -79,6 +84,8 @@ struct RuleSummarySheet: View {
     @State private var blockedLimitIDs: Set<UUID> = []
     @State private var wakeOpens: [RuleRef: Date] = [:]
     @State private var extraState: ExtraTimeState = .notConfigured
+    /// The queued Block now this sheet opened on, kept after it applies.
+    @State private var rememberedStart: PendingChange?
 
     private var calendar: Calendar {
         var calendar = Calendar.current
@@ -106,8 +113,9 @@ struct RuleSummarySheet: View {
         .presentationDetents([.medium, .large])
         .changeReceipt($receipt) { dismiss() }
         .sheet(item: $editor) { editor in editorView(editor) }
-        .onAppear { refresh() }
-        .onReceive(model.$state) { _ in refresh() }
+        .onAppear { refresh(model.state) }
+        // `$state` publishes before the property changes: read the new value.
+        .onReceive(model.$state) { refresh($0) }
     }
 
     // MARK: Content
@@ -547,11 +555,15 @@ struct RuleSummarySheet: View {
 
     // MARK: Events
 
-    private func refresh() {
-        let reads = RuleLiveReads.read(state: model.state)
+    private func refresh(_ state: LatchState) {
+        if case .queuedSession(let id) = requested,
+           let change = state.pending.first(where: { $0.id == id }) {
+            rememberedStart = change
+        }
+        let reads = RuleLiveReads.read(state: state)
         blockedLimitIDs = reads.blockedLimitIDs
         wakeOpens = reads.wakeOpens
-        if case .limit(let id) = ref, let limit = model.state.limits.first(where: { $0.id == id }) {
+        if case .limit(let id) = ref, let limit = state.limits.first(where: { $0.id == id }) {
             extraState = LimitFeatures.extraTimeState(for: limit)
         } else {
             extraState = .notConfigured

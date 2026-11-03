@@ -264,10 +264,16 @@ struct WakeBlockEditor: View {
         model.state.sleepRule.enabled && model.state.sleepRule.startMinutes == rule.startHour * 60
     }
 
+    /// Why `isValid` fails, checked in the order the rule's own test reads.
     private var problem: String? {
         if clashesWithSleep { return tr("Wake-up time must differ from when sleep begins.") }
-        if !rule.isValid(in: model.state) { return tr("Choose at least one app.") }
-        return nil
+        guard !rule.isValid(in: model.state) else { return nil }
+        let start = rule.startHour * 60
+        let latest = [rule.latestMinutes].compactMap { $0 } + Array((rule.weekdayLatestMinutes ?? [:]).values)
+        if latest.contains(where: { $0 <= start || $0 > 1410 }) {
+            return tr("Choose a latest time after the wake-up day begins.")
+        }
+        return tr("Choose at least one app.")
     }
 
     var body: some View {
@@ -367,10 +373,20 @@ struct SleepBlockEditor: View {
         rule.isValid(in: model.state, wakeHour: model.state.wakeRule.startHour)
     }
 
+    /// Why `isValid` fails: the start can't be the wake-up hour; otherwise
+    /// it's the apps this blocks.
+    private var problem: String? {
+        guard !valid else { return nil }
+        if rule.enabled && rule.startMinutes == model.state.wakeRule.startHour * 60 {
+            return tr("Wake-up time must differ from when sleep begins.")
+        }
+        return tr("Choose at least one app.")
+    }
+
     var body: some View {
         RuleEditorPage(title: tr("Sleep"), presentation: presentation,
                        isDirty: loaded && rule != model.state.sleepRule,
-                       problem: valid ? nil : tr("Choose at least one app."),
+                       problem: problem,
                        canReview: loaded && rule != model.state.sleepRule && valid,
                        waiting: boundaryChangePending,
                        onReview: { receipt = ChangeReceiptRequest(action: .setSleepRule(rule)) }) {

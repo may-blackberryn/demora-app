@@ -726,8 +726,10 @@ private struct ExtraTimePage: View {
             }
             if enabled {
                 ForEach(steps.indices, id: \.self) { index in
+                    // Rows can outlive a removed step for one update; read
+                    // through `step(_:)`, never `steps[index]` directly.
                     EditorSection(RuleSummaryFacts.extraUseText(index,
-                        ExtraUseBuilder.use(steps[index], overrides: model.state.overrides),
+                        ExtraUseBuilder.use(step(index), overrides: model.state.overrides),
                         translate: tr, locale: locale)) {
                         useEditor(index)
                     }
@@ -747,60 +749,76 @@ private struct ExtraTimePage: View {
     }
 
     @ViewBuilder private func useEditor(_ index: Int) -> some View {
-        Stepper(value: Binding(get: { steps[index].minutes }, set: { steps[index].minutes = $0 }),
+        Stepper(value: field(index, \.minutes),
                 in: 1...120) {
-            Text(String(format: tr("Extra usage: %d minutes"), steps[index].minutes))
+            Text(String(format: tr("Extra usage: %d minutes"), step(index).minutes))
         }
         Menu {
             Button(tr("Wait")) {
-                steps[index].passwordPolicyID = nil
-                steps[index].phrasePolicyID = nil
-                steps[index].contactRequired = false
+                update(index) { $0.passwordPolicyID = nil }
+                update(index) { $0.phrasePolicyID = nil }
+                update(index) { $0.contactRequired = false }
             }
             ForEach(model.state.overrides.passwordPolicies.filter { $0.allowed.contains(.extraTime) }) { policy in
                 Button(policy.name) {
-                    steps[index].passwordPolicyID = policy.id
-                    steps[index].phrasePolicyID = nil
-                    steps[index].contactRequired = false
+                    update(index) { $0.passwordPolicyID = policy.id }
+                    update(index) { $0.phrasePolicyID = nil }
+                    update(index) { $0.contactRequired = false }
                 }
             }
             ForEach(model.state.overrides.phrasePolicies.filter { $0.allowed.contains(.extraTime) }) { policy in
                 Button(policy.name) {
-                    steps[index].phrasePolicyID = policy.id
-                    steps[index].passwordPolicyID = nil
-                    steps[index].contactRequired = false
+                    update(index) { $0.phrasePolicyID = policy.id }
+                    update(index) { $0.passwordPolicyID = nil }
+                    update(index) { $0.contactRequired = false }
                 }
             }
             if model.state.overrides.contactsEnabled
                 && model.state.overrides.contacts.contains(where: { $0.isUsable && $0.allowed.contains(.extraTime) }) {
                 Button(tr("Ask a trusted contact")) {
-                    steps[index].contactRequired = true
-                    steps[index].passwordPolicyID = nil
-                    steps[index].phrasePolicyID = nil
+                    update(index) { $0.contactRequired = true }
+                    update(index) { $0.passwordPolicyID = nil }
+                    update(index) { $0.phrasePolicyID = nil }
                 }
             }
         } label: {
             let passwordName = model.state.overrides.passwordPolicies.first {
-                $0.id == steps[index].passwordPolicyID }?.name
+                $0.id == step(index).passwordPolicyID }?.name
             let phraseName = model.state.overrides.phrasePolicies.first {
-                $0.id == steps[index].phrasePolicyID }?.name
-            Label(steps[index].contactRequired ? tr("Ask a trusted contact")
+                $0.id == step(index).phrasePolicyID }?.name
+            Label(step(index).contactRequired ? tr("Ask a trusted contact")
                   : passwordName ?? phraseName ?? tr("Wait"),
                   systemImage: "chevron.down")
                 .frame(minHeight: 44)
         }
-        if steps[index].passwordPolicyID == nil && steps[index].phrasePolicyID == nil
-            && !steps[index].contactRequired {
-            Stepper(value: Binding(get: { steps[index].waitMinutes }, set: { steps[index].waitMinutes = $0 }),
+        if step(index).passwordPolicyID == nil && step(index).phrasePolicyID == nil
+            && !step(index).contactRequired {
+            Stepper(value: field(index, \.waitMinutes),
                     in: 1...1440) {
-                Text(String(format: tr("Wait: %d minutes"), steps[index].waitMinutes))
+                Text(String(format: tr("Wait: %d minutes"), step(index).waitMinutes))
             }
         }
         if steps.count > 1 {
-            Button(tr("Remove this use"), role: .destructive) { steps.remove(at: index) }
+            Button(tr("Remove this use"), role: .destructive) {
+                if steps.indices.contains(index) { steps.remove(at: index) }
+            }
                 .buttonStyle(.plain)
                 .frame(minHeight: 44)
         }
+    }
+
+    private func step(_ index: Int) -> LimitExtraStep {
+        steps.indices.contains(index) ? steps[index] : LimitExtraStep(minutes: 1, waitMinutes: 1)
+    }
+
+    private func update(_ index: Int, _ change: (inout LimitExtraStep) -> Void) {
+        guard steps.indices.contains(index) else { return }
+        change(&steps[index])
+    }
+
+    private func field(_ index: Int, _ keyPath: WritableKeyPath<LimitExtraStep, Int>) -> Binding<Int> {
+        Binding(get: { step(index)[keyPath: keyPath] },
+                set: { value in update(index) { $0[keyPath: keyPath] = value } })
     }
 }
 

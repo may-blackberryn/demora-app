@@ -880,26 +880,40 @@ struct WebsiteBlockerEditor: View {
 
     private var blockedDomains: [String] { model.state.blockedDomains }
 
+    /// A new address: not saved and not already waiting to be added.
     private var canAdd: Bool {
         let d = ChangeEngine.normalizeDomain(newDomain)
-        return d.contains(".")
-            && !blockedDomains.contains { $0.caseInsensitiveCompare(d) == .orderedSame }
+        return d.contains(".") && !rows.contains { ChangeEngine.normalizeDomain($0) == d }
     }
 
-    /// Saved sites, then sites whose addition is still waiting.
+    /// Saved sites, then sites whose addition is still waiting, as the
+    /// engine will save them.
     private var rows: [String] {
+        var seen = Set(blockedDomains.map(ChangeEngine.normalizeDomain))
         let waiting = model.state.pending.compactMap { change -> String? in
-            if case .addBlockedDomain(let domain) = change.action,
-               !blockedDomains.contains(where: { $0.caseInsensitiveCompare(domain) == .orderedSame }) {
-                return domain
-            }
-            return nil
+            guard case .addBlockedDomain(let domain) = change.action else { return nil }
+            let normalized = ChangeEngine.normalizeDomain(domain)
+            return seen.insert(normalized).inserted ? normalized : nil
         }
         return blockedDomains + waiting
     }
 
+    /// Each site's waiting add or remove, keyed as the engine saves it.
+    private var waiting: [String: PendingChange] {
+        var result: [String: PendingChange] = [:]
+        for change in model.state.pending {
+            switch change.action {
+            case .addBlockedDomain(let domain), .removeBlockedDomain(let domain):
+                result[ChangeEngine.normalizeDomain(domain)] = change
+            default:
+                continue
+            }
+        }
+        return result
+    }
+
     var body: some View {
-        let pending = RulePending.domains(model.state.pending)
+        let pending = waiting
         ScrollView {
             VStack(alignment: .leading, spacing: DemoraSpace.sectionGap) {
                 VStack(alignment: .leading, spacing: DemoraSpace.s) {
@@ -911,7 +925,10 @@ struct WebsiteBlockerEditor: View {
                             .keyboardType(.URL)
                             .frame(minHeight: 44)
                         Button(tr("Add")) {
-                            receipt = ChangeReceiptRequest(action: .addBlockedDomain(newDomain))
+                            // The engine saves the normalized address; queue
+                            // that, so the same site can't wait twice.
+                            receipt = ChangeReceiptRequest(
+                                action: .addBlockedDomain(ChangeEngine.normalizeDomain(newDomain)))
                         }
                         .disabled(!canAdd)
                         .font(DemoraType.button)
@@ -924,7 +941,7 @@ struct WebsiteBlockerEditor: View {
                     VStack(alignment: .leading, spacing: DemoraSpace.cardGap) {
                         SectionHeader(tr("Blocked sites"))
                         ForEach(rows, id: \.self) { domain in
-                            row(domain, pending: pending[domain.lowercased()])
+                            row(domain, pending: pending[ChangeEngine.normalizeDomain(domain)])
                         }
                     }
                 }
@@ -940,6 +957,12 @@ struct WebsiteBlockerEditor: View {
         .navigationBarTitleDisplayMode(.inline)
         .changeReceipt($receipt) { newDomain = "" }
         .onAppear { if focusAdd { addFocused = true } }
+    }
+
+    /// On this page a waiting change is about one site: added or removed.
+    private func pendingLabel(_ change: PendingChange) -> String {
+        if case .removeBlockedDomain = change.action { return RulePending.labelKey(.removed) }
+        return RulePending.labelKey(.added)
     }
 
     private func row(_ domain: String, pending: PendingChange?) -> some View {
@@ -963,7 +986,7 @@ struct WebsiteBlockerEditor: View {
             if let pending {
                 HStack(spacing: DemoraSpace.xxs) {
                     Image(systemName: "clock").accessibilityHidden(true)
-                    Text(tr(RulePending.labelKey(RulePending.label(change: pending, state: model.state))))
+                    Text(tr(pendingLabel(pending)))
                     CountdownText(to: pending.appliesAt, style: nil).monospacedDigit()
                 }
                 .demoraType(.meta)
