@@ -51,7 +51,8 @@ class GuideContentTests(unittest.TestCase):
             self.assertTrue(f'"{label}"' in sources, f"Missing destination: {label}")
         self.assertIn("UsageInsightsView()", (ROOT / "Latch/HomeView.swift").read_text())
         usage = (ROOT / "Latch/UsageInsightsView.swift").read_text()
-        self.assertIn('tr("Edit weekly estimate")', usage)
+        self.assertIn('tr("About this data")', usage)
+        self.assertIn('aboutPath.append(.startingPoint)', usage)
         self.assertIn("value: -28, to: today", usage)
 
     def test_localized_nonempty_content(self):

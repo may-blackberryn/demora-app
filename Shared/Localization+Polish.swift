@@ -6,6 +6,23 @@
 import Foundation
 
 let polishStrings: [String: String] = [
+    // Insights: header, loading line, About this data, no access.
+    "Insights": "Statystyki",
+    "About this data": "O tych danych",
+    "Loading your usage… If this stays empty, tap Refresh.": "Wczytywanie użycia… Jeśli nic się nie pojawi, dotknij Odśwież.",
+    "Insights needs Screen Time access.": "Statystyki wymagają dostępu do Czasu przed ekranem.",
+    "You can turn it on from Today.": "Możesz go włączyć w karcie Dziś.",
+    "Go to Today": "Przejdź do Dziś",
+    "What you see": "Co tu widzisz",
+    "Your Screen Time from the last 28 days plus today, as iOS reports it. Today is shown on its own and never counts in weekly comparisons.": "Twój Czas przed ekranem z ostatnich 28 dni oraz z dzisiaj, tak jak podaje go iOS. Dzisiejszy dzień jest pokazany osobno i nigdy nie wlicza się do porównań tygodniowych.",
+    "Missing isn't zero": "Brak danych to nie zero",
+    "iOS sometimes reports late or only part of a day. Days without data are marked, never counted as zero. If Insights looks empty, tap Refresh.": "iOS czasem przekazuje dane z opóźnieniem lub tylko za część dnia. Dni bez danych są oznaczone i nigdy nie liczą się jako zero. Jeśli Statystyki wyglądają na puste, dotknij Odśwież.",
+    "Apps and totals": "Aplikacje i sumy",
+    "App times overlap, so they won't add up to your total screen time.": "Czasy aplikacji nakładają się na siebie, więc nie sumują się do Twojego całkowitego czasu przed ekranem.",
+    "Other devices": "Inne urządzenia",
+    "If Screen Time is shared over iCloud, other devices of the same kind may be included.": "Jeśli Czas przed ekranem jest udostępniany przez iCloud, mogą być uwzględnione inne urządzenia tego samego typu.",
+    "Private by design": "Prywatność od podstaw",
+    "Your usage stays inside Apple's Screen Time report. Demora can't read, save or send it.": "Twoje użycie pozostaje w raporcie Czasu przed ekranem Apple. Demora nie może go odczytać, zapisać ani wysłać.",
     // Insights: comparison sentences, coverage and week names (report).
     "%@ h": "%@ godz.",
     "%@ less than the week before": "%@ mniej niż w poprzednich 7 dniach",

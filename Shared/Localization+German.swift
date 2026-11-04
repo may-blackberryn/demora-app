@@ -6,6 +6,23 @@
 import Foundation
 
 let germanStrings: [String: String] = [
+    // Insights: header, loading line, About this data, no access.
+    "Insights": "Einblicke",
+    "About this data": "Über diese Daten",
+    "Loading your usage… If this stays empty, tap Refresh.": "Deine Nutzung wird geladen… Wenn es leer bleibt, tippe auf Aktualisieren.",
+    "Insights needs Screen Time access.": "Einblicke braucht Zugriff auf Bildschirmzeit.",
+    "You can turn it on from Today.": "Du kannst ihn unter Heute aktivieren.",
+    "Go to Today": "Zu Heute",
+    "What you see": "Was du siehst",
+    "Your Screen Time from the last 28 days plus today, as iOS reports it. Today is shown on its own and never counts in weekly comparisons.": "Deine Bildschirmzeit der letzten 28 Tage plus heute, so wie iOS sie meldet. Heute wird separat angezeigt und zählt nie in Wochenvergleichen.",
+    "Missing isn't zero": "Fehlend ist nicht null",
+    "iOS sometimes reports late or only part of a day. Days without data are marked, never counted as zero. If Insights looks empty, tap Refresh.": "iOS meldet manchmal verspätet oder nur einen Teil eines Tages. Tage ohne Daten werden markiert und nie als null gezählt. Wenn Einblicke leer aussieht, tippe auf Aktualisieren.",
+    "Apps and totals": "Apps und Summen",
+    "App times overlap, so they won't add up to your total screen time.": "App-Zeiten überschneiden sich, daher ergeben sie zusammen nicht deine gesamte Bildschirmzeit.",
+    "Other devices": "Andere Geräte",
+    "If Screen Time is shared over iCloud, other devices of the same kind may be included.": "Wenn Bildschirmzeit über iCloud geteilt wird, können andere Geräte desselben Typs enthalten sein.",
+    "Private by design": "Privat von Grund auf",
+    "Your usage stays inside Apple's Screen Time report. Demora can't read, save or send it.": "Deine Nutzung bleibt im Bildschirmzeit-Bericht von Apple. Demora kann sie nicht lesen, speichern oder senden.",
     // Insights: comparison sentences, coverage and week names (report).
     "%@ h": "%@ Std.",
     "%@ less than the week before": "%@ weniger als in den 7 Tagen davor",

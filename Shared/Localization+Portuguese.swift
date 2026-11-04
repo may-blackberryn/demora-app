@@ -6,6 +6,23 @@
 import Foundation
 
 let portugueseStrings: [String: String] = [
+    // Insights: header, loading line, About this data, no access.
+    "Insights": "Estatísticas",
+    "About this data": "Sobre estes dados",
+    "Loading your usage… If this stays empty, tap Refresh.": "Carregando seu uso… Se continuar vazio, toque em Atualizar.",
+    "Insights needs Screen Time access.": "Estatísticas precisa de acesso ao Tempo de Uso.",
+    "You can turn it on from Today.": "Você pode ativá-lo em Hoje.",
+    "Go to Today": "Ir para Hoje",
+    "What you see": "O que você vê",
+    "Your Screen Time from the last 28 days plus today, as iOS reports it. Today is shown on its own and never counts in weekly comparisons.": "Seu Tempo de Uso dos últimos 28 dias mais hoje, como o iOS informa. Hoje aparece separado e nunca entra nas comparações semanais.",
+    "Missing isn't zero": "Ausente não é zero",
+    "iOS sometimes reports late or only part of a day. Days without data are marked, never counted as zero. If Insights looks empty, tap Refresh.": "Às vezes o iOS informa com atraso ou só parte de um dia. Dias sem dados são marcados, nunca contados como zero. Se Estatísticas parecer vazio, toque em Atualizar.",
+    "Apps and totals": "Apps e totais",
+    "App times overlap, so they won't add up to your total screen time.": "Os tempos dos apps se sobrepõem, então não somam o seu Tempo de Uso total.",
+    "Other devices": "Outros dispositivos",
+    "If Screen Time is shared over iCloud, other devices of the same kind may be included.": "Se o Tempo de Uso for compartilhado pelo iCloud, outros dispositivos do mesmo tipo podem ser incluídos.",
+    "Private by design": "Privado por natureza",
+    "Your usage stays inside Apple's Screen Time report. Demora can't read, save or send it.": "Seu uso fica dentro do relatório de Tempo de Uso da Apple. O Demora não pode lê-lo, salvá-lo nem enviá-lo.",
     // Insights: comparison sentences, coverage and week names (report).
     "%@ h": "%@ h",
     "%@ less than the week before": "%@ a menos que nos 7 dias anteriores",

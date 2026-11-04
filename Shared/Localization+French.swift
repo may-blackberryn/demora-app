@@ -6,6 +6,23 @@
 import Foundation
 
 let frenchStrings: [String: String] = [
+    // Insights: header, loading line, About this data, no access.
+    "Insights": "Statistiques",
+    "About this data": "À propos de ces données",
+    "Loading your usage… If this stays empty, tap Refresh.": "Chargement de votre utilisation… Si rien ne s’affiche, touchez Actualiser.",
+    "Insights needs Screen Time access.": "Statistiques a besoin de l’accès à Temps d’écran.",
+    "You can turn it on from Today.": "Vous pouvez l’activer depuis Aujourd’hui.",
+    "Go to Today": "Aller à Aujourd’hui",
+    "What you see": "Ce que vous voyez",
+    "Your Screen Time from the last 28 days plus today, as iOS reports it. Today is shown on its own and never counts in weekly comparisons.": "Votre Temps d’écran des 28 derniers jours et d’aujourd’hui, tel que fourni par iOS. Aujourd’hui est affiché à part et n’entre jamais dans les comparaisons hebdomadaires.",
+    "Missing isn't zero": "Absent ne veut pas dire zéro",
+    "iOS sometimes reports late or only part of a day. Days without data are marked, never counted as zero. If Insights looks empty, tap Refresh.": "iOS transmet parfois les données en retard ou seulement pour une partie de la journée. Les jours sans données sont signalés, jamais comptés comme zéro. Si Statistiques semble vide, touchez Actualiser.",
+    "Apps and totals": "Apps et totaux",
+    "App times overlap, so they won't add up to your total screen time.": "Les durées des apps se chevauchent : leur somme ne correspond pas à votre temps d’écran total.",
+    "Other devices": "Autres appareils",
+    "If Screen Time is shared over iCloud, other devices of the same kind may be included.": "Si Temps d’écran est partagé via iCloud, d’autres appareils du même type peuvent être inclus.",
+    "Private by design": "Confidentiel par conception",
+    "Your usage stays inside Apple's Screen Time report. Demora can't read, save or send it.": "Votre utilisation reste dans le rapport Temps d’écran d’Apple. Demora ne peut ni la lire, ni l’enregistrer, ni l’envoyer.",
     // Insights: comparison sentences, coverage and week names (report).
     "%@ h": "%@ h",
     "%@ less than the week before": "%@ de moins que les 7 jours précédents",

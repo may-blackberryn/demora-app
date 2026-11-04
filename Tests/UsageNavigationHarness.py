@@ -34,6 +34,20 @@ assert 'UsageInsightsView()' in home and 'if !model.inTutorial' in home
 assert 'value: -28' in usage and 'devices: devices' in usage
 assert 'app.demora.dev.usage-insights' in usage and 'app.demora.production.usage-insights' in usage
 assert '.id(' not in usage and 'SharedStore.loadState' not in usage
+# The estimate editor is reachable only from About this data (I5): no pinned
+# bottom button, one editor, pushed inside the About sheet's stack.
+insights = block(usage, 'struct UsageInsightsView:')
+assert 'Edit weekly estimate' not in usage and 'editingEstimate' not in usage
+assert insights.count('WeeklyUsageEstimateDraft(') == 1
+assert '.navigationDestination(for: AboutRoute.self) { _ in estimateEditor }' in insights
+assert 'aboutPath.append(.startingPoint)' in block(insights, 'private var startingPointRow')
+# Refresh: header button only, coalesced like Today, one soft retry, no loop.
+assert insights.count('requestRefresh()') >= 5 and insights.count('try await Task.sleep') == 2
+assert 'HomeReportRefreshPolicy' in insights and 'refreshPolicy.didQuery' in insights
+# Without Screen Time access: a calm card that goes to Today. No prompt,
+# no Settings redirect (Apple 5.1.1(iv)); Today owns the banner.
+assert 'tr("Go to Today")' in insights and 'requestAuthorization' not in usage
+assert 'openSettingsURLString' not in usage and 'ScreenTimeReauthBanner' not in usage
 refresh = block(usage, 'private func refresh()')
 assert 'refreshedAt = Date()' in refresh and 'max(' not in refresh
 assert 'WeeklyUsageEstimateDraft' in onboarding and 'WeeklyUsageEstimateDraft' in welcome

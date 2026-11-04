@@ -77,6 +77,23 @@ func tr(_ key: String) -> String {
 }
 
 let spanishStrings: [String: String] = [
+    // Insights: header, loading line, About this data, no access.
+    "Insights": "Estadísticas",
+    "About this data": "Sobre estos datos",
+    "Loading your usage… If this stays empty, tap Refresh.": "Cargando tu uso… Si sigue vacío, toca Actualizar.",
+    "Insights needs Screen Time access.": "Estadísticas necesita acceso a Tiempo en Pantalla.",
+    "You can turn it on from Today.": "Puedes activarlo desde Hoy.",
+    "Go to Today": "Ir a Hoy",
+    "What you see": "Qué ves aquí",
+    "Your Screen Time from the last 28 days plus today, as iOS reports it. Today is shown on its own and never counts in weekly comparisons.": "Tu Tiempo en Pantalla de los últimos 28 días más hoy, tal como lo informa iOS. Hoy se muestra aparte y nunca cuenta en las comparaciones semanales.",
+    "Missing isn't zero": "Sin datos no es cero",
+    "iOS sometimes reports late or only part of a day. Days without data are marked, never counted as zero. If Insights looks empty, tap Refresh.": "A veces iOS informa tarde o solo una parte del día. Los días sin datos se marcan y nunca se cuentan como cero. Si Estadísticas se ve vacío, toca Actualizar.",
+    "Apps and totals": "Apps y totales",
+    "App times overlap, so they won't add up to your total screen time.": "Los tiempos de las apps se superponen, así que no suman tu tiempo total en pantalla.",
+    "Other devices": "Otros dispositivos",
+    "If Screen Time is shared over iCloud, other devices of the same kind may be included.": "Si Tiempo en Pantalla se comparte por iCloud, pueden incluirse otros dispositivos del mismo tipo.",
+    "Private by design": "Privado por diseño",
+    "Your usage stays inside Apple's Screen Time report. Demora can't read, save or send it.": "Tu uso se queda dentro del informe de Tiempo en Pantalla de Apple. Demora no puede leerlo, guardarlo ni enviarlo.",
     // Insights: comparison sentences, coverage and week names (report).
     "%@ h": "%@ h",
     "%@ less than the week before": "%@ menos que los 7 días anteriores",

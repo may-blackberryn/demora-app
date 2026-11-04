@@ -6,6 +6,23 @@
 import Foundation
 
 let hindiStrings: [String: String] = [
+    // Insights: header, loading line, About this data, no access.
+    "Insights": "आँकड़े",
+    "About this data": "इस डेटा के बारे में",
+    "Loading your usage… If this stays empty, tap Refresh.": "आपका उपयोग लोड हो रहा है… अगर यह खाली ही रहे, तो रीफ़्रेश करें पर टैप करें।",
+    "Insights needs Screen Time access.": "आँकड़े देखने के लिए स्क्रीन टाइम एक्सेस चाहिए।",
+    "You can turn it on from Today.": "आप इसे आज टैब से चालू कर सकते हैं।",
+    "Go to Today": "आज पर जाएँ",
+    "What you see": "आप क्या देख रहे हैं",
+    "Your Screen Time from the last 28 days plus today, as iOS reports it. Today is shown on its own and never counts in weekly comparisons.": "पिछले 28 दिनों और आज का आपका स्क्रीन टाइम, जैसा iOS बताता है। आज अलग दिखाया जाता है और साप्ताहिक तुलना में कभी नहीं गिना जाता।",
+    "Missing isn't zero": "डेटा न होना शून्य नहीं है",
+    "iOS sometimes reports late or only part of a day. Days without data are marked, never counted as zero. If Insights looks empty, tap Refresh.": "iOS कभी-कभी देर से या दिन का केवल कुछ हिस्सा बताता है। बिना डेटा वाले दिन चिह्नित किए जाते हैं, उन्हें कभी शून्य नहीं गिना जाता। अगर आँकड़े खाली दिखें, तो रीफ़्रेश करें पर टैप करें।",
+    "Apps and totals": "ऐप और कुल समय",
+    "App times overlap, so they won't add up to your total screen time.": "ऐप के समय एक-दूसरे से ओवरलैप होते हैं, इसलिए उनका जोड़ आपके कुल स्क्रीन टाइम के बराबर नहीं होगा।",
+    "Other devices": "अन्य डिवाइस",
+    "If Screen Time is shared over iCloud, other devices of the same kind may be included.": "अगर स्क्रीन टाइम iCloud पर शेयर किया जाता है, तो उसी प्रकार के अन्य डिवाइस भी शामिल हो सकते हैं।",
+    "Private by design": "शुरू से निजी",
+    "Your usage stays inside Apple's Screen Time report. Demora can't read, save or send it.": "आपका उपयोग Apple की स्क्रीन टाइम रिपोर्ट के अंदर ही रहता है। Demora इसे न पढ़ सकता है, न सहेज सकता है, न भेज सकता है।",
     // Insights: comparison sentences, coverage and week names (report).
     "%@ h": "%@ घं.",
     "%@ less than the week before": "उससे पहले के 7 दिनों से %@ कम",

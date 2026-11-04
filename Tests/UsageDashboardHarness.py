@@ -142,7 +142,7 @@ assert 'ViewThatFits' in trends and 'showingDetails.toggle()' in view
 assert 'UsageInsightsTrend.compare(comparisonCurrent, with: previous)' in view
 assert 'reader.scrollTo(id, anchor: .trailing)' in view
 assert 'maxHeight: .infinity' in host and 'reportHeight' not in host
-assert 'showingUsageInfo' in host
+assert 'showingAbout' in host and 'showingDetails' not in host  # one About sheet (I4)
 theme = (ROOT / 'Latch/Theme.swift').read_text()
 report_theme = (ROOT / 'LatchReport/ReportTheme.swift').read_text()
 pair = re.compile(r'static let (\w+)\s*=\s*\w+\(light: 0x([0-9A-Fa-f]{6}), dark: 0x([0-9A-Fa-f]{6})\)')

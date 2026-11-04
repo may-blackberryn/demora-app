@@ -6,6 +6,23 @@
 import Foundation
 
 let turkishStrings: [String: String] = [
+    // Insights: header, loading line, About this data, no access.
+    "Insights": "İstatistikler",
+    "About this data": "Bu veriler hakkında",
+    "Loading your usage… If this stays empty, tap Refresh.": "Kullanımın yükleniyor… Boş kalırsa Yenile'ye dokun.",
+    "Insights needs Screen Time access.": "İstatistikler için Ekran Süresi erişimi gerekir.",
+    "You can turn it on from Today.": "Bunu Bugün sekmesinden açabilirsin.",
+    "Go to Today": "Bugün'e git",
+    "What you see": "Ne görüyorsun",
+    "Your Screen Time from the last 28 days plus today, as iOS reports it. Today is shown on its own and never counts in weekly comparisons.": "Son 28 güne ve bugüne ait Ekran Süresi verilerin, iOS'un bildirdiği şekilde. Bugün ayrı gösterilir ve haftalık karşılaştırmalara hiçbir zaman dahil edilmez.",
+    "Missing isn't zero": "Eksik, sıfır demek değil",
+    "iOS sometimes reports late or only part of a day. Days without data are marked, never counted as zero. If Insights looks empty, tap Refresh.": "iOS bazen geç ya da bir günün yalnızca bir kısmını bildirir. Verisi olmayan günler işaretlenir, hiçbir zaman sıfır sayılmaz. İstatistikler boş görünüyorsa Yenile'ye dokun.",
+    "Apps and totals": "Uygulamalar ve toplamlar",
+    "App times overlap, so they won't add up to your total screen time.": "Uygulama süreleri örtüşür, bu yüzden toplamları toplam ekran sürene eşit olmaz.",
+    "Other devices": "Diğer cihazlar",
+    "If Screen Time is shared over iCloud, other devices of the same kind may be included.": "Ekran Süresi iCloud üzerinden paylaşılıyorsa aynı türdeki diğer cihazlar da dahil olabilir.",
+    "Private by design": "Tasarımı gereği gizli",
+    "Your usage stays inside Apple's Screen Time report. Demora can't read, save or send it.": "Kullanımın Apple'ın Ekran Süresi raporunda kalır. Demora onu okuyamaz, kaydedemez veya gönderemez.",
     // Insights: comparison sentences, coverage and week names (report).
     "%@ h": "%@ sa",
     "%@ less than the week before": "Önceki 7 güne göre %@ daha az",
