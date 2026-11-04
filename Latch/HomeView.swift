@@ -326,13 +326,13 @@ struct HomeView: View {
         }
     }
 
-    /// Usage & trends and help stay here until Insights and You exist (§8).
+    /// Insights and help stay here until their tabs exist (§8).
     private var moreLinks: some View {
         VStack(alignment: .leading, spacing: 0) {
             NavigationLink {
                 UsageInsightsView().toolbar(.visible, for: .navigationBar)
             } label: {
-                moreRow(tr("Usage & trends"), symbol: "chart.xyaxis.line")
+                moreRow(tr("Insights"), symbol: "chart.bar")
             }
             Rectangle().fill(Ink.hairline).frame(height: 1)
                 .padding(.leading, DemoraSpace.cardPadding)

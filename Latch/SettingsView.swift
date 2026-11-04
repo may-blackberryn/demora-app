@@ -335,11 +335,11 @@ struct GuideView: View {
                     GuideSection(title: tr("Trusted contacts"), body: tr("Choose approval permissions separately for each contact. Extra-time permission is opt-in, including for existing contacts, and a limit's extra-time step must also require contact approval. Demora-user contacts accept an invitation before approving in their app. For email approval, enter the short code in your Demora. Permission edits are delay-gated; an approval skips only the eligible request's wait, not every rule."))
                 ]),
             GuideTopic(
-                id: "usage", symbol: "chart.bar", title: tr("Usage & trends"),
+                id: "usage", symbol: "chart.bar", title: tr("Insights"),
                 summary: tr("Screen Time reports and a personal baseline"),
                 sections: [
-                    GuideSection(title: tr("Usage reports"), body: tr("Open Home → Usage & trends for daily usage and comparisons of the past four complete seven-day periods, with today's partial day shown separately. It shows recent history provided by iOS, not a permanent archive. Missing or blank data is not zero usage; try Refresh. iCloud Screen Time sharing may include other devices of the same kind.")),
-                    GuideSection(title: tr("Weekly baseline"), body: tr("In Home → Usage & trends, tap Edit weekly estimate to add, change or remove your optional starting point. Enter hours and minutes per week, not per day; its date shows when it was recorded. This is your own estimate of usage before Demora, not a measured historical report or proof of time saved. Leaving it unset does not affect reports, rules or allowances."))
+                    GuideSection(title: tr("Usage reports"), body: tr("Open Insights for daily usage and comparisons of the past four complete seven-day periods, with today's partial day shown separately. It shows recent history provided by iOS, not a permanent archive. Missing or blank data is not zero usage; try Refresh. iCloud Screen Time sharing may include other devices of the same kind.")),
+                    GuideSection(title: tr("Weekly baseline"), body: tr("In Insights → About this data, open Your starting point to add, change or remove your optional estimate. Enter hours and minutes per week, not per day; its date shows when it was recorded. This is your own estimate of usage before Demora, not a measured historical report or proof of time saved. Leaving it unset does not affect reports, rules or allowances."))
                 ]),
             GuideTopic(
                 id: "troubleshooting", symbol: "wrench.and.screwdriver", title: tr("Troubleshooting"),

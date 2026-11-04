@@ -41,7 +41,7 @@ struct WeeklyUsageEstimateDraft: View {
                 Text(tr("Hours and minutes per week, not per day."))
                     .font(.caption).foregroundStyle(Ink.faint)
             }
-            Text(tr("This is your estimate, not a measurement or a limit. It stays on your device. You can skip it or change it later in Home → Usage & trends."))
+            Text(tr("This is your estimate, not a measurement or a limit. It stays on your device. You can skip it or change it later in Insights → About this data."))
                 .font(.footnote).foregroundStyle(Ink.faint)
         }
     }

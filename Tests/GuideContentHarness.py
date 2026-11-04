@@ -122,10 +122,10 @@ class GuideContentTests(unittest.TestCase):
             self.assertNotIn(obsolete, GUIDE)
 
     def test_reports_and_privacy(self):
-        for phrase in ["Home → Usage & trends", "four complete seven-day periods",
+        for phrase in ["Open Insights", "Insights → About this data", "four complete seven-day periods",
                        "today's partial day shown separately",
                        "recent history provided by iOS, not a permanent archive",
-                       "not zero usage", "Edit weekly estimate", "per week, not per day",
+                       "not zero usage", "Your starting point", "per week, not per day",
                        "its date shows when it was recorded", "your own estimate",
                        "not a measured historical", "other devices of the same kind"]:
             self.assertIn(phrase, TOPICS["usage"])
