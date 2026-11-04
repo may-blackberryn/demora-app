@@ -53,8 +53,11 @@ struct UsageFormat {
         return formatter.string(from: NSNumber(value: value)) ?? "—"
     }
 
+    /// A sentence that ends on an abbreviated unit ("… 42 Min." + ".")
+    /// keeps one full stop.
     func format(_ key: String, _ values: CVarArg...) -> String {
         String(format: translate(key), locale: locale, arguments: values)
+            .replacingOccurrences(of: "..", with: ".")
     }
 
     private func magnitude(_ minutes: Double) -> String {

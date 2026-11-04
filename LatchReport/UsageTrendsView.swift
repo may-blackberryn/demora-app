@@ -1,176 +1,106 @@
 import SwiftUI
 import Foundation
 
-// A distinct page inside the report's private process, not a host data export.
+// The Trends segment of the report (docs/insights-redesign.md §5.7): cards in
+// the report's own scroll, drawn in its private process. Not a page: there's
+// no back button and nothing here can drive host navigation. Today never
+// counts; incomplete periods produce no trend, average or app change.
 struct UsageTrendsView: View {
     let usage: UsageInsightsConfiguration
     let applications: [UsageInsightsApplication]
     let baseline: UsageInsightsBaseline?
-    let scopeLabel: AnyView?
+    let isAppScope: Bool
+    /// The week picked in the shared Four weeks card.
+    let current: UsageInsightsPeriod
     let applicationLabel: (Int) -> AnyView
     let applicationIdentity: (Int) -> AnyHashable
-    let accent: Color
-    let ink: Color
-    let muted: Color
-    let paper: Color
+    let colors: ReportColors
+    let text: UsageFormat
     let locale: Locale
-    let onBack: () -> Void
-    let onAllApps: () -> Void
     let onSelectApp: (Int) -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ScaledMetric(relativeTo: .largeTitle) private var heroSize: CGFloat = 64
     @ScaledMetric(relativeTo: .caption2) private var coverageCellSize: CGFloat = 30
-    @State private var selectedStart: Date?
     @State private var selectedDay: Date?
 
-    init(usage: UsageInsightsConfiguration, applications: [UsageInsightsApplication],
-         baseline: UsageInsightsBaseline?, scopeLabel: AnyView?,
-         applicationLabel: @escaping (Int) -> AnyView, applicationIdentity: @escaping (Int) -> AnyHashable,
-         accent: Color, ink: Color, muted: Color, paper: Color, locale: Locale,
-         selectedPeriod: Date?, onBack: @escaping () -> Void,
-         onAllApps: @escaping () -> Void, onSelectApp: @escaping (Int) -> Void) {
-        self.usage = usage; self.applications = applications; self.baseline = baseline
-        self.scopeLabel = scopeLabel; self.applicationLabel = applicationLabel; self.applicationIdentity = applicationIdentity
-        self.accent = accent; self.ink = ink; self.muted = muted; self.paper = paper; self.locale = locale
-        self.onBack = onBack; self.onAllApps = onAllApps; self.onSelectApp = onSelectApp
-        _selectedStart = State(initialValue: selectedPeriod)
-    }
-    private var current: UsageInsightsPeriod { usage.weeks.first { $0.start == selectedStart } ?? usage.lastSevenDays }
     private var previous: UsageInsightsPeriod? { UsageDashboardPresentation.preceding(current, in: usage.weeks) }
     private var trend: UsageInsightsTrend? { previous.flatMap { UsageInsightsTrend.compare(current, with: $0) } }
     private var currentDays: [UsageInsightsDay] { UsageTrendsModel.days(usage, in: current) }
     private var priorDays: [UsageInsightsDay] { previous.map { UsageTrendsModel.days(usage, in: $0) } ?? [] }
 
     var body: some View {
-        ScrollViewReader { reader in
-        ScrollView {
-            VStack(alignment: .leading, spacing: 34) {
-                pageHeader.id("trendsTop")
-                hero
-                weekChart
-                dailyComparison
-                weekdayPatterns
-                extremeDays
-                if scopeLabel == nil { appChanges }
+        VStack(alignment: .leading, spacing: 20) {
+            comparisonCard
+            dailyComparison
+            extremeDays
+            weekdayPatterns
+            if !isAppScope { appChanges }
+            if !isAppScope {
                 if let baseline { baselineComparison(baseline) }
-                coverage
-            }.padding(.horizontal, 22).padding(.top, 12).padding(.bottom, 32)
-                .frame(maxWidth: 740).frame(maxWidth: .infinity, alignment: .leading)
-        }.frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(paper).foregroundStyle(ink).environment(\.locale, locale)
-            .onChange(of: scopeLabel == nil) { _ in
-                reader.scrollTo("trendsTop", anchor: .top)
-            }
-        }
-    }
-    private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            Button(action: onBack) {
-                HStack(spacing: 9) { Image(systemName: "arrow.left"); Text(insightsText("Back to usage")) }
-                    .font(.subheadline).foregroundStyle(accent).frame(minHeight: 44)
-            }.buttonStyle(.plain)
-            Text(insightsText("Trends")).font(.system(.largeTitle, design: .serif)).accessibilityAddTraits(.isHeader)
-            Text(insightsText("Your time, in perspective.")).font(.subheadline).foregroundStyle(muted)
-            if let scopeLabel {
-                HStack(spacing: 12) {
-                    scopeLabel.font(.headline).labelStyle(.titleAndIcon).frame(maxWidth: .infinity, alignment: .leading)
-                    Button(action: onAllApps) {
-                        Text(insightsText("All apps")).font(.caption.weight(.semibold))
-                            .padding(.horizontal, 12).frame(minHeight: 44).background(accent.opacity(0.08), in: Capsule())
-                    }.buttonStyle(.plain).foregroundStyle(accent)
+                else {
+                    Text(insightsText("Want a starting point? Add an estimate in About this data (ⓘ at the top)."))
+                        .reportType(.meta).foregroundStyle(colors.inkSoft).fixedSize(horizontal: false, vertical: true)
                 }
-            } else { Text(insightsText("All apps")).font(.caption.weight(.semibold)).foregroundStyle(accent) }
+            }
+            coverage
         }
+        .onChange(of: current.start) { _ in selectedDay = nil }
     }
-    private var hero: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            heading("Compared with the previous week")
-            if let trend {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(trend.percentage.map { signed($0) + "%" } ?? signedDuration(trend.differenceMinutes))
-                        .font(.system(size: min(heroSize, 100), design: .serif)).tracking(-2)
-                        .monospacedDigit().lineLimit(1).minimumScaleFactor(0.45)
-                    Image(systemName: trend.differenceMinutes == 0 ? "arrow.right" : (trend.differenceMinutes < 0 ? "arrow.down.right" : "arrow.up.right"))
-                        .font(.system(size: 24, weight: .light)).accessibilityHidden(true)
-                }.foregroundStyle(accent)
-                Text(format("Change: %@", signedDuration(trend.differenceMinutes))).font(.subheadline).foregroundStyle(muted)
-                Text(format("Daily average change: %@", signedDuration(trend.differenceMinutes / Double(current.expectedDays))))
-                    .font(.caption).foregroundStyle(muted)
+
+    // MARK: Compared with the week before
+
+    private var comparisonCard: some View {
+        card("Compared with the week before") {
+            if let sentence = UsageComparisonText.make(trend: trend) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    if let symbol = sentence.symbol {
+                        Image(systemName: symbol).font(.body.weight(.medium)).accessibilityHidden(true)
+                    }
+                    Text(sentence.sentence(text)).reportType(.body).fixedSize(horizontal: false, vertical: true)
+                }.foregroundStyle(colors.ink)
             } else {
-                Text(insightsText("No trend yet")).font(.system(.largeTitle, design: .serif)).foregroundStyle(accent)
-                Text(insightsText("A trend needs full reported coverage for both completed periods.")).font(.subheadline).foregroundStyle(muted)
+                Text(insightsText("No trend yet")).reportType(.hero).foregroundStyle(colors.accent)
+                Text(insightsText("A trend needs two weeks with full data.")).reportType(.body)
+                    .foregroundStyle(colors.inkSoft).fixedSize(horizontal: false, vertical: true)
             }
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: 28) { periodFigures }
-                VStack(alignment: .leading, spacing: 18) { periodFigures }
+                VStack(alignment: .leading, spacing: 14) { periodFigures }
             }
             if let average = UsageDashboardPresentation.average(current) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(duration(average)).font(.system(.title, design: .serif)).foregroundStyle(accent)
-                    Text(insightsText("Average per day")).font(.caption).foregroundStyle(muted)
-                }.accessibilityElement(children: .combine)
+                let change = trend.map { " (" + text.signedDuration(minutes: $0.differenceMinutes / Double(current.expectedDays)) + ")" } ?? ""
+                Text(text.format("Daily average: %@", text.duration(average)) + change)
+                    .reportType(.meta).foregroundStyle(colors.inkSoft)
             }
-            Text(insightsText("Today is excluded from trends.")).font(.caption).foregroundStyle(muted)
+            footnote("Today isn't included in trends.")
         }
-        .padding(.vertical, 24).frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .top) { rule }
-        .overlay(alignment: .bottom) { rule }
     }
     @ViewBuilder private var periodFigures: some View {
-        periodFigure(current, title: "This period")
-        if let previous { periodFigure(previous, title: "Previous period") }
-        else { VStack(alignment: .leading, spacing: 7) { Text(insightsText("Previous period")).font(.caption); Text(insightsText("— No data")).font(.title3) }.foregroundStyle(muted) }
+        periodFigure(current)
+        if let previous { periodFigure(previous) }
     }
-    private func periodFigure(_ period: UsageInsightsPeriod, title: String) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(insightsText(title)).font(.caption).foregroundStyle(muted)
-            Text(duration(period.seconds)).font(.system(.title2, design: .serif)).monospacedDigit()
-            Text(range(period)).font(.caption2).foregroundStyle(muted)
-            if !period.isComplete { Text(insightsText("Partial reported coverage")).font(.caption2).foregroundStyle(muted) }
+    private func periodFigure(_ period: UsageInsightsPeriod) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(name(period)).reportType(.meta).foregroundStyle(colors.inkSoft)
+            Text(text.duration(period.seconds)).reportType(.time)
+                .foregroundStyle(UsageFormat.wholeMinutes(period.seconds) == nil ? colors.inkSoft : colors.ink)
+            if UsageCoverageLabel.isPartlyReported(period) { ReportChip(text: insightsText(UsageCoverageLabel.partly), colors: colors) }
         }.fixedSize(horizontal: false, vertical: true).accessibilityElement(children: .combine)
     }
-    private var weekChart: some View {
-        let maximum = max(1, usage.weeks.compactMap(\.seconds).max() ?? 1)
-        return VStack(alignment: .leading, spacing: 18) {
-            heading("Four-week picture")
-            Text(insightsText("Tap a week to explore it.")).font(.caption).foregroundStyle(muted)
-            ScrollViewReader { reader in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 14) {
-                    ForEach(usage.weeks) { week in
-                        Button {
-                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
-                                selectedStart = week.start; selectedDay = nil
-                            }
-                        } label: {
-                            VStack(spacing: 10) {
-                                Text(duration(week.seconds)).font(.caption2).monospacedDigit().foregroundStyle(muted)
-                                stem(week.seconds, maximum: maximum, width: 34, color: accent.opacity(week.start == current.start ? 1 : 0.30), complete: week.isComplete)
-                                    .frame(height: 125)
-                                Text(date(week.start)).font(.caption2).foregroundStyle(week.start == current.start ? accent : muted)
-                                Circle().fill(week.start == current.start ? accent : .clear).frame(width: 4, height: 4)
-                            }.frame(minWidth: dynamicTypeSize.isAccessibilitySize ? 70 : 66, minHeight: 175)
-                        }.buttonStyle(.plain).id(week.start).accessibilityLabel(range(week))
-                            .accessibilityValue(duration(week.seconds) + ", " + insightsText(week.isComplete ? "Full reported coverage" : "Partial reported coverage"))
-                            .accessibilityAddTraits(week.start == current.start ? .isSelected : [])
-                    }
-                }.padding(.bottom, 4)
-            }
-            .onAppear { reader.scrollTo(current.start, anchor: .trailing) }
-            .onChange(of: current.start) { start in reader.scrollTo(start, anchor: .trailing) }
-            }
-            Text(range(current)).font(.caption).foregroundStyle(muted)
-        }
-    }
+
+    // MARK: Day by day
+
     private var dailyComparison: some View {
         let a = currentDays, b = priorDays
-        let maximum = max(1, (a + b).compactMap(\.seconds).max() ?? 1)
-        return VStack(alignment: .leading, spacing: 18) {
-            heading("Your week, day by day")
-            HStack(spacing: 18) { legend("This period", faded: false); legend("Previous period", faded: true) }
+        let maximum = max(1, (a + b).compactMap { UsageFormat.wholeMinutes($0.seconds) == nil ? nil : $0.seconds }.max() ?? 1)
+        return card("Day by day") {
+            Text(insightsText("Each day next to the same day the week before.")).reportType(.body)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 16) {
+                legend(name(current), faded: false)
+                if let previous { legend(name(previous), faded: true) }
+            }
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 8) {
+                HStack(alignment: .top, spacing: 0) {
                     ForEach(a.indices, id: \.self) { index in
                         dailyBar(a[index], prior: index < b.count ? b[index] : nil, maximum: maximum)
                     }
@@ -179,204 +109,237 @@ struct UsageTrendsView: View {
             if let index = a.firstIndex(where: { $0.date == selectedDay }) {
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .top, spacing: 24) { selectedDayFigures(index, current: a, previous: b) }
-                    VStack(alignment: .leading, spacing: 18) { selectedDayFigures(index, current: a, previous: b) }
+                    VStack(alignment: .leading, spacing: 14) { selectedDayFigures(index, current: a, previous: b) }
                 }
             }
-            Text(insightsText("Each bar shows reported minutes. A dash means no data, not zero.")).font(.caption).foregroundStyle(muted)
         }
     }
     private func dailyBar(_ day: UsageInsightsDay, prior: UsageInsightsDay?, maximum: TimeInterval) -> some View {
-        let value = insightsText("This period") + ": " + duration(day.seconds)
-            + ", " + dayCoverage(day)
-            + "; " + insightsText("Previous period") + ": " + duration(prior?.seconds)
-            + ", " + dayCoverage(prior)
+        let value = name(current) + ": " + dayValue(day) + "; "
+            + (previous.map(name) ?? "") + ": " + dayValue(prior)
+        let selected = day.date == selectedDay
         return Button { selectedDay = day.date } label: {
-            VStack(spacing: 10) {
+            VStack(spacing: 8) {
                 HStack(alignment: .bottom, spacing: 4) {
-                    stem(prior?.seconds, maximum: maximum, width: 13, color: accent.opacity(0.28), complete: prior?.isComplete == true)
-                    stem(day.seconds, maximum: maximum, width: 13, color: accent, complete: day.isComplete)
-                }.frame(height: 125)
-                Text(date(day.date, template: "EEE")).font(.caption2).foregroundStyle(muted)
-                Circle().fill(day.date == selectedDay ? accent : .clear).frame(width: 4, height: 4)
-            }.frame(minWidth: dynamicTypeSize.isAccessibilitySize ? 64 : 44, minHeight: 165)
+                    UsageBarStem(seconds: prior?.seconds, maximum: maximum, width: 13, height: 120,
+                                 fill: colors.accent.opacity(0.3), complete: prior?.isComplete == true, colors: colors)
+                    UsageBarStem(seconds: day.seconds, maximum: maximum, width: 13, height: 120,
+                                 fill: colors.accent, complete: day.isComplete, colors: colors)
+                }
+                Text(date(day.date, template: "EEE")).reportType(.chip)
+                    .foregroundStyle(selected ? colors.accent : colors.inkSoft).lineLimit(1)
+            }.frame(minWidth: dynamicTypeSize.isAccessibilitySize ? 64 : 44, minHeight: 156).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel(date(day.date, template: "EEEEMMMMd"))
             .accessibilityValue(value)
-            .accessibilityAddTraits(day.date == selectedDay ? .isSelected : [])
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
-    @ViewBuilder private func selectedDayFigures(_ index: Int, current: [UsageInsightsDay], previous: [UsageInsightsDay]) -> some View {
-        dayFigure(current[index], title: "This period")
-        if index < previous.count { dayFigure(previous[index], title: "Previous period") }
+    /// "2 h 5 min", "No data yet", or "40 min, Partly reported".
+    private func dayValue(_ day: UsageInsightsDay?) -> String {
+        dayCoverage(day).map { text.duration(day?.seconds) + ", " + insightsText($0) } ?? text.duration(day?.seconds)
     }
-    private func legend(_ key: String, faded: Bool) -> some View {
-        HStack(spacing: 6) { Circle().fill(accent.opacity(faded ? 0.28 : 1)).frame(width: 6, height: 6); Text(insightsText(key)) }
-            .font(.caption).foregroundStyle(muted)
+    /// Only the incomplete case is named (I8); missing already reads "No data yet".
+    private func dayCoverage(_ day: UsageInsightsDay?) -> String? {
+        guard let day, UsageFormat.wholeMinutes(day.seconds) != nil, !day.isComplete else { return nil }
+        return UsageCoverageLabel.partly
     }
-    private func stem(_ seconds: TimeInterval?, maximum: TimeInterval, width: CGFloat, color: Color, complete: Bool) -> some View {
-        ZStack(alignment: .bottom) {
-            Color.clear
-            if let fraction = UsageDashboardPresentation.barFraction(seconds, maximum: maximum) {
-                if fraction == 0 { Circle().stroke(color, lineWidth: 1.5).frame(width: 5, height: 5) }
-                else {
-                    RoundedRectangle(cornerRadius: 5).fill(color.opacity(complete ? 1 : 0.55))
-                        .frame(width: width, height: max(1.5, fraction * 120))
-                        .overlay(alignment: .top) { if !complete { Rectangle().fill(paper).frame(height: 2).padding(.top, 3) } }
+    @ViewBuilder private func selectedDayFigures(_ index: Int, current days: [UsageInsightsDay], previous prior: [UsageInsightsDay]) -> some View {
+        dayFigure(days[index], title: name(current))
+        if index < prior.count, let previous { dayFigure(prior[index], title: name(previous)) }
+    }
+    private func dayFigure(_ day: UsageInsightsDay, title: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).reportType(.meta).foregroundStyle(colors.inkSoft)
+            Text(text.duration(day.seconds)).reportType(.time)
+            Text(date(day.date, template: "EEEMMMd")).reportType(.chip).foregroundStyle(colors.inkSoft)
+            if dayCoverage(day) != nil { ReportChip(text: insightsText(UsageCoverageLabel.partly), colors: colors) }
+        }.fixedSize(horizontal: false, vertical: true).accessibilityElement(children: .combine)
+    }
+    private func legend(_ title: String, faded: Bool) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(colors.accent.opacity(faded ? 0.3 : 1)).frame(width: 7, height: 7).accessibilityHidden(true)
+            Text(title)
+        }.reportType(.chip).foregroundStyle(colors.inkSoft)
+    }
+
+    // MARK: Highs and lows
+
+    private var extremeDays: some View {
+        let values = UsageTrendsModel.extremes(usage, in: current)
+        return card("Highs and lows") {
+            if let high = values.high, let seconds = high.seconds {
+                Text(text.format("Your heaviest day was %@: %@.", date(high.date, template: "EEEE"), text.duration(seconds)))
+                    .reportType(.body).fixedSize(horizontal: false, vertical: true)
+                if let low = values.low, let lowSeconds = low.seconds, low.date != high.date {
+                    Text(text.format("Your lightest day was %@: %@.", date(low.date, template: "EEEE"), text.duration(lowSeconds)))
+                        .reportType(.body).fixedSize(horizontal: false, vertical: true)
                 }
+                if !current.isComplete { footnote("Only fully reported days count.") }
             } else {
-                RoundedRectangle(cornerRadius: 4).stroke(muted.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [2, 3]))
-                    .frame(width: width, height: 14)
+                Text(insightsText("Only fully reported days count.")).reportType(.body)
+                    .foregroundStyle(colors.inkSoft).fixedSize(horizontal: false, vertical: true)
             }
-        }.frame(width: max(width, 16), height: 125).accessibilityHidden(true)
+        }
     }
+
+    // MARK: Weekday patterns
+
     private var weekdayPatterns: some View {
         let patterns = UsageTrendsModel.weekdayPatterns(usage)
         let maximum = max(1, patterns.compactMap(\.averageSeconds).max() ?? 1)
-        return VStack(alignment: .leading, spacing: 20) {
-            heading("Weekday patterns")
-            Text(format("%@ – %@", date(usage.weeks.first?.start ?? current.start),
-                date(usage.calendar.date(byAdding: .day, value: -1, to: usage.calendar.startOfDay(for: usage.generatedAt))!)))
-                .font(.caption).foregroundStyle(muted)
+        return card("Weekday patterns") {
+            if let heaviest = UsageTrendsModel.heaviestWeekday(patterns) {
+                Text(text.format("%@ tends to be your heaviest day.", weekday(heaviest.weekday)))
+                    .reportType(.body).fixedSize(horizontal: false, vertical: true)
+            }
+            if let range = UsageTrendsModel.patternRange(usage) {
+                Text(text.format("%@ – %@", date(range.start), date(range.end))).reportType(.meta).foregroundStyle(colors.inkSoft)
+            }
             ForEach(patterns) { pattern in
-                VStack(alignment: .leading, spacing: 9) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(weekday(pattern.weekday)).font(.subheadline)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(weekday(pattern.weekday)).reportType(.body)
                         Spacer(minLength: 8)
-                        Text(duration(pattern.averageSeconds)).font(.subheadline).monospacedDigit().foregroundStyle(accent)
-                        Text(format("%d days", pattern.sampleCount)).font(.caption2).foregroundStyle(muted)
+                        Text(text.compact(pattern.averageSeconds)).font(.system(.subheadline, design: .serif))
+                            .monospacedDigit().foregroundStyle(colors.accent)
+                        Text(text.format("%d days", pattern.sampleCount)).reportType(.chip).foregroundStyle(colors.inkSoft)
                     }
                     GeometryReader { geometry in
-                        Capsule().fill(accent.opacity(0.07))
+                        Capsule().fill(colors.accentTint)
                         if let fraction = UsageDashboardPresentation.barFraction(pattern.averageSeconds, maximum: maximum) {
-                            Capsule().fill(accent.opacity(0.55)).frame(width: geometry.size.width * fraction)
+                            Capsule().fill(colors.accent.opacity(0.55)).frame(width: geometry.size.width * fraction)
                         }
                     }.frame(height: 4).accessibilityHidden(true)
-                }.accessibilityElement(children: .combine)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(weekday(pattern.weekday))
+                .accessibilityValue(text.duration(pattern.averageSeconds) + ", " + text.format("%d days", pattern.sampleCount))
             }
-            Text(insightsText("Averages use only fully reported days.")).font(.caption).foregroundStyle(muted)
+            footnote("Averages use only days with full data.")
         }
     }
-    private var extremeDays: some View {
-        let values = UsageTrendsModel.extremes(usage, in: current)
-        return VStack(alignment: .leading, spacing: 20) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 32) { extremeFigures(values) }
-                VStack(alignment: .leading, spacing: 24) { extremeFigures(values) }
-            }
-            Text(insightsText("Among fully reported days in this period.")).font(.caption).foregroundStyle(muted)
-        }.padding(.vertical, 24).overlay(alignment: .top) { rule }.overlay(alignment: .bottom) { rule }
-    }
-    @ViewBuilder private func extremeFigures(_ values: (high: UsageInsightsDay?, low: UsageInsightsDay?)) -> some View {
-        dayFigure(values.high, title: "Most used day")
-        dayFigure(values.low, title: "Least used day")
-    }
-    private func dayFigure(_ day: UsageInsightsDay?, title: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(insightsText(title)).font(.caption).foregroundStyle(muted)
-            Text(duration(day?.seconds)).font(.system(.title2, design: .serif)).foregroundStyle(accent)
-            if let day {
-                Text(date(day.date, template: "EEEMMMd")).font(.caption2).foregroundStyle(muted)
-                if !day.isComplete { Text(insightsText("Partial reported coverage")).font(.caption2).foregroundStyle(muted) }
-            }
-        }.fixedSize(horizontal: false, vertical: true).accessibilityElement(children: .combine)
-    }
+
+    // MARK: Biggest app changes
+
     private var appChanges: some View {
         let changes = Array(UsageTrendsModel.appChanges(applications, current: current, previous: previous).prefix(5))
-        return VStack(alignment: .leading, spacing: 20) {
-            heading("Biggest app changes")
-            if changes.isEmpty { Text(insightsText("No comparable app changes yet.")).font(.subheadline).foregroundStyle(muted) }
+        return card("Biggest app changes") {
+            if changes.isEmpty {
+                Text(insightsText("No comparable app changes yet.")).reportType(.body).foregroundStyle(colors.inkSoft)
+            }
             ForEach(changes) { change in
                 Button { onSelectApp(change.id) } label: {
-                    VStack(alignment: .leading, spacing: 9) {
+                    VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 12) {
-                            applicationLabel(change.id).id(applicationIdentity(change.id)).labelStyle(.titleAndIcon)
+                            applicationLabel(change.id).id(applicationIdentity(change.id)).reportType(.body).labelStyle(.titleAndIcon)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                            Text(signedDuration(change.trend.differenceMinutes)).monospacedDigit().foregroundStyle(accent)
-                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(muted).accessibilityHidden(true)
-                        }.font(.subheadline)
-                        Text(duration(change.previous.seconds) + " → " + duration(change.current.seconds)).font(.caption).foregroundStyle(muted)
-                    }.frame(minHeight: 44).contentShape(Rectangle())
+                            Text(text.signedDuration(minutes: change.trend.differenceMinutes))
+                                .font(.system(.subheadline, design: .serif)).monospacedDigit().foregroundStyle(colors.accent)
+                        }
+                        Text(text.duration(change.previous.seconds) + " → " + text.duration(change.current.seconds))
+                            .reportType(.meta).foregroundStyle(colors.inkSoft)
+                    }.frame(minHeight: dynamicTypeSize.isAccessibilitySize ? 64 : 44).contentShape(Rectangle())
                 }.buttonStyle(.plain).accessibilityElement(children: .combine)
             }
-            Text(insightsText("Only apps with full coverage in both periods.")).font(.caption).foregroundStyle(muted)
-            Text(insightsText("These app changes do not add up to the overall difference.")).font(.caption).foregroundStyle(muted)
+            footnote("Only apps with full data in both weeks. App changes don't add up to your overall change.")
         }
     }
+
+    // MARK: Your starting point
+
+    /// A self-reported estimate, never measured history or time saved.
     private func baselineComparison(_ baseline: UsageInsightsBaseline) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            heading("Compared with your starting estimate")
-            Text(duration(Double(baseline.weeklyMinutes) * 60)).font(.system(.title, design: .serif)).foregroundStyle(accent)
-            Text(format("Recorded on %@", date(baseline.recordedAt, template: "yMMMd"))).font(.caption).foregroundStyle(muted)
-            Text(insightsText("Your estimate, not measured Screen Time or a goal.")).font(.caption).foregroundStyle(muted)
-            if current.isComplete, let seconds = current.seconds {
-                Text(format("Compared with your estimate: %@", signedDuration(seconds / 60 - Double(baseline.weeklyMinutes)))).font(.subheadline)
-                Text(insightsText("Your estimate is self-reported; this comparison does not measure time saved by Demora.")).font(.caption).foregroundStyle(muted)
+        card("Your starting point", fill: colors.accentTint) {
+            Text(text.format("You estimated %@ a week before using Demora.", text.duration(Double(baseline.weeklyMinutes) * 60)))
+                .reportType(.body).fixedSize(horizontal: false, vertical: true)
+            Text(text.format("Recorded %@", date(baseline.recordedAt, template: "yMMMd")))
+                .reportType(.meta).foregroundStyle(colors.inkSoft)
+            if let difference = usage.baselineDifference(for: current),
+               let sentence = UsageComparisonText.make(differenceMinutes: difference, percent: nil) {
+                Text(sentence.estimateSentence(period: name(current), text)).reportType(.body)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(insightsText("Needs a week with full data to compare.")).reportType(.meta)
+                    .foregroundStyle(colors.inkSoft).fixedSize(horizontal: false, vertical: true)
             }
-        }.padding(22).frame(maxWidth: .infinity, alignment: .leading)
-            .background(accent.opacity(0.06), in: RoundedRectangle(cornerRadius: 22))
+            footnote("This is your own estimate, not measured Screen Time. It doesn't measure time saved by Demora.")
+        }
     }
+
+    // MARK: How complete this is
+
     private var coverage: some View {
         let values = UsageTrendsModel.coverage(usage)
         let days = usage.days.filter { $0.date < usage.calendar.startOfDay(for: usage.generatedAt) }
-        return VStack(alignment: .leading, spacing: 18) {
-            heading("Report coverage")
+        return card("How complete this is") {
+            Text(text.format("%d of %d days have full data.", values.complete, values.complete + values.partial + values.missing))
+                .reportType(.body)
             ScrollView(.horizontal, showsIndicators: false) {
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(coverageCellSize), spacing: 10), count: 7), spacing: 10) {
                 ForEach(days) { day in
                     ZStack {
-                        if day.seconds == nil { Circle().stroke(muted.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [2, 3])) }
-                        else if day.isComplete { Circle().fill(accent.opacity(0.75)) }
-                        else { Circle().stroke(accent, lineWidth: 1.5) }
-                        Text(date(day.date, template: "d")).font(.caption2).foregroundStyle(day.isComplete ? paper : muted)
+                        if UsageFormat.wholeMinutes(day.seconds) == nil {
+                            Circle().stroke(colors.inkSoft.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                        } else if day.isComplete { Circle().fill(colors.accent.opacity(0.8)) }
+                        else { Circle().stroke(colors.accent, lineWidth: 1.5) }
+                        Text(date(day.date, template: "d")).font(.caption2)
+                            .foregroundStyle(day.isComplete && UsageFormat.wholeMinutes(day.seconds) != nil ? colors.card : colors.inkSoft)
                     }.frame(width: coverageCellSize, height: coverageCellSize).accessibilityElement(children: .ignore)
                         .accessibilityLabel(date(day.date, template: "EEEEMMMMd"))
-                        .accessibilityValue(insightsText(day.seconds == nil ? "Missing days" : (day.isComplete ? "Complete days" : "Partial days")))
+                        .accessibilityValue(insightsText(coverageKey(day)))
                 }
             }
             }
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: 24) { coverageFigures(values) }
-                VStack(alignment: .leading, spacing: 14) { coverageFigures(values) }
+                VStack(alignment: .leading, spacing: 12) { coverageFigures(values) }
             }
-            Text(insightsText("Screen Time may report incomplete or delayed data. Missing days are not counted as zero.")).font(.caption).foregroundStyle(muted)
-            Text(insightsText("Today is excluded from trends.")).font(.caption).foregroundStyle(muted)
+            footnote("Missing days aren't counted as zero.")
         }
     }
-    private func dayCoverage(_ day: UsageInsightsDay?) -> String {
-        guard let day, let seconds = day.seconds, seconds.isFinite, seconds >= 0 else { return insightsText("Missing days") }
-        return insightsText(day.isComplete ? "Full reported coverage" : "Partial reported coverage")
+    private func coverageKey(_ day: UsageInsightsDay) -> String {
+        guard UsageFormat.wholeMinutes(day.seconds) != nil else { return "No data" }
+        return day.isComplete ? "Full data" : UsageCoverageLabel.partly
     }
     @ViewBuilder private func coverageFigures(_ values: (complete: Int, partial: Int, missing: Int)) -> some View {
-        coverageFigure(values.complete, title: "Complete days")
-        coverageFigure(values.partial, title: "Partial days")
-        coverageFigure(values.missing, title: "Missing days")
+        coverageFigure(values.complete, title: "Full data")
+        coverageFigure(values.partial, title: "Partly reported")
+        coverageFigure(values.missing, title: "No data")
     }
     private func coverageFigure(_ count: Int, title: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(number(Double(count))).font(.system(.title, design: .serif)).foregroundStyle(accent)
-            Text(insightsText(title)).font(.caption).foregroundStyle(muted)
+        VStack(alignment: .leading, spacing: 2) {
+            Text(text.number(Double(count))).reportType(.time).foregroundStyle(colors.accent)
+            Text(insightsText(title)).reportType(.chip).foregroundStyle(colors.inkSoft)
         }.fixedSize(horizontal: false, vertical: true).accessibilityElement(children: .combine)
     }
-    private var rule: some View { Rectangle().fill(muted.opacity(0.18)).frame(height: 0.5) }
-    private func heading(_ key: String) -> some View { Text(insightsText(key)).font(.subheadline.weight(.semibold)).accessibilityAddTraits(.isHeader) }
-    private func format(_ key: String, _ values: CVarArg...) -> String { String(format: insightsText(key), locale: locale, arguments: values) }
-    private func number(_ value: Double) -> String {
-        let f = NumberFormatter(); f.locale = locale; f.numberStyle = .decimal; f.maximumFractionDigits = 1
-        return f.string(from: NSNumber(value: value)) ?? "—"
+
+    // MARK: Pieces
+
+    private func card<Content: View>(_ title: String, fill: Color? = nil,
+                                     @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ReportSectionHeader(title: insightsText(title), colors: colors)
+            content()
+        }
+        .reportCard(colors, fill: fill)
     }
-    private func signed(_ value: Double) -> String { (value > 0 ? "+" : "") + number(value) }
-    private func signedDuration(_ minutes: Double) -> String { format("%@ min", signed(minutes)) }
-    private func duration(_ seconds: TimeInterval?) -> String {
-        guard let seconds, seconds.isFinite, seconds >= 0 else { return insightsText("— No data") }
-        let minutes = floor(seconds / 60)
-        return minutes < 60 ? format("%@ min", number(minutes)) : format("%@ h %@ min", number(floor(minutes / 60)), number(minutes.truncatingRemainder(dividingBy: 60)))
+    private func footnote(_ key: String) -> some View {
+        Text(insightsText(key)).reportType(.meta).foregroundStyle(colors.inkSoft)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+    /// "Last 7 full days", "The week before", or the period's dates.
+    private func name(_ period: UsageInsightsPeriod) -> String {
+        UsagePeriodName.key(for: period, in: usage).map(insightsText) ?? range(period)
     }
     private func date(_ date: Date, template: String = "MMMd") -> String {
         let f = DateFormatter(); f.locale = locale; f.calendar = usage.calendar; f.timeZone = usage.calendar.timeZone
         f.setLocalizedDateFormatFromTemplate(template); return f.string(from: date)
     }
     private func weekday(_ day: Int) -> String {
-        let f = DateFormatter(); f.locale = locale; return f.weekdaySymbols[day - 1]
+        let f = DateFormatter(); f.locale = locale; f.calendar = usage.calendar
+        let symbols = f.weekdaySymbols ?? []
+        return symbols.indices.contains(day - 1) ? symbols[day - 1] : ""
     }
     private func range(_ period: UsageInsightsPeriod) -> String {
-        format("%@ – %@", date(period.start), date(usage.calendar.date(byAdding: .day, value: -1, to: period.end) ?? period.start))
+        text.format("%@ – %@", date(period.start), date(usage.calendar.date(byAdding: .day, value: -1, to: period.end) ?? period.start))
     }
 }

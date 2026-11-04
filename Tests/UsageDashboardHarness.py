@@ -88,6 +88,7 @@ check(en.percent(0.4) == nil && en.percent(-0.49) == nil && en.percent(nil) == n
 let german = ["%@ h %@ min": "%@ Std. %@ Min.", "%@ h": "%@ Std.", "%@ min": "%@ Min."]
 let de = UsageFormat(locale: Locale(identifier: "de_DE"), translate: { german[$0] ?? $0 })
 check(de.duration(130 * 60) == "2 Std. 10 Min." && de.duration(1_000 * 3600) == "1.000 Std.")
+check(de.format("Your heaviest day was %@: %@.", "Samstag", de.duration(42 * 60)) == "Your heaviest day was Samstag: 42 Min.")
 let devanagari = UsageFormat(locale: Locale(identifier: "hi_IN@numbers=deva"), translate: { $0 })
 check(devanagari.duration(130 * 60) == "२ h १० min")
 
@@ -132,14 +133,28 @@ check(UsageDashboardPresentation.lastWeekDailyAverage(
     UsageInsightsAccumulator(now: now, calendar: calendar).configuration(baseline: nil)) == nil)
 print("Usage dashboard display checks passed: \(checks)")
 '''
-assert 'rangeButton("Daily"' in view and 'rangeButton("Weekly"' in view
-assert 'selectedDay = item.date' in view and 'selectedWeek = item.start' in view
+# One Day · Week · Trends switch (I1); selections go through the tested model.
+assert 'ForEach(UsageInsightsSegment.allCases' in view and 'segmentButton(item' in view
+assert 'selection.show(item)' in view and '@State private var selection = UsageInsightsSelection<AnyHashable>()' in view
+assert 'selection.selectDay(item.date)' in view and 'selection.selectWeek(item.start)' in view
 assert 'accessibilityReduceMotion' in view and 'isSelected' in view
 assert 'ScrollView(.horizontal' in view and 'count * (dynamicTypeSize.isAccessibilitySize ? 64 : 44)' in view
+assert 'minWidth: dynamicTypeSize.isAccessibilitySize ? 64 : 44' in view  # every bar keeps a 44/64 pt target
 assert 'UsageDashboardPresentation.barFraction' in view
-assert 'fraction == 0' in view and 'dash: [2, 3]' in view
-assert 'ViewThatFits' in trends and 'showingDetails.toggle()' in view
-assert 'UsageInsightsTrend.compare(comparisonCurrent, with: previous)' in view
+assert 'fraction == 0' in view and 'dash: [2, 3]' in view  # zero is a hollow dot, missing is dashed
+assert 'if !complete { Rectangle().fill(colors.paper' in view  # partial is never colour alone
+assert 'ViewThatFits' in trends
+# The report's expandable "Usage details" is gone (I4); measured counts live
+# in Trends → How complete this is.
+assert 'showingDetails' not in view and 'Usage details' not in view + trends
+assert 'How complete this is' in trends and 'UsageTrendsModel.coverage(usage)' in trends
+assert 'UsageWeekComparison.make(week, in: usage.weeks)' in view
+# Neutral ink for less and more (I2); no green/brick grading.
+assert 'loosen' not in view + trends and 'free' not in view + trends
+# Only incomplete data is labelled (I8).
+assert 'Full reported coverage' not in view + trends and 'Partial reported coverage' not in view + trends
+assert 'Color(red:' not in view + trends, 'colours come from ReportTheme'
+assert 'frame(maxWidth: 640)' in view
 assert 'reader.scrollTo(id, anchor: .trailing)' in view
 assert 'maxHeight: .infinity' in host and 'reportHeight' not in host
 assert 'showingAbout' in host and 'showingDetails' not in host  # one About sheet (I4)
@@ -157,6 +172,18 @@ for amount in ('tintLight', 'tintDark'):
     copy_amount = re.search(r'static let ' + amount + r': Double = ([0-9.]+)', report_theme)
     if copy_amount:
         assert app_amount and app_amount.group(1) == copy_amount.group(1), ('tint amount drifted', amount)
+assert {'paper', 'card', 'ink', 'inkSoft', 'hairline', 'accentBlue', 'accentRed', 'free'} <= report_palette.keys()
+assert re.search(r'static let tintLight: Double', report_theme), 'tint amounts copied'
+# Type scale: every ReportType case returns exactly DemoraType's font and tracking.
+def cases(source, start):
+    body = source.split(start, 1)[1].split('\n}\n', 1)[0]
+    return re.findall(r'case \.(\w+):\s*return ([^\n]+)', body)
+assert cases(theme, 'enum DemoraType {') == cases(report_theme, 'enum ReportType {'), 'ReportType drifted from DemoraType'
+assert len(cases(report_theme, 'enum ReportType {')) >= 11
+def blend(source):
+    body = source.split('static func blend(', 1)[1].split('\n    }\n', 1)[0]
+    return re.sub(r'\s+', ' ', body)
+assert blend(theme) == blend(report_theme), 'tint blend drifted'
 with tempfile.TemporaryDirectory(prefix='demora-dashboard-checks-') as temporary:
     work = Path(temporary)
     main = work / 'main.swift'

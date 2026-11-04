@@ -288,8 +288,9 @@ assert "dynamicTypeSize.isAccessibilitySize" in view
 assert "accessibilityElement(children: .combine)" in view
 assert "accessibilityAddTraits(.isHeader)" in view
 assert "insightsText(" in view
-assert all(key in view for key in ["latch.language", "latch.appearance", "latch.accentColor"])
-assert "Compared with your starting estimate" in trends and "not measured Screen Time or a goal" in trends
+assert all(key in report_theme for key in ["latch.language", "latch.appearance", "latch.accentColor"])
+assert "ReportPreferences.read(system: systemScheme)" in view
+assert "baselineDifference(for:" in trends and "not measured Screen Time" in trends and "time saved by Demora" in trends
 assert "baseline: selectedApplication == nil ? configuration.baseline : nil" in view
 assert "Shared/Localization" not in report + view + model
 assert "accumulator.configuration(baseline: nil)" in application_model  # app scopes carry no estimate

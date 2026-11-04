@@ -9,7 +9,7 @@ enum AppGroup { static let id = "demora.dashboard.preview." + UUID().uuidString 
 struct UsageDashboardPreview {
     @MainActor static func main() throws {
         let arguments = CommandLine.arguments
-        guard arguments.count == 6 || arguments.count == 7 else { fatalError("output width height appearance language [day/week/app/appweek/missingapp/empty/partial/large/trends/apptrends/trendpartial/trendempty/trendlarge/trendbaseline]") }
+        guard arguments.count == 6 || arguments.count == 7 else { fatalError("output width height appearance language [day/week/app/appweek/missingapp/empty/partial/large/trends/apptrends/trendpartial/trendempty/trendlarge/trendbaseline/noestimate/onlytoday/redaccent]") }
         let mode = arguments.count == 7 ? arguments[6] : "day"
         let output = arguments[1]
         let width = Double(arguments[2])!
@@ -18,7 +18,7 @@ struct UsageDashboardPreview {
         defer { defaults.removePersistentDomain(forName: AppGroup.id) }
         defaults.set(arguments[4], forKey: "latch.appearance")
         defaults.set(arguments[5], forKey: "latch.language")
-        if arguments[4] == "dark" { defaults.set("red", forKey: "latch.accentColor") }
+        if arguments[4] == "dark" || mode == "redaccent" { defaults.set("red", forKey: "latch.accentColor") }
         _ = NSApplication.shared
         NSApplication.shared.setActivationPolicy(.prohibited)
         var calendar = Calendar(identifier: .gregorian)
@@ -28,7 +28,8 @@ struct UsageDashboardPreview {
         var accumulator = UsageInsightsAccumulator(now: now, calendar: calendar)
         var appAccumulator = ApplicationUsageAccumulator(now: now, calendar: calendar)
         for index in -28...0 {
-            if mode == "empty" || mode == "trendempty" || ((mode == "partial" || mode == "trendpartial") && index < -3) { continue }
+            if mode == "empty" || mode == "trendempty" || ((mode == "partial" || mode == "trendpartial") && index < -3)
+                || (mode == "onlytoday" && index < 0) { continue }
             let start = calendar.date(byAdding: .day, value: index, to: today)!
             let end = calendar.date(byAdding: .day, value: 1, to: start)!
             let minutes = index == 0 ? 167 : (index < -7 ? 230 : [184, 193, 143, 210, 222, 177, 160][abs(index) % 7])
@@ -44,10 +45,12 @@ struct UsageDashboardPreview {
         configuration.applications = appAccumulator.applications()
         if mode == "missingapp" { configuration.applications.removeAll { $0.id == 0 } }
         let names = ["Instagram", "YouTube", "Spotify", "Safari", "Messages", "Books", "Maps"]
-        let root = UsageInsightsView(configuration: configuration,
-            initiallyWeekly: mode == "week" || mode == "appweek",
+        // Synthetic fixtures for the three segments (§8): Day, Week, Trends,
+        // an app scope, no estimate (trends/noestimate) and partial data.
+        let segment: UsageInsightsSegment = ["week", "appweek", "onlytoday"].contains(mode) ? .week
+            : ["trends", "apptrends", "trendpartial", "trendempty", "trendlarge", "trendbaseline", "noestimate"].contains(mode) ? .trends : .day
+        let root = UsageInsightsView(configuration: configuration, initialSegment: segment,
             initiallySelectedApplication: mode == "app" || mode == "appweek" || mode == "missingapp" || mode == "apptrends" ? 0 : nil,
-            initiallyShowingTrends: ["trends", "apptrends", "trendpartial", "trendempty", "trendlarge", "trendbaseline"].contains(mode),
             applicationLabel: { id in
                 AnyView(HStack(spacing: 10) {
                     Image(systemName: ["camera", "play.rectangle", "music.note", "safari", "message", "book", "map"][id])

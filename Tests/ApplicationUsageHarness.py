@@ -161,10 +161,11 @@ assert 'max(previous, seconds)' in report  # duplicate categories don't add
 assert 'segment.totalActivityDuration' in report
 assert 'applicationTokens: Dictionary' in report
 assert 'AnyView(Label(token))' in extension and 'AnyHashable(token)' in extension
-assert '@State private var selectedApplication: AnyHashable?' in view
+assert '@State private var selection = UsageInsightsSelection<AnyHashable>()' in view
+assert 'private var selectedApplication: AnyHashable? { selection.application }' in view
 assert 'applicationIdentity($0.id) == selectedApplication' in view
-assert 'selectedApplication = applicationIdentity(id)' in view
-assert 'selectedApplication = nil' in view
+assert 'selection.scope(to: applicationIdentity(id))' in view
+assert 'selection.showAllApps(); selectedApplicationLabel = nil' in view
 assert 'reader.scrollTo("usageTop", anchor: .top)' in view
 assert 'app.usage.weeks.first' in view and 'app.usage.days.first' in view
 assert 'baseline: selectedApplication == nil ? configuration.baseline : nil' in view
@@ -172,7 +173,9 @@ assert 'UsageDashboardPresentation.unavailable(configuration)' in view
 assert 'else if let selectedApplicationLabel' in view
 assert 'applicationLabel(id).id(selectedApplication)' in view
 assert 'selectedApplicationLabel.id(selectedApplication)' in view
-assert 'rankedApplications' in view and 'prefix(5)' in view and 'LazyVStack' in view
+assert 'rankedApplications' in view and 'visibleApplications(applications, expanded:' in view and 'LazyVStack' in view
+assert 'if selection.showsMostUsed { mostUsedApplications(colors) }' in view
+assert 'text.format("See all %d apps", applications.count)' in view
 for file in ['ApplicationUsageAccumulator.swift', 'UsageInsightsReport.swift', 'UsageInsightsModel.swift', 'UsageInsightsView.swift', 'UsageTrendsView.swift', 'UsageTrendsModel.swift', 'UsageFormat.swift', 'ReportTheme.swift', 'UsageDashboardPresentation.swift']:
     code = re.sub(r'//[^\n]*', '', (ROOT / 'LatchReport' / file).read_text())
     assert not re.search(r'\b(?:Encodable|Codable|JSONEncoder|URLSession|FileManager|OSLog|Logger)\b|\.set\s*\(|\.write\s*\(|\b(?:print|NSLog)\s*\(', code)

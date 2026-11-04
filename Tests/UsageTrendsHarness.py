@@ -178,22 +178,29 @@ print("Usage trends algorithm checks passed: \(checks)")
 view = (ROOT / 'LatchReport/UsageInsightsView.swift').read_text()
 trends = (ROOT / 'LatchReport/UsageTrendsView.swift').read_text()
 host = (ROOT / 'Latch/UsageInsightsView.swift').read_text()
-assert 'if showingTrends' in view and 'UsageTrendsView(' in view
-assert 'onBack: { showingTrends = false }' in view
-assert 'showingTrends = true' in view and 'Explore trends' in view
+# Trends is a segment of one report scroll, not a page with its own back
+# button the host can't coordinate (I1).
+assert 'case .trends: trendsSegment(colors)' in view and 'UsageTrendsView(' in view
+assert 'onBack' not in view + trends and 'Back to usage' not in view + trends
+assert 'showingTrends' not in view and 'Explore trends' not in view
+assert 'ScrollView {' not in trends  # the report owns the only vertical scroll
 assert 'applicationLabel(id).id(selectedApplication)' in view
 assert 'selectedApplicationLabel.id(selectedApplication)' in view
 assert 'applicationLabel(app.id).id(applicationIdentity(app.id))' in view
 assert 'applicationLabel(change.id).id(applicationIdentity(change.id))' in trends
 assert 'baseline: selectedApplication == nil ? configuration.baseline : nil' in view
-assert 'Today is excluded from trends.' in trends
-assert 'These app changes do not add up to the overall difference.' in trends
-assert 'time saved by Demora' in trends and 'not measured Screen Time or a goal' in trends
-assert 'accessibilityReduceMotion' in trends and 'accessibilityValue' in trends and 'ViewThatFits' in trends
-assert 'dayCoverage(day)' in trends and 'dayCoverage(prior)' in trends
+assert trends.count("Today isn't included in trends.") == 1  # said once
+assert "App changes don't add up to your overall change." in trends
+assert 'time saved by Demora' in trends and 'not measured Screen Time' in trends
+assert 'usage.baselineDifference(for: current)' in trends and 'if !isAppScope' in trends
+# The week picker (and its animation) moved to the shared Four weeks card.
+assert 'reduceMotion ? nil' in view and 'accessibilityValue' in trends and 'ViewThatFits' in trends
+assert 'dayValue(day)' in trends and 'dayValue(prior)' in trends and 'dayCoverage(day)' in trends  # both weeks' coverage in VoiceOver
 assert '@ScaledMetric(relativeTo: .caption2) private var coverageCellSize' in trends
 assert 'GridItem(.fixed(coverageCellSize)' in trends
-assert 'selectedStart = week.start; selectedDay = nil' in trends
+assert '.onChange(of: current.start) { _ in selectedDay = nil }' in trends
+assert 'UsageTrendsModel.heaviestWeekday(patterns)' in trends and 'UsageTrendsModel.patternRange(usage)' in trends
+assert '!)' not in trends and '.seconds!' not in trends  # no force-unwraps
 # The host's existing refresh identifier is unchanged; no app selection exported into it.
 assert 'selectedApplication' not in host and 'UsageTrends' not in host
 for name in ['UsageTrendsModel.swift', 'UsageTrendsView.swift']:
