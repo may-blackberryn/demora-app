@@ -1,61 +1,65 @@
 # Demora iOS full redesign — review
 
 ## Start here
-- **State:** foundations, Today and now the Rules build (`docs/rules-redesign.md`)
-  are on `design/full-redesign`; the Rules build is the commits after `5aa9c3d`
-  (see Sessions). Nothing is pushed. Verify passes: every `Tests/*Harness.py`
-  (including the new `RulesPresentationHarness`), the two Swift harnesses, the
+- **State:** foundations, Today, Rules and now the Insights build
+  (`docs/insights-redesign.md`) are on `design/full-redesign`; the Insights
+  build is the commits after `32abd2a` (see Sessions). Nothing is pushed.
+  Verify passes: every `Tests/*Harness.py`, the two Swift harnesses, the
   localization check, `git diff --check`, and unsigned arm64 Debug and Release
   builds of the Latch scheme.
 - **Install / run:** open `Latch.xcodeproj`, scheme **Latch**, Debug, on your
   iPhone. No simulator runtime is installed on this Mac, so nothing here was
-  looked at on a screen.
-- **What to try on the phone, in order (Rules):**
-  1. Tap the second tab (still labelled **Limits**): it is now **Rules** —
-     title, calendar and conflicts icons, a **Your waits** strip, then your
-     rules in sections (Limits, Schedules, Day & night, Planned, Always on).
-     Each card shows one summary line and, where it applies, a chip
-     ("Blocked", "On until 21:00", "Starts in 2 hr", "On"/"Off").
-  2. Tap **New rule** (pinned at the bottom): six choices. Try **Daily
-     limit**: name, Apps, the big minutes value with − / + (tap the value for
-     the wheels), then **Different limit per day**, **Split the day** and
-     **Extra time** rows, each a sub-page. **Review change** opens the receipt.
-  3. After confirming, the new limit appears as a dashed card with "Added in
-     …". Tap the countdown line: the Changes ledger opens at that change.
-  4. Tap any rule card: the summary sheet says what it does (When, Days,
-     What, How much, Split, Extra time…) with **Edit** and a quiet Remove.
-     Remove asks through the receipt (hold for looser). With a change already
-     waiting, Edit and Remove are disabled and it says to cancel in Changes.
-  5. **Repeating block**: From/To with a dotted thread, "Ends next day" when it
-     wraps, Every day / Some days / Monthly. Make one overlap another block of a
-     different kind — "Overlaps with … on …" appears under the form.
-  6. **Day & night**: name, What, Wake-up (Ask me to tap Wake up, start, wait,
-     latest), Sleep, Days as round chips, "Different times per day" sub-page,
-     "?" for the long explanation. Check onboarding's day & night step still
-     saves without a receipt (Debug: developer demos).
-  7. **Always on**: tap App deletion / Adult websites → Turn on/off through
-     the receipt; Websites → Edit list, add a site (receipt), remove one.
-  8. **Your waits** strip → the waits page, Review change → receipt.
-  9. Conflicts icon (dot when rules overlap) → restyled Conflicts, "?" help,
-     priority rows → Prioritize this → receipt.
-  10. On Today: tap the Now card while one block runs → its summary sheet; with
-      several blocks → Rules. Tap an item on the day thread → its summary.
-  11. If you still use the old wake-up / sleep settings, they appear as
-      "Wake-up" / "Sleep" cards under Day & night; their editors keep every
-      old check.
-- **Decisions most worth your eye:** tab 1 still says "Limits" until the
-  four-tab switch; counts say "websites" (the old German "sites" entry was
-  wrong); a new repeating block still defaults to "All except these"; the
-  first problem line only shows once you've changed something; sheet editors
-  with edits can't be swiped away (Cancel asks).
-- **Known limits:** nothing was checked on a screen or device; the Calendar
-  page itself isn't restyled; "Get extra time on Today" switches tabs but
-  doesn't scroll; the Schedules tab's pages (Sessions, Planned, Recurring,
-  Day & night, now & next) stay until the four-tab switch; the legacy tutorial
-  keeps its old limit and recurring editors; the old "Home tab" pending key is
-  left unused until the You build.
-- **Housekeeping:** build products are in the session scratchpad, outside
-  the repo.
+  looked at on a phone screen; the report was only rendered as synthetic macOS
+  pictures.
+- **What to try on the phone, in order (Insights):**
+  1. On Today, scroll to the bottom and tap **Insights** (still a link there
+     until the four-tab switch). The page opens with **Insights**, a refresh
+     arrow and an ⓘ. While iOS draws the report you should briefly see
+     "Loading your usage…"; once the report appears it must be gone. If the
+     line stays visible *behind* drawn charts, tell me: that drops decision I9.
+  2. **Day** (selected first): the big total says "Today so far", with "Your
+     daily average last week" under it when last week is fully reported. The
+     chart card pages with ‹ ›; tap a bar to see that day. A day iOS only
+     partly reported shows a "Partly reported" chip; full days show nothing.
+  3. **Week**: "LAST 7 FULL DAYS · dates", the total, "… a day", and one
+     sentence such as "↓ 2 h 10 min less than the week before (−9%)" in plain
+     ink. Tap an older bar in **Four weeks**: the title switches to its dates,
+     and the oldest says "No earlier week to compare."
+  4. **Trends**: the same Four weeks card on top, then Compared with the week
+     before, Day by day (tap a day for both figures), Highs and lows, Weekday
+     patterns, Biggest app changes, Your starting point and How complete this
+     is (the calendar of dots and the three counts). Pick another week above:
+     every card follows it. There is no "Back to usage" any more.
+  5. In **Most used apps** (Day or Week) tap an app: the whole view scopes to
+     it (name + **All apps** under the switch), Most used disappears, and
+     Day/Week/Trends all stay on that app. **All apps** returns.
+  6. Tap ⓘ **About this data**: five short sections, then **Your starting
+     point** with Add or Edit. Add an estimate, Save, close the sheet: Trends →
+     Your starting point shows it ("You estimated 21 h a week…"). Edit again and
+     switch it off to remove it; Trends then shows the one-line hint instead.
+  7. Tap the refresh arrow a few times quickly: one light tap each, the report
+     refreshes without blinking away or looping.
+  8. Change appearance (dark), accent (red) and language (try Deutsch and
+     हिन्दी) and come back: report colours and words follow; long German lines
+     wrap, numbers never truncate.
+  9. Largest text size: the switch spans the width, bars scroll sideways with
+     big targets, figures stack. VoiceOver: switch → scope → hero (one element)
+     → chart bars (date, value, "Partly reported" only when it applies).
+  10. Debug build without Screen Time access (or after revoking it): Insights
+      shows "Insights needs Screen Time access." with **Go to Today**.
+  11. Onboarding/welcome estimate step and the Guide's **Insights** entry now
+      point to "Insights → About this data".
+- **Decisions most worth your eye:** "Insights" is translated as a stats word
+  (Estadísticas, Einblicke, Statistiques…); "The week before" is translated as
+  "the 7 days before" so it can't read as a calendar week; under a minute
+  reads "0 min"; a change under 1 % drops the percentage; Today's link now
+  reads "Insights"; About this data keeps the approved "Demora can't read,
+  save or send it." (the reviewer suggested softer wording).
+- **Known limits:** nothing checked on a phone; the loading line's behaviour
+  needs the device check (I9); `canRefresh` still uses Today's tab until the
+  four-tab switch; highs-and-lows weekdays aren't bold.
+- **Housekeeping:** build products and preview pictures are in the session
+  scratchpad, outside the repo.
 
 ## Sessions
 | Session | Scope | Commits | Status |
@@ -63,6 +67,7 @@
 | Foundations build | Tokens, type, components, text case, tab bar; three review fixes | `7af8f65`, `46181bc`, `b15b244`, `d448215`, `5fad6e0`; fixes `3d25eda`, `23ba309`, `a59969f` | Done, reviewed and fixed |
 | Today build | Pure logic, change receipt, Changes ledger, Today layout, report restyle, extra time moved | `82181d3`, `f3cbd3f`, `2548ac8`, `e16fe23`, `3180864`, `f38951e`; review fix `d2f8329` | Done, self-reviewed and fixed; awaiting the main session's review |
 | Rules build | Pure logic, Rules tab, summary sheet, editors, receipts and Changes copy, dead editor removed | `90e5f42`, `660ec07`, `b4345ae`, `f5d7e54`, `ea16ed1`, `c79d334`; review fixes `61681ee` | Done, reviewed and fixed; awaiting the main session's review |
+| Insights build | Pure logic, host header/loading line/About sheet, Day · Week · Trends report, copy elsewhere, README/status | `46eb366`, `680d09e`, `619a77d`, `a20433e`, `d065979`; review fixes `ec80259` | Done, reviewed and fixed; awaiting the main session's review |
 
 ## Foundations build (2026-11-02)
 | Decision | Why | Done? |
@@ -212,3 +217,56 @@ A fresh reviewer read the whole Rules diff (5aa9c3d..c79d334). Fixed in `61681ee
 | Legacy wake/sleep said "Choose at least one app." for any invalid rule | Wake names a bad latest time; sleep names a start equal to the wake-up hour | Source guards on both messages |
 | Websites: a site could be queued twice ("www.reddit.com" vs "reddit.com"), a waiting row showed the raw text, and a waiting add read "Tightens in" | Queue the normalized address (the engine saves it normalized anyway), check waiting adds in `canAdd`, label "Added in" / "Removed in" | Source guards on the normalized queue and `canAdd` |
 | A harness check ("each editor uses its lifted validity") passed if the call appeared anywhere in the file | Check only inside each editor | The check itself |
+
+## Insights build (2026-11-04)
+| Decision | Why | Done? |
+| --- | --- | --- |
+| Steps built in the brief's order, one commit each: pure logic, host, report, copy, docs | Each verified before the next | Yes |
+| Pure display logic in a new `LatchReport/UsageFormat.swift` (`UsageFormat`, `UsageComparisonText`, `UsageWeekComparison`, `UsageCoverageLabel`, `UsagePeriodName`); the segment model `UsageInsightsSelection` sits with `UsageDashboardPresentation` | Foundation only, so the harnesses compile the real files with no stubs; the views only draw | Yes |
+| Pure text takes a `translate` closure (the views pass `insightsText`) | The harnesses check the exact English sentences; same pattern as the Rules build | Yes |
+| The localization generator also scans `UsageFormat.swift` and `UsageDashboardPresentation.swift` for `translate(…)`, `format(…)`, returned and assigned literals; SF Symbol names are skipped | Keys that live in pure logic would otherwise go untranslated in the report | Yes |
+| The generator's `--patch` output is applied with a small checker (`apply_report_patch.py`, scratchpad) that refuses unless every `-` line matches the file | No `apply_patch` tool on this Mac; the snapshot is still never hand-edited | Yes |
+| Durations: whole minutes, "%@ h" for exact hours ("21 h"), "%@ h %@ min" otherwise; under a minute reads "0 min" | Spec examples ("21 h a week"); floor matches the old helpers and the shield's minute accounting | Yes — owner may prefer "<1 min" |
+| Missing durations read "No data yet" in sentences and VoiceOver, "—" in tight chart captions | Spec §5.4 / §6; a dash is never a zero | Yes |
+| Comparison: within one minute either way is "About the same as the week before"; the percentage is omitted when the week before was zero or when it rounds to under 1 % | "(0%)" next to "3 min less" reads as a contradiction | Yes |
+| Signed values use the real minus sign (−) | Typography; VoiceOver reads it as minus | Yes |
+| "Daily average: 3 h 6 min (−19 min)" uses a signed duration, not an arrow | An arrow character inside text is read as "down arrow"; the main sentence keeps the SF Symbol hidden from VoiceOver | Yes |
+| Estimate comparison within a minute reads "%@: about the same as your estimate." (new key) | Spec gives only less/more; "0 min less" would be odd | Yes |
+| `baselineDifference(for:)` replaces `baselineDifferenceMinutes`; nil without an estimate, for an incomplete or non-seven-day period; app scopes never carry an estimate (`configuration(baseline: nil)`) | One rule for Trends and the model; any complete selected week compares, not just the latest | Yes |
+| Week hero without a total: "No full week yet" until any past day has data, then "No data yet" | The spec's "No full week yet" is for a new install; for an old empty week it would be wrong | Yes |
+| "Last 7 full days" names the latest period; "The week before" names the period right before the picked one; others use their dates | Spec I10; the review showed a fixed "The week before" clashed with the sentence once an older week was picked | Yes |
+| Heaviest weekday: only weekdays with two or more full days; ties keep the first weekday in calendar order | Spec §5.7.5 and §7 | Yes |
+| The segment control's pill is 36 pt inside a 44 pt track (56 in a 64 pt track at accessibility sizes); the whole 44/64 pt row is the tap target | Spec's 44 pt height with a visible track around the pill | Yes |
+| Day bars and day-by-day pairs drop their gaps (each bar keeps a 44 pt target) | Seven 44 pt targets plus gaps overflowed a 390 pt phone and clipped the first bar (seen in the synthetic render) | Yes |
+| Day bars show the short weekday ("Wed") under each bar; the date range sits between the ‹ › buttons | Spec: weekday label; the full date is in VoiceOver | Yes |
+| Highs and lows: plain sentences, weekday not bold | Bold inside a translated format string needs per-language markup | Yes |
+| Highs and lows with one full day shows only the heaviest sentence | "Heaviest" and "lightest" on the same day reads oddly | Yes |
+| Trends: the Four weeks card is the parent's, shared with Week; `UsageTrendsView` is now cards only, with no scroll, header, back button or `onBack` | I1: Trends is a segment; the report can't drive host navigation | Yes |
+| Host header: page title, Refresh and About as 44 pt icon buttons in `inkSoft`; Refresh is hidden without Screen Time access | Nothing to refresh then; About still explains the data | Yes |
+| Refresh goes through the Today report's coalescing (`HomeReportRefreshPolicy`: one request, 2 s apart, one soft retry); `refresh()` keeps its name and body | Spec §5.1; `UsageNavigationHarness` parses `refresh()` | Yes |
+| `canRefresh` still checks `model.selectedTab == 0` | Insights is pushed from Today until the four-tab switch, which must swap in the Insights tab identity (spec §5.1) | Interim — four-tab switch |
+| The "Loading your usage…" line sits behind the report and is hidden from VoiceOver | VoiceOver would otherwise read it under a drawn report; needs the device check from I9 | Limit — confirm on device |
+| About this data: Starting point row pushes the unchanged estimate editor inside the sheet; Cancel and Save return to the sheet (system back hidden) | Owner's answer 1; same save/verify/remove/"Couldn't save" behaviour | Yes |
+| Go to Today: sets tab 0 and pops the pushed page | Works pushed (today) and as a tab (after the switch) | Yes |
+| Today's link now reads "Insights" | The page is called Insights; the link stays until the four-tab switch | Yes |
+| 65 retired keys removed from all seven tables (the spec's list plus the old report and host strings), each only after no Swift source used it; "Expanded"/"Compact" stay (Today uses them) | Spec §10 | Yes |
+| Translations: "Insights" as a stats word (Estadísticas, Einblicke, Statistiques, Estatísticas, Statystyki, İstatistikler, आँकड़े); "The week before" as "the 7 days before"; "Partly reported" reuses each table's "partial data" wording | A rolling period must not read as a calendar week; same terms as the existing tables | Yes — native speakers may refine |
+| Polish/Turkish/Hindi "%d of %d days have full data." reorder as "Full data: %d of %d" | Their grammar can't keep the English order with one plural form | Yes |
+| German abbreviations ("Min.") before a sentence's full stop collapse to one "." in `UsageFormat.format` | Seen in the synthetic German render ("42 Min..") | Yes |
+| Turkish "Week" fixed to "Hafta" (was lowercase) | It's now a segment label | Yes |
+| "Private by design" copy kept as approved ("Demora can't read, save or send it.") | The reviewer noted the app stores limit-reached flags; those come from threshold events, not the measured usage the sentence is about. Owner may prefer softer wording | Flag for owner |
+| Synthetic preview fixtures: `initialSegment:` replaces `initiallyWeekly`/`initiallyShowingTrends`; modes added: noestimate, onlytoday, redaccent | Spec §8 fixtures for the three segments, app scope, no estimate and partial | Yes |
+| Synthetic macOS renders (light/dark, English/German/Hindi, Day/Week/Trends, app scope, partial, empty, large type) | No iOS simulator runtime; renders check layout only, not iOS or report delivery | Limit |
+| No visual check on a phone | No device in this session | Limit |
+
+## Insights review fixes
+A fresh reviewer read the whole Insights diff (32abd2a..d065979) with no conclusions from the build. Fixed in `ec80259`, each with a regression check:
+
+| Bug | Fix | Test |
+| --- | --- | --- |
+| With an older week picked, the hero and Trends called the picked week "The week before" while the sentence compared it with the week before it | "The week before" now names the period right before the picked one | `UsageTrendsHarness`: picked week is never "The week before", its predecessor is, latest keeps "Last 7 full days", oldest has none (fails on the old naming) |
+| Today's bar was drawn with the complete fill and no notch, and VoiceOver read only the minutes | `drawsComplete` uses `isComplete` (false for today); VoiceOver adds "Today so far" | `UsageTrendsHarness` native checks; `UsageDashboardHarness` source guard |
+| Weekday names started sentences lowercase in Spanish, French, Portuguese and Polish ("jueves suele ser…") | Standalone weekday symbols, first letter capitalised | Native `sentenceStart` check and a source guard |
+| Turkish segment label read "hafta" | "Hafta" | Localization check (regenerated snapshot) |
+
+Not changed: the approved "Private by design" sentence (logged above for the owner).
