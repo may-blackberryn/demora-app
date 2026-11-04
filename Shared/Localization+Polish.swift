@@ -6,6 +6,23 @@
 import Foundation
 
 let polishStrings: [String: String] = [
+    // Insights: comparison sentences, coverage and week names (report).
+    "%@ h": "%@ godz.",
+    "%@ less than the week before": "%@ mniej niż w poprzednich 7 dniach",
+    "%@ more than the week before": "%@ więcej niż w poprzednich 7 dniach",
+    "%@: %@ less than your estimate.": "%@: %@ mniej niż Twój szacunek.",
+    "%@: %@ more than your estimate.": "%@: %@ więcej niż Twój szacunek.",
+    "%@: about the same as your estimate.": "%@: mniej więcej tyle, ile wynosi Twój szacunek.",
+    "(%@%%)": "(%@%%)",
+    "About the same as the week before": "Mniej więcej tyle samo co w poprzednich 7 dniach",
+    "Day": "Dzień",
+    "Last 7 full days": "Ostatnie 7 pełnych dni",
+    "No comparison yet: both weeks need full data.": "Brak porównania: oba tygodnie wymagają pełnych danych.",
+    "No data": "Brak danych",
+    "No earlier week to compare.": "Brak wcześniejszego tygodnia do porównania.",
+    "No full week yet": "Brak jeszcze pełnego tygodnia",
+    "Partly reported": "Dane częściowe",
+    "The week before": "Poprzednie 7 dni",
     // Trend dashboard.
     "Trends": "Trendy",
     "Back to usage": "Wróć do użycia",

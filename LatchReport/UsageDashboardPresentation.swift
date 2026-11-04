@@ -40,4 +40,61 @@ enum UsageDashboardPresentation {
     static func preceding(_ period: UsageInsightsPeriod, in periods: [UsageInsightsPeriod]) -> UsageInsightsPeriod? {
         periods.first { $0.end == period.start }
     }
+    /// The Day hero's "Your daily average last week": only when the last
+    /// seven full days are completely reported; nothing is invented otherwise.
+    static func lastWeekDailyAverage(_ usage: UsageInsightsConfiguration) -> TimeInterval? {
+        average(usage.lastSevenDays)
+    }
+    /// Most used apps shows the top five until "See all N apps" is tapped.
+    /// N is the ranked list, so apps with no reported time are never counted.
+    static let mostUsedLimit = 5
+    static func visibleApplications<T>(_ ranked: [T], expanded: Bool) -> [T] {
+        expanded ? ranked : Array(ranked.prefix(mostUsedLimit))
+    }
+}
+
+/// The report's one view switch (decision I1): Trends is a segment, not a
+/// pushed page with its own back button.
+enum UsageInsightsSegment: CaseIterable, Hashable, Sendable {
+    case day, week, trends
+    var key: String {
+        switch self {
+        case .day: return "Day"
+        case .week: return "Week"
+        case .trends: return "Trends"
+        }
+    }
+}
+
+/// What the person has picked inside the report. It lives only in the
+/// report's view state: never stored, exported or sent to the host.
+/// Switching segments keeps the app scope, the selected week (shared by Week
+/// and Trends) and the day pager page (§5.3).
+struct UsageInsightsSelection<App: Hashable> {
+    var segment: UsageInsightsSegment = .day
+    /// The opaque app identity the whole view is scoped to; nil = all apps.
+    var application: App?
+    /// Start of the selected rolling week; nil = the last seven full days.
+    var week: Date?
+    var page = 0
+    var day: Date?
+    var showingAllApplications = false
+
+    mutating func show(_ segment: UsageInsightsSegment) { self.segment = segment }
+    mutating func scope(to application: App) { self.application = application }
+    mutating func showAllApps() { application = nil }
+    mutating func selectWeek(_ start: Date) { week = start }
+    mutating func selectDay(_ date: Date) { day = date }
+    /// Older days. The selected day resets to that page's latest day.
+    mutating func pageBack(dayCount: Int) {
+        guard page < UsageDashboardPresentation.lastPage(dayCount: dayCount) else { return }
+        page += 1; day = nil
+    }
+    mutating func pageForward() {
+        guard page > 0 else { return }
+        page -= 1; day = nil
+    }
+    /// Most used apps belongs to Day and Week, and only for all apps: under
+    /// an app scope it would list that one app.
+    var showsMostUsed: Bool { segment != .trends && application == nil }
 }

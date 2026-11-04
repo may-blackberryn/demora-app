@@ -6,6 +6,23 @@
 import Foundation
 
 let hindiStrings: [String: String] = [
+    // Insights: comparison sentences, coverage and week names (report).
+    "%@ h": "%@ घं.",
+    "%@ less than the week before": "उससे पहले के 7 दिनों से %@ कम",
+    "%@ more than the week before": "उससे पहले के 7 दिनों से %@ ज़्यादा",
+    "%@: %@ less than your estimate.": "%@: आपके अनुमान से %@ कम।",
+    "%@: %@ more than your estimate.": "%@: आपके अनुमान से %@ ज़्यादा।",
+    "%@: about the same as your estimate.": "%@: लगभग आपके अनुमान जितना।",
+    "(%@%%)": "(%@%%)",
+    "About the same as the week before": "लगभग उससे पहले के 7 दिनों जितना",
+    "Day": "दिन",
+    "Last 7 full days": "पिछले 7 पूरे दिन",
+    "No comparison yet: both weeks need full data.": "अभी कोई तुलना नहीं: दोनों हफ़्तों का पूरा डेटा होना ज़रूरी है।",
+    "No data": "कोई डेटा नहीं",
+    "No earlier week to compare.": "तुलना के लिए कोई पिछला हफ़्ता नहीं है।",
+    "No full week yet": "अभी कोई पूरा हफ़्ता नहीं",
+    "Partly reported": "आंशिक डेटा",
+    "The week before": "उससे पहले के 7 दिन",
     // Trend dashboard.
     "Trends": "रुझान",
     "Back to usage": "उपयोग पर वापस जाएँ",

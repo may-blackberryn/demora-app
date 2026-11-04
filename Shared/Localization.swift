@@ -77,6 +77,23 @@ func tr(_ key: String) -> String {
 }
 
 let spanishStrings: [String: String] = [
+    // Insights: comparison sentences, coverage and week names (report).
+    "%@ h": "%@ h",
+    "%@ less than the week before": "%@ menos que los 7 días anteriores",
+    "%@ more than the week before": "%@ más que los 7 días anteriores",
+    "%@: %@ less than your estimate.": "%@: %@ menos que tu estimación.",
+    "%@: %@ more than your estimate.": "%@: %@ más que tu estimación.",
+    "%@: about the same as your estimate.": "%@: más o menos igual que tu estimación.",
+    "(%@%%)": "(%@%%)",
+    "About the same as the week before": "Más o menos igual que los 7 días anteriores",
+    "Day": "Día",
+    "Last 7 full days": "Últimos 7 días completos",
+    "No comparison yet: both weeks need full data.": "Aún no hay comparación: ambas semanas necesitan datos completos.",
+    "No data": "Sin datos",
+    "No earlier week to compare.": "No hay una semana anterior para comparar.",
+    "No full week yet": "Aún no hay una semana completa",
+    "Partly reported": "Datos parciales",
+    "The week before": "Los 7 días anteriores",
     // Trend dashboard.
     "Trends": "Tendencias",
     "Back to usage": "Volver al uso",

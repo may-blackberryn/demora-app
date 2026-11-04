@@ -19,6 +19,8 @@ presentation = (ROOT / "LatchReport/UsageDashboardPresentation.swift").read_text
 application_model = (ROOT / "LatchReport/ApplicationUsageAccumulator.swift").read_text()
 trends = (ROOT / "LatchReport/UsageTrendsView.swift").read_text()
 trends_model = (ROOT / "LatchReport/UsageTrendsModel.swift").read_text()
+formatting = (ROOT / "LatchReport/UsageFormat.swift").read_text()
+report_theme = (ROOT / "LatchReport/ReportTheme.swift").read_text()
 
 # This suite links the actual production model, not a Python translation.
 driver = r'''
@@ -246,14 +248,27 @@ check(full.configuration(baseline: manual).baseline?.weeklyMinutes == 420,
       "baseline retained as independent self-reported field")
 check(full.configuration(baseline: manual).trend?.percentage == all.trend?.percentage,
       "manual estimate never changes measured aggregation/trend")
-check(close(full.configuration(baseline: manual).baselineDifferenceMinutes, -413),
+let withEstimate = full.configuration(baseline: manual)
+check(close(withEstimate.baselineDifference(for: withEstimate.lastSevenDays), -413),
       "complete recent week can compare with a separately labelled manual estimate")
-check(config(full).baselineDifferenceMinutes == nil,
-      "no estimate means no estimate comparison")
+check(close(withEstimate.baselineDifference(for: withEstimate.weeks[0]), 840 / 60 - 420),
+      "any complete selected week compares, not only the latest")
+check(close(withEstimate.baselineDifference(for: withEstimate.weeks[3]),
+            withEstimate.baselineDifference(for: withEstimate.lastSevenDays) ?? .nan),
+      "the picker's latest week is the same period")
+let lowEstimate = UsageInsightsBaseline.decode(baseline("0", recordedAt: stamp), now: now)!
+check(close(full.configuration(baseline: lowEstimate).baselineDifference(for: all.lastSevenDays), 7),
+      "more than the estimate is positive")
+check(config(full).baselineDifference(for: all.lastSevenDays) == nil,
+      "no estimate (and every app scope, built without one) means no estimate comparison")
 var partialBaseline = UsageInsightsAccumulator(now: now, calendar: calendar)
 add(&partialBaseline, -1, seconds: 60)
-check(partialBaseline.configuration(baseline: manual).baselineDifferenceMinutes == nil,
+let partialWithEstimate = partialBaseline.configuration(baseline: manual)
+check(partialWithEstimate.baselineDifference(for: partialWithEstimate.lastSevenDays) == nil,
       "partial measured week never compares with full manual estimate")
+let oddPeriod = UsageInsightsPeriod(start: day(-3), end: today, expectedDays: 3, reportedDays: 3,
+    completeDays: 3, seconds: 180)
+check(withEstimate.baselineDifference(for: oddPeriod) == nil, "only seven-day periods compare with a weekly estimate")
 
 print("UsageInsights production algorithm checks passed: \(checks)")
 '''
@@ -277,9 +292,10 @@ assert all(key in view for key in ["latch.language", "latch.appearance", "latch.
 assert "Compared with your starting estimate" in trends and "not measured Screen Time or a goal" in trends
 assert "baseline: selectedApplication == nil ? configuration.baseline : nil" in view
 assert "Shared/Localization" not in report + view + model
+assert "accumulator.configuration(baseline: nil)" in application_model  # app scopes carry no estimate
 
 # Strip comments for guards so privacy documentation doesn't trigger itself.
-production = "\n".join(line.split("//", 1)[0] for line in (report + view + model + presentation + application_model + trends + trends_model).splitlines())
+production = "\n".join(line.split("//", 1)[0] for line in (report + view + model + presentation + application_model + trends + trends_model + formatting + report_theme).splitlines())
 for forbidden in [r"\bEncodable\b", r"\bCodable\b", r"\bJSONEncoder\b",
                   r"\bURLSession\b", r"\bURLRequest\b", r"\bFileManager\b",
                   r"\bNotificationCenter\b", r"\bOSLog\b", r"\bos_log\b",

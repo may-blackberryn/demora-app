@@ -6,6 +6,23 @@
 import Foundation
 
 let turkishStrings: [String: String] = [
+    // Insights: comparison sentences, coverage and week names (report).
+    "%@ h": "%@ sa",
+    "%@ less than the week before": "Önceki 7 güne göre %@ daha az",
+    "%@ more than the week before": "Önceki 7 güne göre %@ daha fazla",
+    "%@: %@ less than your estimate.": "%@: tahmininden %@ daha az.",
+    "%@: %@ more than your estimate.": "%@: tahmininden %@ daha fazla.",
+    "%@: about the same as your estimate.": "%@: tahmininle hemen hemen aynı.",
+    "(%@%%)": "(%@%%)",
+    "About the same as the week before": "Önceki 7 günle hemen hemen aynı",
+    "Day": "Gün",
+    "Last 7 full days": "Son 7 tam gün",
+    "No comparison yet: both weeks need full data.": "Henüz karşılaştırma yok: İki haftanın da tam verisi olmalı.",
+    "No data": "Veri yok",
+    "No earlier week to compare.": "Karşılaştırılacak önceki bir hafta yok.",
+    "No full week yet": "Henüz tam bir hafta yok",
+    "Partly reported": "Kısmi veri",
+    "The week before": "Önceki 7 gün",
     // Trend dashboard.
     "Trends": "Eğilimler",
     "Back to usage": "Kullanıma dön",

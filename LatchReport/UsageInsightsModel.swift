@@ -74,11 +74,14 @@ struct UsageInsightsConfiguration: Sendable {
     var trend: UsageInsightsTrend? {
         UsageInsightsTrend.compare(lastSevenDays, with: previousSevenDays)
     }
-    /// A comparison with a manual estimate, never proof of time saved.
-    /// Do not compare an incomplete measured period with a full-week estimate.
-    var baselineDifferenceMinutes: Double? {
-        guard let baseline, lastSevenDays.isComplete,
-              let seconds = lastSevenDays.seconds, seconds.isFinite else { return nil }
+    /// Minutes above (+) or below (−) the manual weekly estimate for one
+    /// rolling week. A comparison with a self-reported estimate, never proof
+    /// of time saved. Nil without an estimate (app scopes never carry one) and
+    /// for a period that isn't fully reported: an incomplete measured period
+    /// is never compared with a full-week estimate.
+    func baselineDifference(for period: UsageInsightsPeriod) -> Double? {
+        guard let baseline, period.isComplete, period.expectedDays == 7,
+              let seconds = period.seconds, seconds.isFinite, seconds >= 0 else { return nil }
         return seconds / 60 - Double(baseline.weeklyMinutes)
     }
 }

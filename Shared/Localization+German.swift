@@ -6,6 +6,23 @@
 import Foundation
 
 let germanStrings: [String: String] = [
+    // Insights: comparison sentences, coverage and week names (report).
+    "%@ h": "%@ Std.",
+    "%@ less than the week before": "%@ weniger als in den 7 Tagen davor",
+    "%@ more than the week before": "%@ mehr als in den 7 Tagen davor",
+    "%@: %@ less than your estimate.": "%@: %@ weniger als deine Schätzung.",
+    "%@: %@ more than your estimate.": "%@: %@ mehr als deine Schätzung.",
+    "%@: about the same as your estimate.": "%@: etwa gleich wie deine Schätzung.",
+    "(%@%%)": "(%@%%)",
+    "About the same as the week before": "Etwa gleich wie in den 7 Tagen davor",
+    "Day": "Tag",
+    "Last 7 full days": "Letzte 7 volle Tage",
+    "No comparison yet: both weeks need full data.": "Noch kein Vergleich: Beide Wochen brauchen vollständige Daten.",
+    "No data": "Keine Daten",
+    "No earlier week to compare.": "Keine frühere Woche zum Vergleichen.",
+    "No full week yet": "Noch keine volle Woche",
+    "Partly reported": "Teilweise gemeldet",
+    "The week before": "Die 7 Tage davor",
     // Trend dashboard.
     "Trends": "Trends",
     "Back to usage": "Zurück zur Nutzung",

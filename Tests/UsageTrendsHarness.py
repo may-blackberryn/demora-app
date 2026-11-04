@@ -111,6 +111,68 @@ for current in usage.weeks {
     let results = UsageTrendsModel.appChanges(allApps, current: current, previous: previous)
     check(results.allSatisfy { $0.current.start == current.start && $0.current.end == current.end }, "selected period app comparisons")
 }
+
+// Comparison sentence (I2, I3): hours and minutes first, percent second.
+let en = UsageFormat(locale: Locale(identifier: "en_US"), translate: { $0 })
+func sentence(_ minutes: Double, _ percent: Double?) -> String? {
+    UsageComparisonText.make(trend: UsageInsightsTrend(differenceMinutes: minutes, percentage: percent))?.sentence(en)
+}
+check(sentence(-130, -9.2) == "2 h 10 min less than the week before (−9%)", "less, h+min then percent")
+check(sentence(45, 12) == "45 min more than the week before (+12%)", "more")
+check(sentence(0.6, 1) == "About the same as the week before", "within a minute is the same")
+check(sentence(-0.99, -0.1) == "About the same as the week before", "within a minute below")
+check(sentence(0, nil) == "About the same as the week before", "zero versus zero")
+check(sentence(60, nil) == "1 h more than the week before", "previous zero: no percent")
+check(sentence(-3, -0.2) == "3 min less than the week before", "under one percent: no percent")
+check(UsageComparisonText.make(trend: nil) == nil, "no trend, no sentence")
+check(UsageComparisonText.make(trend: UsageInsightsTrend(differenceMinutes: .nan, percentage: nil)) == nil, "invalid change")
+check(UsageComparisonText.make(trend: UsageInsightsTrend(differenceMinutes: -130, percentage: -9))?.symbol == "arrow.down", "down arrow")
+check(UsageComparisonText.make(trend: UsageInsightsTrend(differenceMinutes: 0, percentage: nil))?.symbol == nil, "no arrow for same")
+check(UsageWeekComparison.make(usage.weeks[0], in: usage.weeks) == .noEarlierWeek, "oldest week")
+if case .sentence(let text)? = Optional(UsageWeekComparison.make(usage.lastSevenDays, in: usage.weeks)) {
+    check(text.direction == .less, "complete weeks compare")
+} else { check(false, "complete weeks compare") }
+check(UsageWeekComparison.make(short.lastSevenDays, in: short.weeks) == .needsFullData, "partial weeks never compare")
+check(UsageWeekComparison.make(unknown.lastSevenDays, in: unknown.weeks) == .needsFullData, "missing weeks never compare")
+let estimate = UsageComparisonText.make(differenceMinutes: -160, percent: nil)!
+    .estimateSentence(period: "Last 7 full days", en)
+check(estimate == "Last 7 full days: 2 h 40 min less than your estimate.", "estimate sentence")
+check(!estimate.lowercased().contains("save"), "an estimate is never savings")
+check(UsageComparisonText.make(differenceMinutes: 90, percent: nil)!.estimateSentence(period: "6 – 12 Oct", en)
+      == "6 – 12 Oct: 1 h 30 min more than your estimate.", "more than the estimate")
+
+// Heaviest weekday: two or more full days; ties keep the first calendar weekday.
+check(UsageTrendsModel.heaviestWeekday(patterns)?.weekday == patterns.max { ($0.averageSeconds ?? 0) < ($1.averageSeconds ?? 0) }?.weekday, "heaviest weekday")
+check(UsageTrendsModel.heaviestWeekday(UsageTrendsModel.weekdayPatterns(zeros)) == nil, "one sample per weekday: no sentence")
+check(UsageTrendsModel.heaviestWeekday(UsageTrendsModel.weekdayPatterns(unknown)) == nil, "no data: no sentence")
+let tied = [UsageWeekdayPattern(weekday: 2, sampleCount: 1, averageSeconds: 9_000),
+            UsageWeekdayPattern(weekday: 3, sampleCount: 2, averageSeconds: 600),
+            UsageWeekdayPattern(weekday: 4, sampleCount: 3, averageSeconds: 600),
+            UsageWeekdayPattern(weekday: 5, sampleCount: 2, averageSeconds: nil)]
+check(UsageTrendsModel.heaviestWeekday(tied)?.weekday == 3, "tie keeps the first weekday; one sample never counts")
+let range = UsageTrendsModel.patternRange(usage)
+check(range?.start == usage.weeks[0].start && range?.end == day(-1), "weekday caption from the report calendar")
+
+// Rolling weeks are named by position or dates, never "This week" (I10).
+check(UsagePeriodName.key(for: usage.lastSevenDays, in: usage) == "Last 7 full days", "latest week")
+check(UsagePeriodName.key(for: usage.weeks[3], in: usage) == "Last 7 full days", "latest week in the picker")
+check(UsagePeriodName.key(for: usage.weeks[2], in: usage) == "The week before", "week before")
+check(UsagePeriodName.key(for: usage.weeks[0], in: usage) == nil && UsagePeriodName.key(for: usage.weeks[1], in: usage) == nil, "older weeks use dates")
+check(UsagePeriodName.emptyKey(unknown) == "No full week yet" && UsagePeriodName.emptyKey(usage) == "No data yet", "empty week wording")
+var onlyToday = UsageInsightsAccumulator(now: now, calendar: cal)
+add(&onlyToday, 0, seconds: 600)
+check(UsagePeriodName.emptyKey(onlyToday.configuration(baseline: nil)) == "No full week yet", "new install: only today")
+
+// Coverage labels (I8): only what's incomplete is marked.
+check(UsageCoverageLabel.isPartlyReported(short.days.first { $0.date == day(-2) }, today: today), "partial past day")
+check(!UsageCoverageLabel.isPartlyReported(short.days.first { $0.date == day(-1) }, today: today), "full day carries no label")
+check(!UsageCoverageLabel.isPartlyReported(usage.today, today: today), "today says so far instead")
+check(!UsageCoverageLabel.isPartlyReported(short.days.first { $0.date == day(-5) }, today: today), "missing day is not partial")
+check(UsageCoverageLabel.accessibilityKey(short.days.first { $0.date == day(-5) }, today: today) == "No data", "missing reads No data")
+check(UsageCoverageLabel.accessibilityKey(short.days.first { $0.date == day(-2) }, today: today) == "Partly reported", "partial VoiceOver")
+check(UsageCoverageLabel.accessibilityKey(short.days.first { $0.date == day(-1) }, today: today) == nil, "full: nothing extra")
+check(UsageCoverageLabel.isPartlyReported(short.lastSevenDays) && !UsageCoverageLabel.isPartlyReported(week), "periods")
+check(!UsageCoverageLabel.isPartlyReported(unknown.lastSevenDays), "a period with no data is missing, not partial")
 print("Usage trends algorithm checks passed: \(checks)")
 '''
 view = (ROOT / 'LatchReport/UsageInsightsView.swift').read_text()
@@ -146,6 +208,6 @@ with tempfile.TemporaryDirectory(prefix='demora-trends-checks-') as temporary:
         str(ROOT / 'LatchReport/UsageInsightsModel.swift'),
         str(ROOT / 'LatchReport/ApplicationUsageAccumulator.swift'),
         str(ROOT / 'LatchReport/UsageDashboardPresentation.swift'),
-        str(ROOT / 'LatchReport/UsageTrendsModel.swift'), str(main), '-o', str(executable)], check=True)
+        str(ROOT / 'LatchReport/UsageTrendsModel.swift'), str(ROOT / 'LatchReport/UsageFormat.swift'), str(main), '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
 print('Trends navigation, scoped-label identity, coverage and no-export guards passed')

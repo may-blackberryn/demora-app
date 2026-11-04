@@ -35,6 +35,26 @@ enum UsageTrendsModel {
                 averageSeconds: samples.isEmpty || !sum.isFinite ? nil : sum / Double(samples.count))
         }
     }
+    /// The weekday the sentence names ("Thursday tends to be your heaviest
+    /// day."): only weekdays with at least two full days count; a tie keeps
+    /// the first weekday in the calendar's order. Nil means no sentence.
+    static func heaviestWeekday(_ patterns: [UsageWeekdayPattern]) -> UsageWeekdayPattern? {
+        patterns.reduce(nil) { best, pattern in
+            guard pattern.sampleCount >= 2, let average = pattern.averageSeconds,
+                  average.isFinite, average >= 0 else { return best }
+            guard let best, let top = best.averageSeconds else { return pattern }
+            return average > top ? pattern : best
+        }
+    }
+    /// The days weekday patterns draw from: the first reported week's start
+    /// to yesterday, from the report's own calendar (no force-unwrap).
+    static func patternRange(_ usage: UsageInsightsConfiguration) -> (start: Date, end: Date)? {
+        let today = usage.calendar.startOfDay(for: usage.generatedAt)
+        guard let start = usage.weeks.first?.start,
+              let yesterday = usage.calendar.date(byAdding: .day, value: -1, to: today),
+              start <= yesterday else { return nil }
+        return (start, yesterday)
+    }
     static func extremes(_ usage: UsageInsightsConfiguration, in period: UsageInsightsPeriod) -> (high: UsageInsightsDay?, low: UsageInsightsDay?) {
         let days = completedDays(usage).filter { $0.date >= period.start && $0.date < period.end }
             .sorted { $0.date < $1.date }

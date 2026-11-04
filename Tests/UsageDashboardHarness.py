@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Actual display projections with fixtures; no live usage/preferences queries."""
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 model = ROOT / 'LatchReport/UsageInsightsModel.swift'
 presentation = ROOT / 'LatchReport/UsageDashboardPresentation.swift'
+formatting = ROOT / 'LatchReport/UsageFormat.swift'
 view = (ROOT / 'LatchReport/UsageInsightsView.swift').read_text()
 trends = (ROOT / 'LatchReport/UsageTrendsView.swift').read_text()
 host = (ROOT / 'Latch/UsageInsightsView.swift').read_text()
@@ -61,6 +63,73 @@ let secondWeek = UsageInsightsPeriod(start: firstWeek.end, end: days[14].date, e
     reportedDays: 7, completeDays: 7, seconds: 840)
 check(UsageDashboardPresentation.preceding(secondWeek, in: [firstWeek, secondWeek])?.start == firstWeek.start)
 check(UsageDashboardPresentation.preceding(firstWeek, in: [firstWeek, secondWeek]) == nil)
+
+// UsageFormat: hours and minutes, missing is "No data yet", never zero.
+let en = UsageFormat(locale: Locale(identifier: "en_US"), translate: { $0 })
+check(en.duration(0) == "0 min")
+check(en.duration(59) == "0 min")
+check(en.duration(59 * 60) == "59 min")
+check(en.duration(60 * 60) == "1 h")
+check(en.duration(61 * 60) == "1 h 1 min")
+check(en.duration((23 * 60 + 59) * 60) == "23 h 59 min")
+check(en.duration(21 * 3600) == "21 h")
+for invalid in [nil, -1.0, Double.nan, Double.infinity] as [Double?] {
+    check(en.duration(invalid) == "No data yet")
+    check(en.compact(invalid) == "—")
+}
+check(en.compact(0) == "0 min")
+check(en.signedDuration(minutes: -130) == "−2 h 10 min")
+check(en.signedDuration(minutes: -130.9) == "−2 h 10 min")
+check(en.signedDuration(minutes: 5.9) == "+5 min")
+check(en.signedDuration(minutes: 0.4) == "0 min" && en.signedDuration(minutes: -0.9) == "0 min")
+check(en.signedDuration(minutes: .nan) == "—")
+check(en.percent(-9.4) == "(−9%)" && en.percent(12.5) == "(+13%)")
+check(en.percent(0.4) == nil && en.percent(-0.49) == nil && en.percent(nil) == nil && en.percent(.nan) == nil)
+let german = ["%@ h %@ min": "%@ Std. %@ Min.", "%@ h": "%@ Std.", "%@ min": "%@ Min."]
+let de = UsageFormat(locale: Locale(identifier: "de_DE"), translate: { german[$0] ?? $0 })
+check(de.duration(130 * 60) == "2 Std. 10 Min." && de.duration(1_000 * 3600) == "1.000 Std.")
+let devanagari = UsageFormat(locale: Locale(identifier: "hi_IN@numbers=deva"), translate: { $0 })
+check(devanagari.duration(130 * 60) == "२ h १० min")
+
+// Segment state: app scope, selected week and day page survive every switch.
+var selection = UsageInsightsSelection<String>()
+check(selection.segment == .day && selection.showsMostUsed)
+let pickedWeek = days[7].date
+selection.scope(to: "opaque-app"); selection.selectWeek(pickedWeek)
+selection.pageBack(dayCount: 29); selection.selectDay(days[3].date)
+for segment in [UsageInsightsSegment.week, .trends, .day, .trends, .week, .day] {
+    selection.show(segment)
+    check(selection.segment == segment && selection.application == "opaque-app"
+          && selection.week == pickedWeek && selection.page == 1 && selection.day == days[3].date)
+    check(!selection.showsMostUsed)
+}
+selection.showAllApps()
+check(selection.application == nil && selection.week == pickedWeek && selection.showsMostUsed)
+selection.show(.trends); check(!selection.showsMostUsed)
+selection.show(.week); check(selection.showsMostUsed)
+selection.pageForward(); check(selection.page == 0 && selection.day == nil)
+selection.pageForward(); check(selection.page == 0)
+for _ in 0..<10 { selection.pageBack(dayCount: 29) }
+check(selection.page == UsageDashboardPresentation.lastPage(dayCount: 29))
+check(UsageInsightsSegment.allCases.map(\.key) == ["Day", "Week", "Trends"])
+
+// Day hero: "Your daily average last week" only for a fully reported week.
+var calendar = Calendar(identifier: .gregorian)
+calendar.timeZone = TimeZone(identifier: "Europe/Madrid")!
+let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 4, hour: 15))!
+let midnight = calendar.startOfDay(for: now)
+var full = UsageInsightsAccumulator(now: now, calendar: calendar)
+var partial = UsageInsightsAccumulator(now: now, calendar: calendar)
+for offset in -14 ... -1 {
+    let start = calendar.date(byAdding: .day, value: offset, to: midnight)!
+    let finish = calendar.date(byAdding: .day, value: 1, to: start)!
+    full.add(source: 0, start: start, end: finish, seconds: 3_600, updatedAt: now)
+    if offset != -3 { partial.add(source: 0, start: start, end: finish, seconds: 3_600, updatedAt: now) }
+}
+check(UsageDashboardPresentation.lastWeekDailyAverage(full.configuration(baseline: nil)) == 3_600)
+check(UsageDashboardPresentation.lastWeekDailyAverage(partial.configuration(baseline: nil)) == nil)
+check(UsageDashboardPresentation.lastWeekDailyAverage(
+    UsageInsightsAccumulator(now: now, calendar: calendar).configuration(baseline: nil)) == nil)
 print("Usage dashboard display checks passed: \(checks)")
 '''
 assert 'rangeButton("Daily"' in view and 'rangeButton("Weekly"' in view
@@ -74,12 +143,26 @@ assert 'UsageInsightsTrend.compare(comparisonCurrent, with: previous)' in view
 assert 'reader.scrollTo(id, anchor: .trailing)' in view
 assert 'maxHeight: .infinity' in host and 'reportHeight' not in host
 assert 'showingUsageInfo' in host
+theme = (ROOT / 'Latch/Theme.swift').read_text()
+report_theme = (ROOT / 'LatchReport/ReportTheme.swift').read_text()
+pair = re.compile(r'static let (\w+)\s*=\s*\w+\(light: 0x([0-9A-Fa-f]{6}), dark: 0x([0-9A-Fa-f]{6})\)')
+def block(source, start):
+    return source.split(start, 1)[1].split('\n}\n', 1)[0]
+app_palette = {n: (l.upper(), d.upper()) for n, l, d in pair.findall(block(theme, 'enum InkPalette {'))}
+report_palette = {n: (l.upper(), d.upper()) for n, l, d in pair.findall(block(report_theme, 'enum ReportPalette {'))}
+for name, values in report_palette.items():
+    assert app_palette.get(name) == values, ('ReportTheme drifted from InkPalette', name)
+for amount in ('tintLight', 'tintDark'):
+    app_amount = re.search(r'static let ' + amount + r': Double = ([0-9.]+)', theme)
+    copy_amount = re.search(r'static let ' + amount + r': Double = ([0-9.]+)', report_theme)
+    if copy_amount:
+        assert app_amount and app_amount.group(1) == copy_amount.group(1), ('tint amount drifted', amount)
 with tempfile.TemporaryDirectory(prefix='demora-dashboard-checks-') as temporary:
     work = Path(temporary)
     main = work / 'main.swift'
     main.write_text(driver)
     binary = work / 'checks'
-    subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', str(model), str(presentation),
+    subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', str(model), str(presentation), str(formatting),
                     str(main), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
 print('Dashboard selection, accessibility, viewport and missing-data source checks passed')

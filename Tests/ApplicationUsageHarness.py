@@ -135,6 +135,23 @@ check(unavailable.reportedDays == 0 && unavailable.days.allSatisfy { $0.seconds 
       "disappeared selection retains an unknown scope, not overall usage")
 check(unavailable.baseline == nil && unavailable.trend == nil, "unknown app has no estimate or trend")
 check(unavailable.today?.date == today && unavailable.weeks.count == 4, "unknown scope keeps calendar navigation")
+// "See all N apps" counts the ranked list; apps with no reported time aren't in it.
+let ranked = UsageDashboardPresentation.rankedApplications(apps, day: today, week: nil)
+check(UsageDashboardPresentation.visibleApplications(ranked, expanded: false).count == ranked.count, "two apps all shown")
+let many = Array(0..<14)
+check(UsageDashboardPresentation.visibleApplications(many, expanded: false) == [0, 1, 2, 3, 4], "top five")
+check(UsageDashboardPresentation.visibleApplications(many, expanded: true) == many, "See all expands in place")
+check(UsageDashboardPresentation.visibleApplications([Int](), expanded: false).isEmpty, "no placeholder rows")
+let unknownDay = UsageDashboardPresentation.rankedApplications(apps, day: day(-29), week: nil)
+check(unknownDay.isEmpty, "unknown apps never counted as zero-minute rows")
+var scoped = UsageInsightsSelection<Int>()
+check(scoped.showsMostUsed, "all apps shows Most used")
+scoped.scope(to: 10)
+for segment in UsageInsightsSegment.allCases {
+    scoped.show(segment); check(!scoped.showsMostUsed, "app scope hides Most used in every segment")
+}
+scoped.showAllApps(); scoped.show(.day)
+check(scoped.showsMostUsed && scoped.application == nil, "All apps brings it back")
 print("Application usage algorithm checks passed: \(checks)")
 '''
 report = (ROOT / 'LatchReport/UsageInsightsReport.swift').read_text()
@@ -156,7 +173,7 @@ assert 'else if let selectedApplicationLabel' in view
 assert 'applicationLabel(id).id(selectedApplication)' in view
 assert 'selectedApplicationLabel.id(selectedApplication)' in view
 assert 'rankedApplications' in view and 'prefix(5)' in view and 'LazyVStack' in view
-for file in ['ApplicationUsageAccumulator.swift', 'UsageInsightsReport.swift', 'UsageInsightsModel.swift', 'UsageInsightsView.swift', 'UsageTrendsView.swift', 'UsageTrendsModel.swift']:
+for file in ['ApplicationUsageAccumulator.swift', 'UsageInsightsReport.swift', 'UsageInsightsModel.swift', 'UsageInsightsView.swift', 'UsageTrendsView.swift', 'UsageTrendsModel.swift', 'UsageFormat.swift', 'ReportTheme.swift', 'UsageDashboardPresentation.swift']:
     code = re.sub(r'//[^\n]*', '', (ROOT / 'LatchReport' / file).read_text())
     assert not re.search(r'\b(?:Encodable|Codable|JSONEncoder|URLSession|FileManager|OSLog|Logger)\b|\.set\s*\(|\.write\s*\(|\b(?:print|NSLog)\s*\(', code)
 with tempfile.TemporaryDirectory(prefix='demora-app-usage-') as temporary:

@@ -23,6 +23,14 @@ def report_keys():
     keys = {json.loads('"' + key + '"') for key in re.findall(
         r'\b(?:insightsText|heading|format|rangeButton|pageButton)\(\s*' + STRING, view)}
     keys.update(json.loads('"' + key + '"') for key in re.findall(r'title:\s*' + STRING, view))
+    # Pure display logic (UsageFormat, segment names) hands keys to the views
+    # through `translate`/`format` calls and returned literals.
+    logic = '\n'.join((ROOT / 'LatchReport' / name).read_text() for name in
+                      ['UsageFormat.swift', 'UsageDashboardPresentation.swift'])
+    logic = re.sub(r'//[^\n]*', '', logic)
+    found = re.findall(r'(?:\btranslate\(|\bformat\(|\breturn|=)\s*' + STRING, logic)
+    keys.update(key for key in (json.loads('"' + value + '"') for value in found)
+                if re.search(r'[A-Za-z%]', key) and not re.fullmatch(r'[a-z]+(?:\.[a-z]+)+', key))
     keys.update({'Today so far', 'Full reported coverage', 'Partial reported coverage',
                  'Daily usage', 'Weekly totals', 'Tap a bar to see that day.', 'Tap a bar to see that week.',
                  'Expanded', 'Compact'})
