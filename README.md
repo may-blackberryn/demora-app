@@ -127,7 +127,7 @@ Features:
   by one soft retry three seconds later. They cancel when the report is hidden
   or the app is inactive; selection snapshots stay unchanged until a visible
   refresh. Both the arrow and Home pull-to-refresh use this path. Inbox loading
-  resumes on Home return, and retained Usage & trends only refreshes when visible.
+  resumes on Home return, and retained Insights only refreshes when visible.
   None of this resets monitors, enforcement or spent usage. Retaining the host
   hierarchy does not guarantee iOS will keep or render its extension process.
 - Now & Next shows only the next upcoming occurrence of each repeating rule
@@ -190,20 +190,27 @@ Features:
 - Limits & blocks has a full-width New limit action; Home's Select action lives
   in Pending changes rather than the page header. The Guide covers real 2.0
   workflows, permissions, delays, overrides, overlaps and troubleshooting.
-- Home → Usage & trends renders 28 completed calendar days plus today through
-  a separate DeviceActivityReport scene. Its dashboard has daily/weekly modes,
-  a large selected-period total, tappable bars, earlier-day navigation and four
-  completed seven-day totals. Explore trends opens its own page within the
-  report, with a four-week overview, paired daily bars, weekday averages and
-  sample counts, high/low fully reported days, and the biggest comparable app
-  changes. Select a week to compare it with its predecessor; comparisons need
-  complete coverage in both periods, and the oldest week has no invented trend.
-  Trends excludes today and explicitly shows complete/partial/missing coverage.
-  App changes are not claimed to explain or sum to the overall difference.
-  A daily average appears only for complete weeks. Warm-paper light/dark styling
-  follows the blue/red accent, and narrow or large-text charts scroll rather
-  than shrink their touch targets. Longer disclosures are in Usage details;
-  the host retains a compact manual-estimate action instead of a settings list.
+- Insights (reached from Today until the four-tab switch; redesigned
+  2026-11-04, `docs/insights-redesign.md`) renders 28 completed calendar days
+  plus today through a separate DeviceActivityReport scene. The host draws only
+  a fixed header (title, one Refresh, About this data), a "Loading your
+  usage…" line behind the report, and the About this data sheet: static
+  explanations plus Your starting point, which pushes the optional estimate
+  editor. Without Screen Time access it shows a card with Go to Today. The
+  report owns one scroll with one Day · Week · Trends switch. Day: hero total
+  ("Today so far" or the day), last week's daily average when fully reported,
+  seven tappable bars with ‹ › paging. Week: rolling seven-day periods named
+  "Last 7 full days", "The week before" or by their dates, a neutral
+  comparison sentence ("2 h 10 min less than the week before (−9%)") and a
+  Four weeks picker shared with Trends. Trends is a stack of cards (compared
+  with the week before, day by day, highs and lows, weekday patterns, biggest
+  app changes, your starting point, how complete this is), each opening with
+  one sentence. Comparisons need complete coverage in both periods, the oldest
+  week has no invented trend, today never counts, and only partly reported
+  data is labelled. App changes are not claimed to explain or sum to the
+  overall difference. Warm-paper light/dark styling comes from
+  `LatchReport/ReportTheme.swift`, a parity-checked copy of the foundations
+  tokens; narrow or large-text charts scroll rather than shrink their targets.
   Most used apps ranks the selected day's/week's reported app totals, with
   Apple's private app labels and an expandable list. Tap an app to scope the
   total, chart, average and trend to it; All apps returns to overall screen

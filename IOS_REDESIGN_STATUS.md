@@ -792,3 +792,29 @@ App Store copy until those paths are enforced and tested.
   background/foreground, permission loss/regrant, midnight/clock changes, and
   app/category/site/mixed selections. Confirm fewer blank reports and unchanged
   blocking/accounting; never interpret a missing report as zero use.
+
+## Insights redesign — 2026-11-04
+
+- Built from `docs/insights-redesign.md` (owner-approved 2026-11-02). Decisions,
+  review fixes and what to try on the phone: `docs/redesign-review.md` →
+  "Insights build (2026-11-04)".
+- Structure: the host (`Latch/UsageInsightsView.swift`) draws a fixed header
+  (Insights, Refresh, About this data), a loading line behind the report and
+  the About this data sheet, which holds Your starting point (the pinned
+  estimate capsule and both "Usage details" are gone). Refresh uses
+  `HomeReportRefreshPolicy`. The report (`LatchReport/UsageInsightsView.swift`,
+  `UsageTrendsView.swift`) has one Day · Week · Trends switch in one scroll;
+  Trends is a segment, not a page with "Back to usage". Measured coverage moved
+  to Trends → How complete this is.
+- Pure logic: `LatchReport/UsageFormat.swift` (durations, comparison and
+  estimate sentences, coverage labels, rolling-week names) and
+  `UsageInsightsSelection` in `UsageDashboardPresentation.swift`; tested by the
+  Usage* and ApplicationUsage harnesses. `ReportTheme.swift` copies the
+  foundations palette, tint and type scale, checked by UsageDashboardHarness.
+- Still pushed from Today: at the four-tab switch, move it into the Insights tab
+  and replace `canRefresh`'s `model.selectedTab == 0` with the Insights tab.
+- Verified: every harness, Swift harnesses, localization check, `git diff
+  --check`, unsigned arm64 Debug and Release builds, and synthetic macOS
+  renders of the report. Not verified: anything on an iPhone (no simulator
+  runtime or device), including whether the loading line is hidden once the
+  report draws (decision I9).
