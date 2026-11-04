@@ -328,16 +328,18 @@ struct UsageTrendsView: View {
     }
     /// "Last 7 full days", "The week before", or the period's dates.
     private func name(_ period: UsageInsightsPeriod) -> String {
-        UsagePeriodName.key(for: period, in: usage).map(insightsText) ?? range(period)
+        UsagePeriodName.key(for: period, selected: current, in: usage).map(insightsText) ?? range(period)
     }
     private func date(_ date: Date, template: String = "MMMd") -> String {
         let f = DateFormatter(); f.locale = locale; f.calendar = usage.calendar; f.timeZone = usage.calendar.timeZone
         f.setLocalizedDateFormatFromTemplate(template); return f.string(from: date)
     }
+    /// A weekday on its own (a row title or the start of a sentence), so it
+    /// is capitalised even where weekdays are lowercase mid-sentence.
     private func weekday(_ day: Int) -> String {
         let f = DateFormatter(); f.locale = locale; f.calendar = usage.calendar
-        let symbols = f.weekdaySymbols ?? []
-        return symbols.indices.contains(day - 1) ? symbols[day - 1] : ""
+        let symbols = f.standaloneWeekdaySymbols ?? []
+        return symbols.indices.contains(day - 1) ? UsageFormat.sentenceStart(symbols[day - 1], locale: locale) : ""
     }
     private func range(_ period: UsageInsightsPeriod) -> String {
         text.format("%@ – %@", date(period.start), date(usage.calendar.date(byAdding: .day, value: -1, to: period.end) ?? period.start))

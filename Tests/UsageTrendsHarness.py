@@ -154,10 +154,19 @@ let range = UsageTrendsModel.patternRange(usage)
 check(range?.start == usage.weeks[0].start && range?.end == day(-1), "weekday caption from the report calendar")
 
 // Rolling weeks are named by position or dates, never "This week" (I10).
-check(UsagePeriodName.key(for: usage.lastSevenDays, in: usage) == "Last 7 full days", "latest week")
-check(UsagePeriodName.key(for: usage.weeks[3], in: usage) == "Last 7 full days", "latest week in the picker")
-check(UsagePeriodName.key(for: usage.weeks[2], in: usage) == "The week before", "week before")
-check(UsagePeriodName.key(for: usage.weeks[0], in: usage) == nil && UsagePeriodName.key(for: usage.weeks[1], in: usage) == nil, "older weeks use dates")
+func name(_ period: UsageInsightsPeriod, _ selected: UsageInsightsPeriod) -> String? {
+    UsagePeriodName.key(for: period, selected: selected, in: usage)
+}
+let latest = usage.lastSevenDays
+check(name(latest, latest) == "Last 7 full days" && name(usage.weeks[3], latest) == "Last 7 full days", "latest week")
+check(name(usage.weeks[2], latest) == "The week before", "the week before the latest")
+check(name(usage.weeks[0], latest) == nil && name(usage.weeks[1], latest) == nil, "older weeks use dates")
+// Review fix: with an older week picked, "The week before" names the week
+// before *it*, matching the comparison sentence, never the picked week.
+check(name(usage.weeks[2], usage.weeks[2]) == nil, "the picked week is never called the week before")
+check(name(usage.weeks[1], usage.weeks[2]) == "The week before", "its predecessor is")
+check(name(usage.weeks[3], usage.weeks[2]) == "Last 7 full days", "latest keeps its name")
+check(name(usage.weeks[0], usage.weeks[0]) == nil, "oldest has no week before")
 check(UsagePeriodName.emptyKey(unknown) == "No full week yet" && UsagePeriodName.emptyKey(usage) == "No data yet", "empty week wording")
 var onlyToday = UsageInsightsAccumulator(now: now, calendar: cal)
 add(&onlyToday, 0, seconds: 600)
@@ -168,7 +177,12 @@ check(UsageCoverageLabel.isPartlyReported(short.days.first { $0.date == day(-2) 
 check(!UsageCoverageLabel.isPartlyReported(short.days.first { $0.date == day(-1) }, today: today), "full day carries no label")
 check(!UsageCoverageLabel.isPartlyReported(usage.today, today: today), "today says so far instead")
 check(!UsageCoverageLabel.isPartlyReported(short.days.first { $0.date == day(-5) }, today: today), "missing day is not partial")
-check(UsageCoverageLabel.accessibilityKey(short.days.first { $0.date == day(-5) }, today: today) == "No data", "missing reads No data")
+check(UsageCoverageLabel.accessibilityKey(short.days.first { $0.date == day(-5) }, today: today) == nil, "missing already reads No data yet")
+// Review fix: today's bar is drawn and read as incomplete ("so far").
+check(UsageCoverageLabel.accessibilityKey(usage.today, today: today) == "Today so far", "today's bar says so far")
+check(!UsageCoverageLabel.drawsComplete(usage.today!), "today's bar gets the partial fill and notch")
+check(UsageCoverageLabel.drawsComplete(usage.days[0]) && !UsageCoverageLabel.drawsComplete(short.days.first { $0.date == day(-2) }!), "full and partial past days")
+check(UsageFormat.sentenceStart("jueves", locale: Locale(identifier: "es")) == "Jueves" && UsageFormat.sentenceStart("", locale: Locale(identifier: "es")) == "", "sentence start")
 check(UsageCoverageLabel.accessibilityKey(short.days.first { $0.date == day(-2) }, today: today) == "Partly reported", "partial VoiceOver")
 check(UsageCoverageLabel.accessibilityKey(short.days.first { $0.date == day(-1) }, today: today) == nil, "full: nothing extra")
 check(UsageCoverageLabel.isPartlyReported(short.lastSevenDays) && !UsageCoverageLabel.isPartlyReported(week), "periods")

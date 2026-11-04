@@ -250,7 +250,7 @@ struct UsageInsightsView: View {
 
     private func dayBar(_ item: UsageInsightsDay, maximum: TimeInterval, selected: Bool, colors: ReportColors) -> some View {
         let note = UsageCoverageLabel.accessibilityKey(item, today: usage.today?.date)
-        let complete = !UsageCoverageLabel.isPartlyReported(item, today: usage.today?.date)
+        let complete = UsageCoverageLabel.drawsComplete(item)
         return Button { selection.selectDay(item.date) } label: {
             VStack(spacing: 8) {
                 UsageBarStem(seconds: item.seconds, maximum: maximum, width: 22, height: 132,
@@ -264,10 +264,9 @@ struct UsageInsightsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain).accessibilityLabel(date(item.date, template: "EEEEMMMMd"))
-        // Missing already reads "No data yet"; only partial adds a note.
-        .accessibilityValue(note == UsageCoverageLabel.partly
-                            ? text.duration(item.seconds) + ", " + insightsText(UsageCoverageLabel.partly)
-                            : text.duration(item.seconds))
+        // "Today so far" or "Partly reported" only when it applies.
+        .accessibilityValue(note.map { text.duration(item.seconds) + ", " + insightsText($0) }
+                            ?? text.duration(item.seconds))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -438,7 +437,7 @@ struct UsageInsightsView: View {
 
     /// "LAST 7 FULL DAYS · 26 OCT – 1 NOV", or the dates alone for older weeks.
     private func periodTitle(_ period: UsageInsightsPeriod, withRange: Bool) -> String {
-        guard let key = UsagePeriodName.key(for: period, in: usage) else { return range(period) }
+        guard let key = UsagePeriodName.key(for: period, selected: week, in: usage) else { return range(period) }
         return withRange ? insightsText(key) + " · " + range(period) : insightsText(key)
     }
     private var windowRange: String {

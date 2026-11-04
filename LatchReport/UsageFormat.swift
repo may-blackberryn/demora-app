@@ -45,6 +45,12 @@ struct UsageFormat {
         return format("(%@%%)", (rounded < 0 ? "−" : "+") + number(abs(rounded)))
     }
 
+    /// Capitalises the first letter only ("jueves" → "Jueves").
+    static func sentenceStart(_ text: String, locale: Locale) -> String {
+        guard let first = text.first else { return text }
+        return String(first).uppercased(with: locale) + text.dropFirst()
+    }
+
     func number(_ value: Double) -> String {
         let formatter = NumberFormatter()
         formatter.locale = locale
@@ -169,20 +175,33 @@ enum UsageCoverageLabel {
         UsageFormat.wholeMinutes(period.seconds) != nil && !period.isComplete
     }
 
-    /// The VoiceOver note for a bar or calendar day: nil when it's complete.
+    /// The VoiceOver note after a bar's value: "Today so far" for today,
+    /// "Partly reported" for a partial past day, nil when complete or missing
+    /// (missing already reads "No data yet").
     static func accessibilityKey(_ day: UsageInsightsDay?, today: Date?) -> String? {
-        guard let day, UsageFormat.wholeMinutes(day.seconds) != nil else { return "No data" }
+        guard let day, UsageFormat.wholeMinutes(day.seconds) != nil else { return nil }
+        if day.date == today { return "Today so far" }
         return isPartlyReported(day, today: today) ? partly : nil
     }
+
+    /// Whether a bar is drawn as fully reported. Today never is: it gets the
+    /// partial fill and notch, like any incomplete day.
+    static func drawsComplete(_ day: UsageInsightsDay) -> Bool { day.isComplete }
 }
 
 /// Weeks are rolling seven-day periods ending yesterday (decision I10), so
 /// they're named by position or by their dates, never "This week".
 enum UsagePeriodName {
-    /// "Last 7 full days", "The week before", or nil: use the date range.
-    static func key(for period: UsageInsightsPeriod, in usage: UsageInsightsConfiguration) -> String? {
+    /// "Last 7 full days" for the latest period; "The week before" for the
+    /// period right before the selected one, so it always matches the
+    /// comparison sentence ("… than the week before"); otherwise nil: use the
+    /// date range.
+    static func key(for period: UsageInsightsPeriod, selected: UsageInsightsPeriod,
+                    in usage: UsageInsightsConfiguration) -> String? {
         if same(period, usage.lastSevenDays) { return "Last 7 full days" }
-        if same(period, usage.previousSevenDays) { return "The week before" }
+        if let before = UsageDashboardPresentation.preceding(selected, in: usage.weeks), same(period, before) {
+            return "The week before"
+        }
         return nil
     }
 

@@ -441,7 +441,7 @@ nonisolated func insightsText(_ key: String) -> String {
             "Trends": "Eğilimler",
             "Used up": "Doldu",
             "Want a starting point? Add an estimate in About this data (ⓘ at the top).": "Bir başlangıç noktası ister misin? Bu veriler hakkında bölümünden bir tahmin ekle (üstteki ⓘ).",
-            "Week": "hafta",
+            "Week": "Hafta",
             "Weekday patterns": "Haftanın günlerine göre örüntüler",
             "You estimated %@ a week before using Demora.": "Demora'yı kullanmadan önce haftada %@ tahmin etmiştin.",
             "Your daily average last week: %@": "Son 7 tam gündeki günlük ortalaman: %@",

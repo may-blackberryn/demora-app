@@ -155,6 +155,8 @@ assert 'loosen' not in view + trends and 'free' not in view + trends
 assert 'Full reported coverage' not in view + trends and 'Partial reported coverage' not in view + trends
 assert 'Color(red:' not in view + trends, 'colours come from ReportTheme'
 assert 'frame(maxWidth: 640)' in view
+assert 'UsageCoverageLabel.drawsComplete(item)' in view  # review fix: today never drawn complete
+assert 'standaloneWeekdaySymbols' in trends and 'UsageFormat.sentenceStart(' in trends  # review fix: capitalised weekday
 assert 'reader.scrollTo(id, anchor: .trailing)' in view
 assert 'maxHeight: .infinity' in host and 'reportHeight' not in host
 assert 'showingAbout' in host and 'showingDetails' not in host  # one About sheet (I4)

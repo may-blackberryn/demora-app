@@ -540,7 +540,7 @@ let turkishStrings: [String: String] = [
     "When on, deleting any app from this iPhone is blocked — including Demora itself — so your rules can't be bypassed by uninstalling. Turning it off goes through the less-strict delay.": "Açıldığında, bu iPhone'dan herhangi bir uygulamayı silmek engellenir — Demora'yı da dahil olmak üzere — böylece kurallarınızı yüklemeyi kaldırmanızla aşamıyorsunuz. Kapattığınızda daha az katı gecikme süreci geçerlidir.",
     "Blocks": "Bloklar",
     "New recurring": "Yeni tekrarlayan",
-    "Week": "hafta",
+    "Week": "Hafta",
     "Month": "ay",
     "Nothing on this day.": "Bu gün hiçbir şey yok.",
     "When things overlap": "Şeyler örtüştüğünde",
