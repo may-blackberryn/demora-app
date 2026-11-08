@@ -91,7 +91,7 @@ final class AppModel: ObservableObject {
     /// so it survives the language re-render — the TabView is rebuilt on a
     /// language change, which would otherwise pop you back to the root and
     /// kick you out of e.g. Appearance. Home's "change" link also sets it.
-    @Published var settingsPath: [SettingsRoute] = []
+    @Published var youPath: [YouRoute] = []
 
     private var timer: AnyCancellable?
     private var housekeepingInFlight = false
@@ -194,7 +194,7 @@ final class AppModel: ObservableObject {
     }
 
     /// Poll CloudKit for incoming "be my trusted contact" invites so the
-    /// Settings tab can show a badge when someone is waiting on your answer.
+    /// You tab can show a dot when someone is waiting on your answer (Y7).
     func refreshIncomingInviteCount() {
         Task { [weak self] in
             let count = (try? await ContactsRelay.incomingInvites().count) ?? 0
@@ -566,22 +566,6 @@ final class AppModel: ObservableObject {
         tutorialScreen = "limits"
     }
 
-    /// Jump to the Settings tab and open a specific section (Delays, Overrides,
-    /// …), always landing on that section's *main* page. Reassigning the path to
-    /// a different value rebuilds the stack and drops any closure-based
-    /// sub-pushes (e.g. a Contacts page inside Overrides). If we happen to already
-    /// be at this exact route, clear it first so we still pop back to the root
-    /// instead of leaving a deeper page on screen.
-    func openSettings(to route: SettingsRoute) {
-        selectedTab = 3
-        if settingsPath == [route] {
-            settingsPath = []
-            DispatchQueue.main.async { self.settingsPath = [route] }
-        } else {
-            settingsPath = [route]
-        }
-    }
-
     private func advanceTutorial(to step: TutorialStep) {
         tutorial = step
         switch step {
@@ -658,9 +642,8 @@ final class AppModel: ObservableObject {
         }
         SharedStore.isReplaying = true
         isReplay = true
-        // Replay is launched from inside Settings → Help; pop that stack back to
-        // root so the user doesn't land mid-Settings when the tour ends.
-        settingsPath = []
+        // Pop You's stack back to its root so the tour doesn't end mid-page.
+        youPath = []
         beginTutorial()
     }
 
@@ -689,7 +672,7 @@ final class AppModel: ObservableObject {
         tutorial = nil
         isReplay = false
         selectedTab = 0
-        settingsPath = []
+        youPath = []
         ChangeEngine.reconfigureDailyMonitoring(state: s)
         LimitFeatures.resetForNewDay()
         LimitFeatures.reconfigureSplitMonitoring(state: s)

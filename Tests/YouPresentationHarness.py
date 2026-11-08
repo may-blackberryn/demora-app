@@ -424,7 +424,7 @@ keys = set(re.findall(r'translate\(' + STRING + r'\)', code))
 keys.update(k for k in re.findall(r'return ' + STRING, code))
 for pair in re.findall(r'translate\(extra \? ' + STRING + r' : ' + STRING + r'\)', code):
     keys.update(pair)
-YOU_FILES = [p for p in ('Latch/YouView.swift', 'Latch/SkipWayViews.swift', 'Latch/SkipWaitSheet.swift',
+YOU_FILES = [p for p in ('Latch/YouView.swift', 'Latch/YouPages.swift', 'Latch/SkipWayViews.swift', 'Latch/SkipWaitSheet.swift',
                          'Latch/HowDemoraWorksView.swift') if (ROOT / p).exists()]
 for name in YOU_FILES:
     text = (ROOT / name).read_text()

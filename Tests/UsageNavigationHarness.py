@@ -57,7 +57,7 @@ assert 'if saved, let chosenEstimate' in setup
 complete = block(welcome, 'private func complete(')
 assert complete.index('if demoState != nil') < complete.index('WeeklyUsageEstimate.save')
 assert 'if wantsUsageEstimate' in complete
-guide = settings.split('struct GuideView:', 1)[1].split('// MARK: - Contact', 1)[0]
+guide = settings.split('struct GuideView:', 1)[1].split('// MARK: - Language', 1)[0]
 assert 'replayTutorial' not in guide and 'Replay walkthrough' not in guide
 
 driver = '''

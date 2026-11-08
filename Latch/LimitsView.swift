@@ -29,7 +29,7 @@ struct LimitsView: View {
                     Spacer()
                     if !model.inTutorial {
                         NavigationLink {
-                            HelpHubView().toolbar(.visible, for: .navigationBar)
+                            HelpGuideView().toolbar(.visible, for: .navigationBar)
                         } label: {
                             Image(systemName: "questionmark.circle")
                         }

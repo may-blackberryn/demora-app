@@ -807,7 +807,7 @@ struct MyInfoView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                DemoraPageTitle(title: tr("My info"))
+                DemoraPageTitle(title: tr("Your code"))
                 VStack(alignment: .leading, spacing: 12) {
                     DemoraSectionTitle(title: tr("Your name"), symbol: "person.crop.circle")
                     TextField(tr("Your name (optional)"), text: $myName)
@@ -838,7 +838,7 @@ struct MyInfoView: View {
             .frame(maxWidth: .infinity)
         }
         .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("My info"))
+        .casedNavigationTitle(tr("Your code"))
         .onAppear { myName = ContactsRelay.myName }
     }
 }
@@ -1207,7 +1207,7 @@ struct ApproveForView: View {
                     }
                 }
                 NavigationLink { RequestHistoryView() } label: {
-                    Label(tr("Request history"), systemImage: "clock.arrow.circlepath")
+                    Label(tr("Requests you received"), systemImage: "clock.arrow.circlepath")
                 }
                 Text(tr("These people have you as a trusted contact. Tap one to see their details or add them back. Removing yourself tells them and stops their requests."))
                     .font(.footnote).foregroundStyle(.secondary)
@@ -1338,7 +1338,7 @@ struct SentHistoryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-            DemoraPageTitle(title: tr("Request history"))
+            DemoraPageTitle(title: tr("Requests you sent"))
             if entries.isEmpty {
                 Text(tr("No requests yet."))
                     .foregroundStyle(Ink.faint).demoraSurface()
@@ -1366,7 +1366,7 @@ struct SentHistoryView: View {
             .frame(maxWidth: .infinity)
         }
         .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Request history"))
+        .casedNavigationTitle(tr("Requests you sent"))
         .onAppear { entries = ContactsRelay.sentRequestHistory() }
     }
 
@@ -1392,7 +1392,7 @@ struct RequestHistoryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-            DemoraPageTitle(title: tr("Request history"))
+            DemoraPageTitle(title: tr("Requests you received"))
             if entries.isEmpty {
                 Text(tr("No requests yet."))
                     .foregroundStyle(Ink.faint).demoraSurface()
@@ -1436,7 +1436,7 @@ struct RequestHistoryView: View {
             .frame(maxWidth: .infinity)
         }
         .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Request history"))
+        .casedNavigationTitle(tr("Requests you received"))
         .onAppear(perform: refresh)
     }
 

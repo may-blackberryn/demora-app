@@ -136,7 +136,8 @@ struct RootView: View {
         case 1:
             if model.inTutorial { LimitsView() } else { RulesView() }
         case 2: SchedulesView()
-        case 3: SettingsView()
+        // You replaces Settings until the four-tab switch (docs/you-redesign.md).
+        case 3: YouView()
         case 4: DelaysOverridesTabView()
         default: HomeView()
         }
@@ -148,7 +149,7 @@ struct RootView: View {
         switch model.selectedTab {
         case 1:  LimitsView()
         case 2:  SchedulesView()
-        case 3:  SettingsView()
+        case 3:  YouView()
         default: HomeView()
         }
     }

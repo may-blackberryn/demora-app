@@ -55,10 +55,10 @@ assert not re.search(r'TextCasing\(rawValue: textCasingRaw\) \?\? \.lower', ever
 root = (ROOT / 'Latch/LatchApp.swift').read_text()
 assert root.count('.textCase(TextCasing.resolved(textCasingRaw).textCase)') == 1, 'root application'
 assert 'TextCasing.resolved(textCasingRaw) == .lower' in theme, 'navigation titles follow the setting'
-# Only explicit choices write the value: the onboarding picker and the Settings row.
+# Only explicit choices write the value: You → Appearance (the Settings row moved there).
 writers = [(path.name, m) for path, text in sources.items()
            for m in re.findall(r'(?<!var )textCasingRaw = [^\n]*', text)]
-assert [name for name, _ in writers] == ['SettingsView.swift'], writers
+assert [name for name, _ in writers] == ['YouPages.swift'], writers
 assert not re.search(r'(set|removeObject)\([^\n]*"textCasing"', everything), 'no silent writes'
 assert len(re.findall(r'"textCasing"', everything)) == len(declarations), 'no other key access'
 print(f'Text case default passed: {len(declarations)} @AppStorage declarations, root application, '

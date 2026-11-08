@@ -373,7 +373,8 @@ assert 'ExtraTimePasswordGate(limitID:' in today and 'ExtraTimePhraseGate(limitI
     and 'ContactGateView(changes: [], extraContext: context' in today, 'existing extra-time gates'
 assert 'CompactHomeUsageReport(limits: model.state.limits,\n                                       reloadRequest: usageRefreshRequest)' in body
 assert 'pending.prefix(2)' in body and 'String(format: tr("All %d"), pending.count)' in body
-assert 'UsageInsightsView()' in body and 'HelpHubView()' in body, 'kept at the bottom until Insights/You'
+# You build: the Help link opens You's Help & guide page until the four-tab switch.
+assert 'UsageInsightsView()' in body and 'HelpGuideView()' in body, 'kept at the bottom until the four-tab switch'
 assert body.count('.task(id: model.selectedTab == 0)') == 1, 'one inbox load per Home, both layouts'
 assert '.refreshable {\n                usageRefreshRequest = UUID()' in body, 'pull to refresh stays'
 for forbidden in ('GlobalWake.status(', 'DayNightWake.status(', 'LimitFeatures.wakeState(',

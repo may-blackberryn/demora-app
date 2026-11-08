@@ -337,7 +337,7 @@ struct HomeView: View {
             Rectangle().fill(Ink.hairline).frame(height: 1)
                 .padding(.leading, DemoraSpace.cardPadding)
             NavigationLink {
-                HelpHubView().toolbar(.visible, for: .navigationBar)
+                HelpGuideView().toolbar(.visible, for: .navigationBar)
             } label: {
                 moreRow(tr("Help"), symbol: "questionmark.circle")
             }

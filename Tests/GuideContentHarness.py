@@ -13,7 +13,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SETTINGS = (ROOT / "Latch/SettingsView.swift").read_text()
-GUIDE = SETTINGS.split("// MARK: - Guide\n", 1)[1].split("// MARK: - Contact\n", 1)[0]
+GUIDE = SETTINGS.split("// MARK: - Guide\n", 1)[1].split("// MARK: - Language\n", 1)[0]
 LITERAL = r'"(?:[^"\\]|\\.)*"'
 
 
@@ -34,7 +34,8 @@ class GuideContentTests(unittest.TestCase):
             "overrides", "usage", "troubleshooting", "notifications"})
         ids = re.findall(r'\bid: "([^"\n]+)"', GUIDE)
         self.assertEqual(len(ids), len(set(ids)))
-        self.assertIn("NavigationLink { GuideView() }", SETTINGS)
+        # Help & guide moved to You (docs/you-redesign.md §5.12).
+        self.assertIn("NavigationLink { GuideView() }", (ROOT / "Latch/YouPages.swift").read_text())
         self.assertIn("ForEach(topics)", GUIDE)
         self.assertIn("NavigationLink { GuideTopicView(topic: topic) }", GUIDE)
         self.assertIn("ForEach(topic.sections.indices, id: \\.self)", GUIDE)

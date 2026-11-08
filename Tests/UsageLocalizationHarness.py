@@ -54,7 +54,7 @@ def verify_table(label, pairs, required):
 def main():
     host = (ROOT / 'Latch/UsageInsightsView.swift').read_text()
     settings = (ROOT / 'Latch/SettingsView.swift').read_text()
-    guide = settings.split('struct GuideTopic:', 1)[1].split('// MARK: - Contact', 1)[0]
+    guide = settings.split('struct GuideTopic:', 1)[1].split('// MARK: - Language', 1)[0]
     required = calls(host, 'tr') | calls(guide, 'tr') | {
         'Find practical instructions and troubleshooting in Settings → Help → Guide.'
     }

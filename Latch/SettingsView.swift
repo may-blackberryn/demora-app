@@ -1,195 +1,12 @@
 //
 //  SettingsView.swift
-//  Language, the two delays, override methods, the app-deletion lock,
-//  and beta credits. Every rule change is queued through the change
-//  engine; language is cosmetic and switches after confirmation.
+//  Pages that outlived the Settings tab: limitations, the Guide, the
+//  language picker, the Delays tab and the website list. You
+//  (YouView.swift) replaced the Settings root; every rule change is still
+//  queued through the change engine.
 //
 
 import SwiftUI
-import UserNotifications
-
-enum SettingsRoute: Hashable {
-    case appearance, rules, delays, overrides, notifications, help, fineTuneOverrides
-}
-
-struct SettingsView: View {
-    @EnvironmentObject var model: AppModel
-
-    var body: some View {
-        NavigationStack(path: $model.settingsPath) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    DemoraPageTitle(title: tr("Settings"))
-                    VStack(alignment: .leading, spacing: 0) {
-                        NavigationLink(value: SettingsRoute.appearance) {
-                            GridCard(symbol: "textformat.size",
-                                     title: tr("Appearance"),
-                                     subtitle: tr("language, theme, case"))
-                        }
-                        if model.inTutorial {
-                            NavigationLink(value: SettingsRoute.rules) {
-                                GridCard(symbol: "slider.horizontal.3", title: tr("Rules"),
-                                         subtitle: tr("delays, overrides, blocking"))
-                            }
-                            .tutorialHighlight(model.tutorial == .addContact
-                                               && model.tutorialScreen == "settings")
-                        }
-                        NavigationLink(value: SettingsRoute.notifications) {
-                            GridCard(symbol: "bell", title: tr("Notifications"),
-                                     subtitle: tr("limit and free-period alerts"))
-                        }
-                        NavigationLink(value: SettingsRoute.help) {
-                            GridCard(symbol: "questionmark.circle", title: tr("Help"),
-                                     subtitle: tr("guide, contact, more"))
-                        }
-                        if !model.inTutorial {
-                            NavigationLink(value: SettingsRoute.fineTuneOverrides) {
-                                GridCard(symbol: "slider.horizontal.3",
-                                         title: tr("Fine-tune overrides"),
-                                         subtitle: tr("trusted contacts and methods"))
-                            }
-                        }
-                        #if DEBUG
-                        if !model.inTutorial {
-                            NavigationLink { DeveloperDemosView() } label: {
-                                GridCard(symbol: "play.rectangle", title: "Setup demos (debug)",
-                                         subtitle: "new user + migration · nothing saves")
-                            }
-                        }
-                        Button { model.debugFullReset() } label: {
-                            GridCard(symbol: "trash", title: "Reset app (debug)",
-                                     subtitle: "wipe + onboarding")
-                        }
-                        .buttonStyle(.plain)
-                        #endif
-                    }
-                }
-                .padding(.horizontal, 26)
-                .padding(.vertical, 24)
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity)
-            }
-            .background(Ink.paper.ignoresSafeArea())
-            .toolbar(.hidden, for: .navigationBar)
-            .onAppear {
-                if model.inTutorial && model.selectedTab == 3 {
-                    model.tutorialScreen = "settings"
-                }
-            }
-            .navigationDestination(for: SettingsRoute.self) { route in
-                switch route {
-                case .appearance:  AppearanceGridView().toolbar(.visible, for: .navigationBar)
-                case .rules:       RulesGridView().toolbar(.visible, for: .navigationBar)
-                case .delays:      DelaysGridView().toolbar(.visible, for: .navigationBar)
-                case .overrides:   OverridesGridView().toolbar(.visible, for: .navigationBar)
-                case .notifications: NotificationPreferencesView().toolbar(.visible, for: .navigationBar)
-                case .help:        HelpHubView().toolbar(.visible, for: .navigationBar)
-                case .fineTuneOverrides:
-                    FineTuneOverridesView().toolbar(.visible, for: .navigationBar)
-                }
-            }
-        }
-    }
-
-    private var overridesSubtitle: String {
-        let o = model.state.overrides
-        return o.contactsEnabled ? tr("trusted contacts on") : tr("none on")
-    }
-
-}
-
-private struct NotificationPreferencesView: View {
-    @AppStorage("latch.notifications.limitFiveMinutes.v1", store: SharedStore.defaults)
-    private var limitWarnings = true
-    @AppStorage("latch.notifications.freeBoundary.v1", store: SharedStore.defaults)
-    private var freeWarnings = false
-    @State private var notificationsAllowed = true
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                DemoraPageTitle(title: tr("Notifications"))
-                VStack(alignment: .leading, spacing: 12) {
-                Toggle(tr("5 minutes left for a limit"), isOn: $limitWarnings)
-                Text(tr("Only for limits longer than 5 minutes. No alert is sent during a free period."))
-                    .font(.footnote).foregroundStyle(Ink.faint)
-            }
-                .demoraSurface()
-                VStack(alignment: .leading, spacing: 12) {
-                Toggle(tr("Free period starts or ends in 5 minutes"),
-                       isOn: $freeWarnings)
-                Text(tr("Optional reminders for scheduled free periods and free-session endings."))
-                    .font(.footnote).foregroundStyle(Ink.faint)
-            }
-                .demoraSurface()
-            if !notificationsAllowed {
-                Text(tr("iOS notifications for Demora are off. Enable them in iOS Settings to receive alerts."))
-                    .font(.footnote).foregroundStyle(Ink.danger)
-                    .demoraSurface()
-            }
-            }
-            .padding(20)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
-        }
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Notifications"))
-        .onAppear { Task { await refreshPermission() } }
-        .onChange(of: limitWarnings) { enabled in
-            if enabled { Task { await refreshPermission(requestIfPossible: true) } }
-        }
-        .onChange(of: freeWarnings) { _ in
-            DemoraNotifications.rescheduleFreeBoundaries(state: SharedStore.loadState())
-            if freeWarnings { Task { await refreshPermission(requestIfPossible: true) } }
-        }
-    }
-
-    private func refreshPermission(requestIfPossible: Bool = false) async {
-        let center = UNUserNotificationCenter.current()
-        let settings = await center.notificationSettings()
-        if requestIfPossible && settings.authorizationStatus == .notDetermined {
-            _ = try? await center.requestAuthorization(options: [.alert, .sound])
-        }
-        let current = await center.notificationSettings()
-        notificationsAllowed = current.authorizationStatus == .authorized
-            || current.authorizationStatus == .provisional
-    }
-}
-
-// MARK: - Help hub
-
-struct HelpHubView: View {
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                NavigationLink { GuideView() } label: {
-                    GridCard(symbol: "book", title: tr("Guide"),
-                             subtitle: tr("how each part works"))
-                }
-                NavigationLink { LimitationsView() } label: {
-                    GridCard(symbol: "exclamationmark.triangle", title: tr("Limitations"),
-                             subtitle: tr("iOS reporting notes"))
-                }
-                NavigationLink { ContactView() } label: {
-                    GridCard(symbol: "envelope", title: tr("Contact"),
-                             subtitle: tr("bug, feature, help"))
-                }
-                NavigationLink { SoftwareRoadmapView() } label: {
-                    GridCard(symbol: "map", title: tr("Software roadmap"),
-                             subtitle: tr("features & bugs"))
-                }
-                NavigationLink { PreventDisablingGateView() } label: {
-                    GridCard(symbol: "lock.shield", title: tr("Prevent disabling"),
-                             subtitle: tr("lock it with a friend"))
-                }
-            }
-            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.plain)
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Help"))
-    }
-}
 
 // MARK: - Limitations
 
@@ -227,29 +44,6 @@ struct LimitationsView: View {
                 .font(.body).foregroundStyle(Ink.ink)
                 .fixedSize(horizontal: false, vertical: true)
         }
-    }
-}
-
-// MARK: - Software roadmap
-
-struct SoftwareRoadmapView: View {
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                Link(destination: URL(string: "https://trello.com/b/0TKqYTdt/demora")!) {
-                    GridCard(symbol: "map", title: tr("Feature roadmap"),
-                             subtitle: tr("links to Trello"))
-                }
-                Link(destination: URL(string: "https://trello.com/b/X9HQlORp/demora-bug-fixing")!) {
-                    GridCard(symbol: "ladybug", title: tr("Bug tracker"),
-                             subtitle: tr("links to Trello"))
-                }
-            }
-            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.plain)
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Software roadmap"))
     }
 }
 
@@ -390,97 +184,7 @@ struct GuideTopicView: View {
     }
 }
 
-// MARK: - Contact
-
-struct ContactView: View {
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                mailCard(symbol: "ladybug", title: tr("Report a bug"),
-                         email: "bugs@getdemora.app")
-                mailCard(symbol: "lightbulb", title: tr("Request a feature"),
-                         email: "features@getdemora.app")
-                mailCard(symbol: "questionmark.circle", title: tr("General help"),
-                         email: "hello@getdemora.app")
-                Link(destination: URL(string: "https://getdemora.app")!) {
-                    GridCard(symbol: "globe", title: tr("Website"),
-                             subtitle: "getdemora.app")
-                }
-                Link(destination: URL(string: "https://instagram.com/get.demora")!) {
-                    GridCard(symbol: "camera", title: tr("Instagram"),
-                             subtitle: "@get.demora")
-                }
-            }
-            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.plain)
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Contact"))
-    }
-
-    private func mailCard(symbol: String, title: String, email: String) -> some View {
-        Link(destination: URL(string: "mailto:\(email)")!) {
-            GridCard(symbol: symbol, title: title, subtitle: email)
-        }
-    }
-}
-
-// MARK: - Appearance grid
-
-struct AppearanceGridView: View {
-    @EnvironmentObject var model: AppModel
-    @AppStorage("appearance") private var appearanceRaw = Appearance.system.rawValue
-    @AppStorage("textCasing") private var textCasingRaw = TextCasing.fallback.rawValue
-    @AppStorage("weekStartMonday") private var weekStartMonday = false
-    @AppStorage("latch.accentColor", store: SharedStore.defaults)
-    private var accentColorRaw = "blue"
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                NavigationLink {
-                    LanguagePickerView()
-                } label: {
-                    GridCard(symbol: "globe", title: tr("Language"),
-                             subtitle: model.language.label)
-                }
-                Button {
-                    let all = Appearance.allCases
-                    let cur = Appearance(rawValue: appearanceRaw) ?? .system
-                    appearanceRaw = all[(all.firstIndex(of: cur)! + 1) % all.count].rawValue
-                } label: {
-                    GridCard(symbol: "circle.lefthalf.filled", title: tr("Theme"),
-                             subtitle: (Appearance(rawValue: appearanceRaw) ?? .system).label)
-                }
-                Button {
-                    let all = TextCasing.allCases
-                    let cur = TextCasing.resolved(textCasingRaw)
-                    textCasingRaw = all[(all.firstIndex(of: cur)! + 1) % all.count].rawValue
-                } label: {
-                    GridCard(symbol: "textformat", title: tr("Text case"),
-                             subtitle: TextCasing.resolved(textCasingRaw).label)
-                }
-                Button {
-                    weekStartMonday.toggle()
-                } label: {
-                    GridCard(symbol: "calendar", title: tr("Week starts"),
-                             subtitle: weekStartMonday ? tr("Monday") : tr("Sunday"))
-                }
-                Button {
-                    accentColorRaw = accentColorRaw == "red" ? "blue" : "red"
-                } label: {
-                    GridCard(symbol: "paintpalette", title: tr("App color"),
-                             subtitle: accentColorRaw == "red"
-                                ? tr("Red") : tr("Blue"))
-                }
-            }
-            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.plain)
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Appearance"))
-    }
-}
+// MARK: - Language
 
 struct LanguagePickerView: View {
     @EnvironmentObject var model: AppModel
@@ -547,9 +251,7 @@ struct DelaysGridView: View {
 /// First-class destination from the redesigned bottom navigation. Existing
 /// delay and contact editors keep their queued-change semantics unchanged.
 struct DelaysOverridesTabView: View {
-    @AppAccent private var accent
     @EnvironmentObject var model: AppModel
-    @State private var showAddContact = false
 
     var body: some View {
         NavigationStack {
@@ -566,49 +268,12 @@ struct DelaysOverridesTabView: View {
                     }
                     VStack(alignment: .leading, spacing: 12) {
                         DemoraSectionTitle(title: tr("Overrides"), symbol: "person.2")
-                        HStack {
-                            Text(tr("Trusted contacts"))
-                                .font(.system(.title3, design: .serif).weight(.semibold))
-                            Spacer()
-                            NavigationLink(tr("See all")) {
-                                ContactsDetailView()
-                                    .toolbar(.visible, for: .navigationBar)
-                            }
-                        }
-                        ForEach(model.state.overrides.contacts.prefix(2)) { contact in
-                            TrustedContactApprovalRow(contact: contact)
-                        }
-                        Button { showAddContact = true } label: {
-                            Label(tr("Add contact…"),
-                                  systemImage: "person.crop.circle.badge.plus")
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(accent)
-                        .frame(minHeight: 44)
-                        NavigationLink {
-                            ContactsOverrideEditor()
-                                .toolbar(.visible, for: .navigationBar)
-                        } label: {
-                            GridCard(symbol: "person.2", title: tr("Contact settings"),
-                                     subtitle: model.state.overrides.contactsEnabled
-                                        ? tr("On") : tr("Off"),
-                                     showsDot: model.incomingInviteCount > 0)
-                        }
-                        NavigationLink {
-                            ExtraOverridesView()
-                                .toolbar(.visible, for: .navigationBar)
-                        } label: {
-                            GridCard(symbol: "key.horizontal",
-                                     title: tr("Extra overrides"),
-                                     subtitle: tr("passwords and phrases"))
-                        }
-                        NavigationLink {
-                            FineTuneOverridesView()
-                                .toolbar(.visible, for: .navigationBar)
-                        } label: {
-                            GridCard(symbol: "slider.horizontal.3",
-                                     title: tr("Fine-tune overrides"),
-                                     subtitle: tr("methods and permissions"))
+                        // Overrides live once, in You → Ways to skip a wait
+                        // (docs/you-redesign.md §8). This tab goes at the
+                        // four-tab switch.
+                        Button { model.selectedTab = 3 } label: {
+                            GridCard(symbol: "person.2", title: tr("Ways to skip a wait"),
+                                     subtitle: tr("Open You"))
                         }
                     }
                 }
@@ -620,7 +285,6 @@ struct DelaysOverridesTabView: View {
             .buttonStyle(.plain)
             .background(Ink.paper.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showAddContact) { AddContactView() }
         }
     }
 }

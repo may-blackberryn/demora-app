@@ -25,7 +25,8 @@ def block(source, signature):
 demos = (ROOT / "Latch/DeveloperDemosView.swift").read_text()
 onboarding = (ROOT / "Latch/OnboardingView.swift").read_text()
 welcome = (ROOT / "Latch/RedesignWelcomeView.swift").read_text()
-settings = (ROOT / "Latch/SettingsView.swift").read_text()
+# The Developer card moved from the Settings root to You (docs/you-redesign.md §5.6).
+settings = (ROOT / "Latch/YouView.swift").read_text()
 store = (ROOT / "Shared/SharedStore.swift").read_text()
 models = (ROOT / "Shared/SharedModels.swift").read_text().replace(
     "import FamilyControls\n", ""
@@ -38,8 +39,9 @@ migration = store[store.index("    static let redesignMigrationKey"):
                   store.index("    /// True only during the first-run tutorial.")]
 
 assert demos.splitlines()[2] == "#if DEBUG" and demos.strip().endswith("#endif")
-debug_settings = settings[settings.index("#if DEBUG"):settings.index("#endif")]
-assert "DeveloperDemosView()" in debug_settings
+debug_blocks = [block.split("#endif", 1)[0] for block in settings.split("#if DEBUG")[1:]]
+assert any("DeveloperDemosView()" in block for block in debug_blocks)
+assert settings.count("DeveloperDemosView()") == 1, "the demos entry exists only in a Debug block"
 assert "if !isDemo, model.state.delayPolicy.isValid" in onboarding
 assert "guard !isDemo else { return }" in onboarding
 assert "if let demo {\n                demo.onComplete" in onboarding

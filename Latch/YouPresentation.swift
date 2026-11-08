@@ -12,7 +12,7 @@ import Foundation
 
 // MARK: - The one list (§5.3)
 
-enum SkipWayKind: Equatable {
+enum SkipWayKind: Hashable {
     case contact, password, phrase
 }
 

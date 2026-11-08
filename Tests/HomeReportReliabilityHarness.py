@@ -122,7 +122,7 @@ struct HomeView: View {
 struct LimitsView: View { var body: some View { Text("limits") } }
 struct RulesView: View { var body: some View { Text("rules") } }
 struct SchedulesView: View { var body: some View { Text("schedules") } }
-struct SettingsView: View { var body: some View { Text("settings") } }
+struct YouView: View { var body: some View { Text("you") } }
 struct DelaysOverridesTabView: View { var body: some View { Text("delays") } }
 struct RetainedRoot: View {
     @EnvironmentObject var model: Model
