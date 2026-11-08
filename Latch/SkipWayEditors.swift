@@ -357,10 +357,8 @@ private struct AddPasswordDetails: View {
                         .frame(minHeight: 44)
                     Rectangle().fill(Ink.hairline).frame(height: 1).accessibilityHidden(true)
                     SecureField(tr("Password"), text: $password)
-                        .textContentType(.newPassword)
                         .frame(minHeight: 44)
                     SecureField(tr("Confirm password"), text: $confirm)
-                        .textContentType(.newPassword)
                         .frame(minHeight: 44)
                     if !confirm.isEmpty && password != confirm {
                         Text(tr("Passwords don't match"))
@@ -912,14 +910,11 @@ private struct PasswordSecretChangeView: View {
             VStack(alignment: .leading, spacing: DemoraSpace.m) {
                 VStack(alignment: .leading, spacing: DemoraSpace.s) {
                     SecureField(tr("Current password"), text: $current)
-                        .textContentType(.password)
                         .frame(minHeight: 44)
                     Rectangle().fill(Ink.hairline).frame(height: 1).accessibilityHidden(true)
                     SecureField(tr("New password"), text: $new)
-                        .textContentType(.newPassword)
                         .frame(minHeight: 44)
                     SecureField(tr("Confirm password"), text: $confirm)
-                        .textContentType(.newPassword)
                         .frame(minHeight: 44)
                 }
                 .paperCard()

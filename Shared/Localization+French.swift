@@ -1420,7 +1420,6 @@ let frenchStrings: [String: String] = [
     "Changes wait in Changes": "Les changements attendent dans Changements",
     "A looser change waits in Changes on Today with its countdown. Until it lands nothing changes, and you can cancel it any time.": "Un changement plus souple attend dans Changements, sur Aujourd'hui, avec son compte à rebours. Jusqu'à son arrivée rien ne change, et vous pouvez l'annuler à tout moment.",
     "A trusted contact, a password or a phrase can let a change apply early, but only for the kinds of change you allowed. Changes to them wait too. Set them up in You → Ways to skip a wait.": "Un contact de confiance, un mot de passe ou une phrase peut appliquer un changement plus tôt, mais seulement pour les types de changement autorisés. Les modifier attend aussi. Configurez-les dans Vous → Façons de passer un délai.",
-    "Next": "Suivant",
     "How Demora works is always in You → Help & guide.": "Comment fonctionne Demora est toujours dans Vous → Aide et guide.",
     "Find practical instructions and troubleshooting in You → Help & guide → Guide.": "Instructions pratiques et dépannage : Vous → Aide et guide → Guide.",
     "Contact invitations are sent after setup. Contacts must confirm before they can approve; manage them in You → Ways to skip a wait.": "Les invitations sont envoyées après la configuration. Les contacts doivent confirmer avant de pouvoir approuver ; gérez-les dans Vous → Façons de passer un délai.",

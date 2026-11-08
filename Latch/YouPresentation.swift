@@ -69,6 +69,10 @@ struct SkipWayList: Equatable {
     /// Above 12 rows each kind gets a collapsible header (§6 stress test).
     var collapsesKinds: Bool { rows.count > 12 }
 
+    func isExpanded(_ kind: SkipWayKind, collapsed: Set<SkipWayKind>) -> Bool {
+        !collapsesKinds || !collapsed.contains(kind)
+    }
+
     func rows(of kind: SkipWayKind) -> [SkipWayRow] { rows.filter { $0.kind == kind } }
 
     /// Contacts, then passwords, then phrases; within a kind the stored order,
@@ -354,6 +358,19 @@ enum SkipWayEligibility {
                                   emailAvailable: Bool) -> [EligibleWay] {
         ways(needing: [.extraTime], overrides: overrides, unavailableCodes: unavailableCodes,
              emailAvailable: emailAvailable).filter { $0.way.kind == .contact }
+    }
+
+    /// Navigation keeps its opening plan, but sending must use the current
+    /// contact identity, consent and permissions, never the captured copy.
+    static func currentRequestContacts(for changes: [PendingChange], extraTime: Bool,
+                                       offeredIDs: Set<UUID>, overrides: OverridesConfig,
+                                       unavailableCodes: Set<String>, emailAvailable: Bool) -> [EligibleWay] {
+        let current = extraTime
+            ? extraTimeContacts(overrides: overrides, unavailableCodes: unavailableCodes,
+                                emailAvailable: emailAvailable)
+            : ways(for: changes, overrides: overrides, unavailableCodes: unavailableCodes,
+                   emailAvailable: emailAvailable)
+        return current.filter { $0.way.kind == .contact && offeredIDs.contains($0.id) }
     }
 
     private static func ways(needing needed: Set<OverrideCapability>, overrides: OverridesConfig,

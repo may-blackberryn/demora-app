@@ -1,6 +1,6 @@
 # Demora iOS — primary development handoff
 
-Updated 2026-11-08 (Claude → next agent). This is the iPhone/iPad handoff, not
+Updated 2026-11-08 (Codex independent You verification). This is the iPhone/iPad handoff, not
 the Mac app (the Mac app has its own handoff in the workspace root `CLAUDE.md`).
 Codex reads `AGENTS.md`, which points here. Keep durable decisions current here;
 put build decisions in `docs/redesign-review.md` and older implementation
@@ -46,8 +46,9 @@ Do not use reset/checkout to clean the tree or discard unfamiliar files.
 
 ## Current state: full redesign in progress (2026-11-08)
 
-All redesign work is on branch **`design/full-redesign`** (HEAD `7be509d` at
-this update). `main` is untouched at `160d285`. Nothing is pushed, merged,
+All redesign work is on branch **`design/full-redesign`** (You build through
+`7be509d`, handoff `5c5c502`, followed by the independent verification fixes).
+`main` is untouched at `160d285`. Nothing is pushed, merged,
 uploaded or submitted. The earlier uncommitted 2.0 report work is committed
 there as `862cc9c`.
 
@@ -70,19 +71,29 @@ You**. Read before any redesign work:
 | Today (replaces Home; `TodayView`, `TodayPresentation`, `ChangesLedgerView`, `ChangeReceiptSheet`, `LatchReport/ReportTheme.swift`) | Built, reviewed, re-verified, on the iPhone; owner said it looks good |
 | Rules (behind tab 1, still labelled "Limits") | Built, reviewed, re-verified, on the iPhone |
 | Insights (opened from Today until the tab switch) | Built, reviewed, re-verified, on the iPhone |
-| You (behind the Settings tab), commits `4492d82..7be509d` | Built and self-reviewed; **not yet independently verified** — see below |
+| You (behind the Settings tab), commits `4492d82..7be509d` plus verification fixes | Independently reviewed and corrected; see `docs/redesign-review.md` → Independent You verification for evidence and remaining device checks |
 | Onboarding, shield and widgets | Spec approved; not built |
 | Four-tab switch (drop Delays/Schedules tabs, move badges, retire the legacy tutorial and its dormant code, restyle Calendar) | Not built |
 | Device test pass | Partial (owner tried Today) |
 
 ### Open items to do first
 
-- **Verify the You build independently.** It changed `Latch/AppAttest.swift`
-  although its brief forbade it: find out what and why; revert anything that
-  changes behaviour. Check whether `.textContentType(.password/.newPassword)`
-  on Demora's own override password fields is new since `d7dd92e`; if so,
-  remove it (password-manager autofill would undercut the friction). Re-run
-  the full verify and read the You tables in `docs/redesign-review.md`.
+- **Report the independent You checkpoint before building anything new.**
+  App Attest was a stale suspicion: its bytes and Git blob are identical before
+  and after You; no revert was needed. Five new autofill hints were removed
+  from add/change-password forms (the old skip-gate hint stays). Fixed six
+  duplicate `Next` dictionary keys that could crash beta-language users, stale
+  contact recipients, collapsed rows after list shrink, hidden sent history and
+  an obsolete revealed passcode after replacement. Fresh review rechecked the
+  corrections; all 29 Python harnesses, both Swift harnesses, generated
+  localization and diff checks pass. Unsigned Debug/Release and signed Debug
+  pass; installed as dev demora on the owner's iPhone, but launch was denied
+  because it was locked. Interactive checks remain. Details live in the log.
+- **Next build: onboarding/shield/widgets, then the four-tab switch**, one
+  approved step at a time. Shield phase 1 stays generic; phase 2 naming needs
+  the signed-device token spike. Follow `docs/onboarding-shield-widgets-redesign.md`
+  and the owner answers. Do not change engine/model/service behavior without
+  first asking the owner. No new feature was started during the You checkpoint.
 - **Owner decision pending (don't implement without asking):** should adding,
   removing or pausing contacts stop being skippable via the "Trusted contacts"
   capability, and should new contacts stop getting it by default? Both are
@@ -242,12 +253,18 @@ directory first; do not install/switch tools or change signing without a reason.
 Full verify (run before every commit; the redesign added more harnesses):
 
 ```sh
-for f in Tests/*Harness.py; do python3 "$f" || echo "FAIL $f"; done
-swiftc Shared/PhraseWords.swift Tests/PhraseWordsHarness.swift -o /tmp/phrase-test && /tmp/phrase-test
+(
+verify_failed=0
+for f in Tests/*Harness.py; do
+  python3 "$f" || { printf 'FAIL %s\n' "$f"; verify_failed=1; }
+done
+swiftc Shared/PhraseWords.swift Tests/PhraseWordsHarness.swift -o /tmp/phrase-test && /tmp/phrase-test || verify_failed=1
 (sed -n '/^enum ContactPermissionPresentation {/,/^}/p' Latch/ContactPermissionsEditor.swift; \
-  cat Tests/ContactPermissionsPresentationHarness.swift) | swift -
-python3 Tests/GenerateUsageLocalization.py --check
-git diff --check
+  cat Tests/ContactPermissionsPresentationHarness.swift) | swift - || verify_failed=1
+python3 Tests/GenerateUsageLocalization.py --check || verify_failed=1
+git diff --check || verify_failed=1
+exit "$verify_failed"
+)
 ```
 
 Other focused harnesses cover migration, intro, demos, onboarding overrides,

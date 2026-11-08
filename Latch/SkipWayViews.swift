@@ -39,14 +39,14 @@ struct WaysToSkipSection: View {
                 TimelineView(.periodic(from: .now, by: 60)) { context in
                     card(list, now: context.date)
                 }
-                if showsSentLink {
-                    Button(tr("Requests you sent"), action: onSent)
-                        .buttonStyle(.plain)
-                        .demoraType(.meta)
-                        .foregroundStyle(accent)
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
-                }
+            }
+            if showsSentLink {
+                Button(tr("Requests you sent"), action: onSent)
+                    .buttonStyle(.plain)
+                    .demoraType(.meta)
+                    .foregroundStyle(accent)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
         }
     }
@@ -57,7 +57,7 @@ struct WaysToSkipSection: View {
             ForEach(Array(kinds.enumerated()), id: \.element) { index, kind in
                 if index > 0 { YouRowDivider(heavy: true) }
                 if list.collapsesKinds { kindHeader(kind, count: list.rows(of: kind).count) }
-                if !collapsed.contains(kind) {
+                if list.isExpanded(kind, collapsed: collapsed) {
                     ForEach(Array(list.rows(of: kind).enumerated()), id: \.element.id) { offset, row in
                         if offset > 0 { YouRowDivider() }
                         Button { onOpen(row) } label: {

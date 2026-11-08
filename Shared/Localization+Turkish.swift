@@ -1421,7 +1421,6 @@ let turkishStrings: [String: String] = [
     "Changes wait in Changes": "Değişiklikler Değişiklikler'de bekler",
     "A looser change waits in Changes on Today with its countdown. Until it lands nothing changes, and you can cancel it any time.": "Daha gevşek bir değişiklik geri sayımıyla Bugün'deki Değişiklikler'de bekler. Gelene kadar hiçbir şey değişmez ve onu istediğiniz an iptal edebilirsiniz.",
     "A trusted contact, a password or a phrase can let a change apply early, but only for the kinds of change you allowed. Changes to them wait too. Set them up in You → Ways to skip a wait.": "Güvenilir bir kişi, şifre ya da ifade bir değişikliği erken uygulatabilir, ama yalnızca izin verdiğiniz değişiklik türlerinde. Bunlardaki değişiklikler de bekler. Bunları Siz → Beklemeyi atlamanın yolları'nda kurun.",
-    "Next": "İleri",
     "How Demora works is always in You → Help & guide.": "Demora nasıl çalışır her zaman Siz → Yardım ve rehber'dedir.",
     "Find practical instructions and troubleshooting in You → Help & guide → Guide.": "Pratik talimatlar ve sorun giderme Siz → Yardım ve rehber → Rehber'de.",
     "Contact invitations are sent after setup. Contacts must confirm before they can approve; manage them in You → Ways to skip a wait.": "Kişi davetleri kurulumdan sonra gönderilir. Kişiler onaylayabilmeden önce kabul etmelidir; onları Siz → Beklemeyi atlamanın yolları'ndan yönetin.",

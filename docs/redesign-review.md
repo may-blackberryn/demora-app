@@ -418,3 +418,61 @@ A fresh reviewer read the whole You diff (d7dd92e..e86f704) with no conclusions 
 | (Found while fixing) You's `onReceive(model.$state)` read the state it was about to replace | Reads the published value | Source guard |
 
 Not changed: a new phrase defaults to 0 allowed mistakes — the reviewer thought this was new, but the old editor also set 0 for new phrases. **Owner decision:** should adding/removing/pausing contacts stop being skippable (engine returns no capability for them), and should new contacts stop getting "Trusted contacts" by default? Both are engine/model changes outside this build.
+
+## Independent You verification — 2026-11-08
+
+Scope: `4492d82..7be509d`, including the first commit's changes (compared
+against `d7dd92e`), and the handoff at `5c5c502`. No new feature build is part
+of this checkpoint. The lead read the approved plan, all six specs and this
+log. A separate read-only reviewer audited the You/request/receipt flows,
+then re-reviewed the corrections without writing them.
+
+| Decision / finding | Why | Done? |
+| --- | --- | --- |
+| Leave `AppAttest.swift` untouched | Contrary to the handoff suspicion, the file has the identical Git blob at `d7dd92e`, `7be509d` and the handoff HEAD (`bf09932454f25633ed0ffa2365ab84ee9eff93d5`). No commit in the You range changes it. Its last change is the pre-existing July recovery fix `48187ef`; reverting that would change production email behavior | Verified, no patch |
+| Remove five newly introduced `.password` / `.newPassword` hints from the add and secret-change forms | These forms had no such hints before You. Keep the two SecureFields/three SecureFields, hashing, validation and clearing unchanged. The skip gate's `.password` hint existed in both old change and extra-time gates, so it is retained, not silently changed | Fixed; source regression detects all five original hints |
+| Remove the new standalone `Next` entries in six catalogs, keeping the original inline translations | `b62f699` added a second key in German, French, Portuguese, Polish, Turkish and Hindi. Swift warns, but a dictionary initializer can trap at runtime. The old whole-line regex missed `"Now": …, "Next": …` | Fixed; scanner detects every old duplicate, plus a warnings-as-errors native check compiles and initializes all seven real dictionaries without app preferences |
+| Keep sheet navigation fixed, but revalidate contact recipients against current consent/scopes | The opening plan captured contacts even after removal, revocation or pause. Choice rows now follow current eligibility; Send reads persisted state and rechecks after async registration/email work before disclosing the relay request. Only the actual relay-recipient subset is recorded. No engine authorization or relay protocol changes | Fixed; pure current-recipient tests cover removal, revocation, pause, consent, extra-time scope, updated identity, reachability, a newly added contact and one/all recipients removed during suspension; source guards cover send/recheck/record wiring |
+| Ignore remembered collapse state at twelve rows or fewer | At thirteen rows a user could collapse a kind; after a removal the expand header disappeared but its rows stayed hidden | Fixed; native large → small/empty regressions and view wiring guard |
+| Show Requests you sent independently of an empty ways list | Removing the last way must not hide retained sent history | Fixed; source guard checks the link is outside both list branches |
+| Clear a previous passcode reveal when the entry sheet closes, on Save or Cancel | Otherwise replacing a passcode left the old secret labelled Saved passcode. Clearing even on Cancel matches the old separate-screen lifetime conservatively; neither new nor old passcode is revealed automatically | Fixed; source guard checks the dismissal callback, no storage/gate change |
+| Keep the contact-capability/default-permissions decision deferred | The owner requires asking before engine/model changes. This checkpoint changes no classification, delays, accounting, contact service, App Attest, schema, signing configuration or environment identifiers | Preserved |
+
+Re-review found no further concrete regressions in these patches. Native
+presentation tests and source guards do not simulate a real suspended CloudKit
+send or interactive iOS passcode sheet. Device follow-up for this checkpoint:
+switch to each beta language; add/change a password; revoke one/all selected
+contacts before Send and during registration; collapse 13 ways then shrink to
+12; remove the last way with history; reveal → replace/save and reveal →
+entry/Cancel. Both passcode cases must require a new delayed viewing request.
+
+Verification rerun: all **29** `Tests/*Harness.py` passed, including **3,748**
+You checks (3,360 eligibility comparisons against the extracted real engine).
+Both standalone Swift harnesses passed (phrase challenges; contact presentation,
+9 assertions). Generated report localization matches 67 keys × seven tables;
+the actual seven app translation dictionaries compile with warnings-as-errors
+and initialize safely. The improved scanner detects all six duplicate keys in
+the original You revision; Swift rejects the original French table under
+warnings-as-errors. The new autofill guard detects the original five hints.
+`git diff --check` passed. Full-run output: `/tmp/demora-takeover-full-verify.log`.
+The runner now retains failure status rather than turning a failed harness into
+a successful `echo`, and the handoff command follows that behavior.
+
+Final unsigned arm64 **Debug and Release builds both passed**, sequentially,
+using stable Xcode 27.0 (27A266a). Debug emitted no warnings; Release emitted
+only the skipped AppIntents metadata extraction warning. The built Release
+bundle identifies as `demora` / `may.latch`. Logs:
+`/tmp/demora-takeover-debug.log` and `/tmp/demora-takeover-release.log`.
+These builds do not establish TestFlight startup, production App Attest,
+CloudKit round trips or interactive iOS behavior. No engine/model/service,
+project/signing, identifier, version or build-number changes were made.
+
+Signed Debug also passed (same metadata-extraction warning; log
+`/tmp/demora-takeover-signed-debug.log`). Verified the signed host and all four
+embedded extensions use the development App Group and `may.latch.dev` bundle
+family; the report remains in its dedicated `Extensions` destination. Installed
+successfully on **iphone de may** as **dev demora**. Launch was refused by iOS
+because the phone was **Locked** — this was a device launch denial, not an
+observed app crash. No interactive phone check or live contact/email round trip
+was performed. The owner can unlock the phone and open the installed dev app;
+the App Store app remains separate. Nothing was pushed, merged or submitted.

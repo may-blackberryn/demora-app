@@ -259,7 +259,7 @@ struct PreventDisablingPage: View {
         } message: {
             Text(tr("Are you sure? There is no way to undo this — the saved passcode is replaced only when you save a new one."))
         }
-        .sheet(isPresented: $showEntry) { PasscodeEntrySheet() }
+        .sheet(isPresented: $showEntry, onDismiss: { revealed = nil }) { PasscodeEntrySheet() }
         .sheet(isPresented: $showGuide) {
             NavigationStack {
                 ScrollView {

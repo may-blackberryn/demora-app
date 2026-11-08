@@ -1421,7 +1421,6 @@ let hindiStrings: [String: String] = [
     "Changes wait in Changes": "बदलाव, बदलाव में इंतज़ार करते हैं",
     "A looser change waits in Changes on Today with its countdown. Until it lands nothing changes, and you can cancel it any time.": "ढील वाला बदलाव अपनी उलटी गिनती के साथ आज में बदलाव के अंदर इंतज़ार करता है। उसके लागू होने तक कुछ नहीं बदलता, और आप उसे कभी भी रद्द कर सकते हैं।",
     "A trusted contact, a password or a phrase can let a change apply early, but only for the kinds of change you allowed. Changes to them wait too. Set them up in You → Ways to skip a wait.": "कोई भरोसेमंद संपर्क, पासवर्ड या वाक्यांश किसी बदलाव को पहले लागू करवा सकता है, पर सिर्फ़ उन्हीं तरह के बदलावों के लिए जिनकी आपने अनुमति दी। इनमें बदलाव भी इंतज़ार करते हैं। इन्हें आप → इंतज़ार छोड़ने के तरीके में सेट करें।",
-    "Next": "आगे",
     "How Demora works is always in You → Help & guide.": "Demora कैसे काम करता है हमेशा आप → मदद और गाइड में है।",
     "Find practical instructions and troubleshooting in You → Help & guide → Guide.": "काम की हिदायतें और समस्या-समाधान आप → मदद और गाइड → गाइड में मिलेंगे।",
     "Contact invitations are sent after setup. Contacts must confirm before they can approve; manage them in You → Ways to skip a wait.": "संपर्क आमंत्रण सेटअप के बाद भेजे जाते हैं। मंज़ूरी देने से पहले संपर्कों को पुष्टि करनी होगी; इन्हें आप → इंतज़ार छोड़ने के तरीके में संभालें।",

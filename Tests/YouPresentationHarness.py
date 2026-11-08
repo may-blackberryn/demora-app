@@ -222,6 +222,9 @@ check(list.rows(of: .contact).count == 20 && list.rows(of: .password).count == 1
 let twelve = SkipWayList.make(overrides: { var c = many; c.contacts = Array(c.contacts.prefix(12));
     c.passwordPolicies = []; c.phrasePolicies = []; return c }(), pending: [], unavailableCodes: [])
 check(!twelve.collapsesKinds, "twelve rows stay flat")
+check(!list.isExpanded(.contact, collapsed: [.contact]), "large list may collapse a kind")
+check(twelve.isExpanded(.contact, collapsed: [.contact]), "shrinking below threshold restores rows")
+check(empty.isExpanded(.contact, collapsed: [.contact]), "a stale collapse does not survive an empty list")
 
 // Legacy contacts saved before `allowed` decode without extra time.
 let legacyJSON = #"{"name":"Old","kind":{"latchUser":{"code":"OLD001"}},"accepted":true}"#
@@ -334,6 +337,56 @@ check(SkipWayStart.initial([EligibleWay(way: .contact(alex), unavailable: nil)] 
                            reopensRequest: false) == .menu, "a sent request doesn't hide the password")
 
 // MARK: Add plan (Y3)
+// Stable navigation must not freeze a recipient's consent, scopes or identity.
+var currentOverrides = OverridesConfig()
+currentOverrides.contactsEnabled = true
+currentOverrides.contacts = [alex]
+let disclosureChange = change(.removeLimit(id: UUID()))
+func currentRecipients(_ overrides: OverridesConfig, extra: Bool = false,
+                       unavailable: Set<String> = [], email: Bool = true) -> [EligibleWay] {
+    SkipWayEligibility.currentRequestContacts(for: [disclosureChange], extraTime: extra,
+        offeredIDs: [alex.id], overrides: overrides,
+        unavailableCodes: unavailable, emailAvailable: email)
+}
+check(currentRecipients(currentOverrides).map(\.id) == [alex.id], "current accepted contact is offered")
+currentOverrides.contacts = []
+check(currentRecipients(currentOverrides).isEmpty, "removed contact cannot receive a captured request")
+currentOverrides.contacts = [alex]
+currentOverrides.contacts[0].allowed = [.scheduleChanges]
+check(currentRecipients(currentOverrides).isEmpty, "revoked limit scope cannot receive a request")
+currentOverrides.contacts[0].allowed = [.limitChanges]
+check(currentRecipients(currentOverrides, extra: true).isEmpty, "extra-time scope is checked independently")
+currentOverrides.contacts[0].allowed = [.extraTime]
+check(currentRecipients(currentOverrides, extra: true).map(\.id) == [alex.id], "current extra-time scope works")
+check(currentRecipients(currentOverrides).isEmpty, "extra-time permission does not imply pending-change access")
+currentOverrides.contacts = [alex]
+currentOverrides.contacts[0].accepted = false
+check(currentRecipients(currentOverrides).isEmpty, "withdrawn consent cannot receive a request")
+currentOverrides.contacts = [alex]
+currentOverrides.contactsEnabled = false
+check(currentRecipients(currentOverrides).isEmpty, "pausing contacts invalidates a captured request")
+currentOverrides.contactsEnabled = true
+currentOverrides.contacts[0].name = "Current name"
+check(currentRecipients(currentOverrides).first?.way == .contact(currentOverrides.contacts[0]), "current identity replaces captured contact")
+currentOverrides.contacts.append(newContact)
+check(currentRecipients(currentOverrides).map(\.id) == [alex.id], "newly added contact is never silently included")
+if let code = alex.latchUserCode {
+    check(currentRecipients(currentOverrides, unavailable: [code]).first?.unavailable == .cantReach,
+          "current reachability disables the recipient")
+}
+var suspended = OverridesConfig()
+suspended.contactsEnabled = true
+suspended.contacts = [alex, newContact]
+let capturedRecipientIDs: Set<UUID> = [alex.id, newContact.id]
+suspended.contacts.removeAll { $0.id == alex.id }
+let survivors = SkipWayEligibility.currentRequestContacts(for: [disclosureChange], extraTime: false,
+    offeredIDs: capturedRecipientIDs, overrides: suspended, unavailableCodes: [], emailAvailable: true)
+check(survivors.map(\.id) == [newContact.id], "revocation during registration sends and records only the surviving recipient")
+suspended.contacts = []
+check(SkipWayEligibility.currentRequestContacts(for: [disclosureChange], extraTime: false,
+    offeredIDs: capturedRecipientIDs, overrides: suspended, unavailableCodes: [], emailAvailable: true).isEmpty,
+    "revoking every selected contact leaves no recipient to send or record")
+
 let addAlex = SkipWayDraft.contact(newContact)
 check(SkipWayAddPlan.actions(adding: addAlex, overrides: config, pending: []) == [.addContact(newContact)],
       "contacts on: just the contact")
@@ -455,6 +508,20 @@ presenter = sheet.split('private struct SkipWaitPresenter: ViewModifier {', 1)[1
 assert presenter.count('plan(for: target)') == 1 and 'presented = PresentedSkip(target: target, plan: plan(for: target))' in presenter
 assert '.sheet(item: $presented' in presenter and '.sheet(item: $target' not in presenter
 assert 'if case .request = target { reopens = true }' in presenter
+contact_step = sheet.split('private struct ContactRequestStep: View {', 1)[1]
+assert 'SkipWayEligibility.currentRequestContacts(' in contact_step
+assert 'currentContacts(in: currentState.overrides)' in contact_step
+assert 'currentContacts(in: latest.overrides)' in contact_step, 'revalidate again after async registration'
+assert 'approverCodes: currentCodes' in contact_step and 'sentRelayIDs = currentRecipients.map(\\.id)' in contact_step
+assert '.disabled(selectedContacts.isEmpty || sending)' in contact_step
+assert 'guard !sending else { return }' in declaration(contact_step, 'private func send() async')
+ways_view = (ROOT / 'Latch/SkipWayViews.swift').read_text()
+assert 'if list.isExpanded(kind, collapsed: collapsed)' in ways_view
+assert re.search(r'card\(list, now: context.date\)\s*}\s*}\s*if showsSentLink', ways_view), \
+    'sent history stays reachable outside the empty/nonempty ways branch'
+pages = (ROOT / 'Latch/YouPages.swift').read_text()
+assert '.sheet(isPresented: $showEntry, onDismiss: { revealed = nil })' in pages, \
+    'leaving passcode entry clears the previous one-time reveal, never reveals the replacement'
 for name in ('Latch/ChangesLedgerView.swift', 'Latch/HomeView.swift'):
     src = (ROOT / name).read_text()
     assert 'skipTarget = .changes([change])' in src and 'skipTarget = .request(' in src, name
@@ -472,6 +539,13 @@ assert 'current = ""; new = ""; confirm = ""' in secret
 add_password = editors.split('private struct AddPasswordDetails: View {', 1)[1].split('\n/// The phrase fields', 1)[0]
 assert 'hash: AppModel.hash(password)' in add_password and 'password = ""' in add_password
 assert '.onDisappear { password = ""; confirm = "" }' in add_password, 'plain passwords never outlive the page'
+# These add/change forms had no password-manager hints before the You build.
+# Keep that friction; the skip gate's pre-existing .password hint is separate.
+for password_form in (add_password, secret):
+    assert not re.search(r'\.textContentType\s*\(\s*\.(?:password|newPassword)\s*\)', password_form), \
+        'do not introduce password-manager autofill hints in override add/change forms'
+password_step = sheet.split('private struct PasswordSkipStep: View {', 1)[1].split('\n// MARK:', 1)[0]
+assert '.textContentType(.password)' in password_step, 'the pre-existing skip-gate hint is unchanged'
 for action in ('.setContactPermissions(id: id, allowed: allowed)', '.upsertPasswordPolicy(policy)',
                '.upsertPhrasePolicy(policy)', '.removeContact(id: id)', '.removePasswordPolicy(id: id)',
                '.removePhrasePolicy(id: id)', 'ChangeReceiptRequest(action: .upsertPhrasePolicy(changed))'):
@@ -530,7 +604,13 @@ for name in YOU_FILES:
 assert len(keys) >= 16, sorted(keys)
 TABLES = {'es': '', 'de': '+German', 'fr': '+French', 'pt': '+Portuguese',
           'pl': '+Polish', 'tr': '+Turkish', 'hi': '+Hindi'}
-entry = re.compile(r'^\s*' + STRING + r'\s*:\s*' + STRING + r',?\s*$', re.M)
+# Match each entry, including several entries on one line. Anchoring an entire
+# line missed the old inline Now/Next pair and allowed a second Next to crash
+# non-English dictionary initialization.
+entry = re.compile(r'(?:^|,)\s*' + STRING + r'\s*:\s*' + STRING + r'\s*(?=,|$)', re.M)
+inline_fixture = entry.findall('    "Now": "Maintenant", "Next": "Ensuite",\n    "Next": "Suivant",\n')
+assert len(inline_fixture) == 3 and [key for key, _ in inline_fixture].count('Next') == 2, \
+    'the duplicate-key scanner must detect entries sharing a line'
 for language, suffix in TABLES.items():
     pairs = entry.findall((ROOT / f'Shared/Localization{suffix}.swift').read_text())
     seen = [k for k, _ in pairs]
@@ -543,3 +623,23 @@ for language, suffix in TABLES.items():
         for spec in ('%@', '%d'):
             assert key.count(spec) == table[key].count(spec), (language, key, spec)
 print(f'You strings passed: {len(keys)} keys × 7 tables, no duplicates, placeholders match')
+
+# Initialize the actual dictionaries too, independently of the source scanner.
+# Compile only the table declaration, not tr()/AppLanguage or live preferences.
+table_names = ('spanishStrings', 'germanStrings', 'frenchStrings', 'portugueseStrings',
+               'polishStrings', 'turkishStrings', 'hindiStrings')
+table_sources = []
+for (_, suffix), name in zip(TABLES.items(), table_names):
+    source = (ROOT / f'Shared/Localization{suffix}.swift').read_text()
+    table_sources.append('let ' + name + source.split('let ' + name, 1)[1])
+with tempfile.TemporaryDirectory(prefix='demora-you-localization-') as directory:
+    folder = Path(directory)
+    (folder / 'Tables.swift').write_text('import Foundation\n' + '\n'.join(table_sources))
+    (folder / 'main.swift').write_text(
+        'let tables = [' + ', '.join(table_names) + ']\n'
+        'precondition(tables.count == 7 && tables.allSatisfy { !$0.isEmpty && $0["Next"] != nil })\n'
+        'print("All seven production translation dictionaries initialize without warnings or duplicate-key traps")\n')
+    binary = folder / 'localization'
+    subprocess.run(['xcrun', 'swiftc', '-warnings-as-errors', str(folder / 'Tables.swift'),
+                    str(folder / 'main.swift'), '-o', str(binary)], check=True)
+    subprocess.run([str(binary)], check=True)

@@ -700,7 +700,20 @@ private struct ContactRequestStep: View {
     @State private var deniedDetected = false
     @State private var usage: EmailCodeService.Usage?
 
-    private var usable: [TrustedContact] { contacts.filter(\.1).map(\.0) }
+    private func currentContacts(in overrides: OverridesConfig) -> [(TrustedContact, Bool)] {
+        SkipWayEligibility.currentRequestContacts(
+            for: changes, extraTime: extraContext != nil,
+            offeredIDs: Set(contacts.map { $0.0.id }), overrides: overrides,
+            unavailableCodes: model.unavailableContactCodes,
+            emailAvailable: EmailCodeService.isConfigured
+        ).compactMap { way in
+            guard case .contact(let contact) = way.way else { return nil }
+            return (contact, way.unavailable == nil)
+        }
+    }
+
+    private var liveContacts: [(TrustedContact, Bool)] { currentContacts(in: model.state.overrides) }
+    private var usable: [TrustedContact] { liveContacts.filter(\.1).map(\.0) }
     private var selectedContacts: [TrustedContact] {
         usable.filter { selected.contains($0.id) }
     }
@@ -740,7 +753,7 @@ private struct ContactRequestStep: View {
     private var choose: some View {
         VStack(alignment: .leading, spacing: DemoraSpace.m) {
             VStack(spacing: 0) {
-                ForEach(Array(contacts.enumerated()), id: \.element.0.id) { index, item in
+                ForEach(Array(liveContacts.enumerated()), id: \.element.0.id) { index, item in
                     if index > 0 { YouRowDivider() }
                     contactRow(item.0, usable: item.1)
                 }
@@ -762,7 +775,7 @@ private struct ContactRequestStep: View {
                 Task { await send() }
             }
             .buttonStyle(DemoraPrimaryButtonStyle())
-            .disabled(selected.isEmpty || sending)
+            .disabled(selectedContacts.isEmpty || sending)
         }
     }
 
@@ -870,6 +883,7 @@ private struct ContactRequestStep: View {
     }
 
     private func send() async {
+        guard !sending else { return }
         sending = true
         defer { sending = false }
         error = nil
@@ -893,13 +907,24 @@ private struct ContactRequestStep: View {
             }
         }
         let requestId = reqId
-        let recipients = selectedContacts
+        let currentState = SharedStore.loadState()
+        guard !SharedStore.stateRecoveryNeeded else {
+            error = approvalError
+            return
+        }
+        let recipients = currentContacts(in: currentState.overrides)
+            .filter { $0.1 && selected.contains($0.0.id) }.map(\.0)
+        guard !recipients.isEmpty else {
+            error = approvalError
+            return
+        }
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         let fullSummary = trimmed.isEmpty
             ? combinedSummary
             : String(format: tr("%@ — Note: %@"), combinedSummary, trimmed)
         var emailOK = false
         var codesOK = false
+        var sentRelayIDs: [UUID] = []
         do {
             let emails: [String] = recipients.compactMap {
                 if case .email(let address) = $0.kind { return address }
@@ -920,13 +945,27 @@ private struct ContactRequestStep: View {
             }
             if !codes.isEmpty {
                 await ContactsRelay.registerSelfIfNeeded()
-                try await ContactsRelay.sendRequests(
-                    requestId: requestId, approverCodes: codes,
-                    summary: fullSummary)
-                ContactsRelay.markSent(requestId: requestId, relay: true)
-                latchSent = true
-                codesOK = true
-                startPolling(requestId: requestId)
+                // Registration (or the email send) may have suspended while
+                // a removal/revocation applied. Revalidate before disclosure.
+                let latest = SharedStore.loadState()
+                let recipientIDs = Set(recipients.map(\.id))
+                let currentRecipients = SharedStore.stateRecoveryNeeded ? [] : currentContacts(in: latest.overrides)
+                    .filter { $0.1 && recipientIDs.contains($0.0.id) }
+                    .map(\.0).filter { $0.latchUserCode != nil }
+                let currentCodes = currentRecipients.compactMap(\.latchUserCode)
+                if !currentCodes.isEmpty {
+                    try await ContactsRelay.sendRequests(
+                        requestId: requestId, approverCodes: currentCodes,
+                        summary: fullSummary)
+                    ContactsRelay.markSent(requestId: requestId, relay: true)
+                    latchSent = true
+                    codesOK = true
+                    sentRelayIDs = currentRecipients.map(\.id)
+                    startPolling(requestId: requestId)
+                } else if !emailOK {
+                    error = approvalError
+                    return
+                }
             }
         } catch EmailCodeError.rateLimited(let global) {
             self.error = global
@@ -941,9 +980,7 @@ private struct ContactRequestStep: View {
         // the ledger's "Waiting for…" matches reality.
         if emailOK || codesOK {
             let emailIDs = emailOK ? recipients.filter(\.isEmail).map(\.id) : []
-            let relayIDs = codesOK ? recipients.filter {
-                $0.latchUserCode != nil
-            }.map(\.id) : []
+            let relayIDs = sentRelayIDs
             if let extraContext {
                 ContactsRelay.recordOutgoingExtra(extraContext,
                                                   email: emailOK, relay: codesOK,
