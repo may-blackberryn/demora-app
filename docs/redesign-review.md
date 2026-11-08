@@ -1,6 +1,79 @@
 # Demora iOS full redesign — review
 
 ## Start here
+- **State:** foundations, Today, Rules, Insights and now the You build
+  (`docs/you-redesign.md`) are on `design/full-redesign`; the You build is
+  the commits after `d7dd92e` (see Sessions). Nothing is pushed. Verify
+  passes: every `Tests/*Harness.py`, the two Swift harnesses, the
+  localization check, `git diff --check`, and unsigned arm64 Debug and
+  Release builds of the Latch scheme.
+- **Install / run:** open `Latch.xcodeproj`, scheme **Latch**, Debug, on your
+  iPhone. No simulator runtime is installed on this Mac, so nothing in the
+  You build was looked at on a screen, and no live contact, email or relay
+  round trip was made.
+- **What to try on the phone, in order (You):**
+  1. Tap the last tab (still labelled **Settings** until the four-tab
+     switch). It opens **You**: Ways to skip a wait, Approving for others,
+     Notifications, App, and a footer with the version, Privacy and Word list
+     credits. With no ways yet the card says "Nothing can skip a wait yet."
+  2. **Add a way to skip a wait → A password.** Name it, type it twice, tick
+     only **Limits**, Continue. The receipt is the last step inside the same
+     sheet: "Looser change", the landing time, **Hold to confirm**. Hold. The
+     row appears dimmed with "Added …"; tapping it opens Changes on that
+     change.
+  3. Add **Someone you trust** with a friend's Demora code (Your code is
+     shown under Approving for others). Without email configured there is no
+     Email/Demora switch. If contacts were paused, the receipt has a second
+     line, "Also turns on contact approvals". The row then reads "Waiting to
+     accept" until they accept.
+  4. Once a way exists (or skip the wait with **Skip delay (dev)**), open its
+     row: the checklist shows what it may skip **now**. Change it, **Save
+     changes** → receipt. Narrowing a contact is a stricter, one-tap
+     Confirm; a password or phrase edit stays "Looser change" (owner answer
+     1). The page then shows "From …: …" above the unchanged checklist,
+     with **See in Changes**.
+  5. On a password, **Change the password**: current, new, confirm, **Change
+     now**. It changes right away; what it may skip doesn't. A wrong current
+     password says so.
+  6. **Remove…** on any row → receipt with a plain **Confirm** (stricter).
+  7. With a looser change waiting and a way that may skip it, tap **Apply
+     now…** in Changes (Today → All, or a rule's pending line). One sheet
+     opens: the change on top, then only the allowed ways. With exactly one
+     usable way it opens straight on it. Type the password: wrong clears the
+     field and says so; right closes the sheet and the change lands.
+  8. Phrase: the word-by-word entry shows "Word 1 of 50" and mistakes left;
+     paste is not offered.
+  9. Contact: send a request, close the sheet, then tap "Waiting for …" on
+     the change: it reopens on "Sent · waiting". Apply now on the same change
+     still lists your password and phrase. Approve on the other phone.
+  10. Extra time on Today with a password/phrase/contact step opens the same
+      sheet on that step ("Extra time · Games · +15 min").
+  11. **Contacts can approve · On** row → receipt: off is Confirm, on is Hold.
+      While off, contact rows say "Paused" and Apply now lists no contacts.
+  12. Ask someone to add you as their contact: an invite card appears at the
+      top of You (the tab shows a dot). **Block** asks once.
+  13. Notifications: the two toggles sit on You. **Appearance**: theme tiles,
+      Blue/Brick swatches, Regular/lowercase and week start apply at once;
+      the preview card follows. **Prevent disabling**: one page; Request
+      access goes through the receipt; "Enter passcode" stays immediate.
+  14. **Help & guide → How Demora works**: four pages. The Guide now names
+      Today, Rules, Insights and You.
+  15. The **Delays** tab still has its delay rows; its override part is one
+      row that opens You.
+- **Decisions most worth your eye:** the "Changes to your ways can never be
+  skipped" line was false and now reads "Changes to passwords, phrases and
+  what anyone may skip can never be skipped early." — adding, removing or
+  pausing **contacts** can be skipped early by a way allowed "Trusted
+  contacts", which new contacts are by default (engine unchanged; see the You
+  review fixes); tapping one contact in the skip sheet checks only that
+  contact; the tab label stays "Settings" until the switch.
+- **Known limits:** nothing checked on a phone; no contact/email round trip;
+  the walkthrough's remaining branches and the legacy Limits/Schedules
+  screens go at the four-tab switch (list in "You build").
+- **Housekeeping:** build products are in the session scratchpad, outside the
+  repo.
+
+### Insights: what to try on the phone (2026-11-04)
 - **State:** foundations, Today, Rules and now the Insights build
   (`docs/insights-redesign.md`) are on `design/full-redesign`; the Insights
   build is the commits after `32abd2a` (see Sessions). Nothing is pushed.
@@ -68,6 +141,7 @@
 | Today build | Pure logic, change receipt, Changes ledger, Today layout, report restyle, extra time moved | `82181d3`, `f3cbd3f`, `2548ac8`, `e16fe23`, `3180864`, `f38951e`; review fix `d2f8329` | Done, self-reviewed and fixed; awaiting the main session's review |
 | Rules build | Pure logic, Rules tab, summary sheet, editors, receipts and Changes copy, dead editor removed | `90e5f42`, `660ec07`, `b4345ae`, `f5d7e54`, `ea16ed1`, `c79d334`; review fixes `61681ee` | Done, reviewed and fixed; awaiting the main session's review |
 | Insights build | Pure logic, host header/loading line/About sheet, Day · Week · Trends report, copy elsewhere, README/status | `46eb366`, `680d09e`, `619a77d`, `a20433e`, `d065979`; review fixes `ec80259` | Done, reviewed and fixed; awaiting the main session's review |
+| You build | Pure logic, You page, Skip the wait sheet, add/edit/remove with receipts, Help and Guide copy, duplicate screens removed | `4492d82`, `562bc69`, `f8994c9`, `41e7d00`, `b62f699`, `e86f704`; review fixes `17ec17f` | Done, reviewed and fixed; awaiting the main session's review |
 
 ## Foundations build (2026-11-02)
 | Decision | Why | Done? |
@@ -270,3 +344,77 @@ A fresh reviewer read the whole Insights diff (32abd2a..d065979) with no conclus
 | Turkish segment label read "hafta" | "Hafta" | Localization check (regenerated snapshot) |
 
 Not changed: the approved "Private by design" sentence (logged above for the owner).
+
+## You build (2026-11-08)
+| Decision | Why | Done? |
+| --- | --- | --- |
+| Steps built in the brief's order, one commit each: pure logic, You page, Skip the wait, receipts and detail pages, Help and Guide, duplicate removal | Each verified before the next | Yes |
+| Pure logic in Latch/YouPresentation.swift; harness lifts the engine's real overrideCapability/hasOverride/classify by source extraction (no stub copies) | eligibility must match hasOverride exactly | Yes |
+| Summary uses separate lowercase list-form keys ("schedules") after the first capitalised item | spec copy "Limits, schedules · extra time"; German keeps nouns capitalised | Yes |
+| "Can't reach" chip uses StateChip .blocked (loosen ink, dot) | spec asks for loosen; .loosening would add an arrow meaning "looser" | Yes |
+| ContactPermissionsPresentationHarness not extended: the new decisions need SharedModels and the engine capability map, which that sed/stub harness can't compile; YouPresentationHarness covers them | Brief: extend it where it fits | Yes |
+| Contacts switch row shows when any contact row exists (saved or waiting to be added) | spec "≥1 contact"; a waiting contact added while paused also queues "turn on" | Yes |
+| Add plan never queues the switch when any switch change is already pending | engine refuses a second change with the same conflict key | Yes |
+| Fixed French "Protection" (was "Protection des personnes") and Turkish "koruma" → "Koruma" | used as a section/checklist label | Yes |
+| Tapping a contact in the skip menu opens the request with that contact checked; others can be added | spec says all checked by default for the step; when opened from a specific row the tap is the choice | Yes — owner may check |
+| Extra-time contact list now excludes paused/unaccepted contacts (shown before, failed on send) | same outcome, no dead end | Yes |
+| Tab bar label stays "Settings" (FoundationsComponentsHarness guards five tabs); four-tab switch renames | | Interim |
+| Step 2 (`562bc69`): You page behind tab 3; SettingsView root, notifications page, help hub, contact/roadmap pages and appearance grid deleted (replaced) | brief placement | Yes |
+| `settingsPath`/`SettingsRoute` → `youPath`/`YouRoute`; `openSettings(to:)` removed (no caller) | spec §8 | Yes |
+| Page title is plain `Text("You")` in `pageTitle` (like Rules), no wordmark | spec §5 "no wordmark"; DemoraPageTitle draws the wordmark | Yes |
+| Empty state title/description split: "Nothing can skip a wait yet." / "That's the strictest setup." | EmptyStateView has title + description | Yes |
+| "People you approve for" count fetched with grantsToMe on appear/refresh; shows no value until loaded | count lives on the relay | Yes |
+| "Requests you sent" link shows with any saved contact or any sent history | spec: hidden when no contacts and no history | Yes |
+| Delays tab: keeps title, tagline and DelayPolicyNavigationRows; its override section is one "Ways to skip a wait · Open You" row that switches to tab 3 (no invite dot there, Y7) | brief: Delays stays working until the switch | Interim — four-tab switch removes the tab |
+| Today/Limits/Schedules "Help" links now open You's Help & guide page | HelpHubView removed; links stay until the four-tab switch | Interim |
+| Guide/locale harnesses split the Guide at a new "// MARK: - Language" marker (the Contact page they split on was removed) | guard intent unchanged | Yes |
+| Prevent disabling: Request access and the passcode look go through the receipt (same actions); "Enter passcode" stays immediate with the existing replace warning; status re-reads each second via TimelineView | spec §5.11; owner answer 3 | Yes |
+| Prevent disabling waiting copy: new sentence "Access requested. It opens after your looser wait. Track it in Changes on Today…" | spec copy fix "track it in Changes on Today" | Yes |
+| Appearance: theme tiles drawn with real tokens under a forced colour scheme; Text/Week segmented; colour swatches 44 pt; preview card is a static sample ("Evening block", "On until…", a countdown) | spec §5.8 | Yes |
+| Footer Privacy link: https://getdemora.app/privacy-policy.html (the website's page); Word list credits reads the bundled WORDLIST_ATTRIBUTION.md, English | spec §5.7 | Yes |
+| Added "%d words" to the five tables that lacked it | was untranslated in the phrase editor | Yes |
+| Step 3 (`f8994c9`): SkipWaitSheet replaces OverrideGateView, PasswordChangeGate, PhraseChangeGate, ContactGateView, ExtraTimePasswordGate, ExtraTimePhraseGate and TutorialContactGateView (all deleted); MathGateView/PasswordGateView (retired, unused) left for step 6 | Y4 | Yes |
+| The contact request/poll/verify/finish code, password hash+apply and phrase entry/apply moved into the sheet line for line; only layout and copy changed | brief: gate logic unchanged | Yes |
+| Where the sheet opens is decided once when it opens (plan computed by the presenter) | steps must not jump when a change lands underneath | Yes |
+| A sent request always reopens on its status, also for extra time when contacts were paused since | otherwise the waiting request would be stranded | Yes |
+| Unreachable contacts and email contacts without email are listed but disabled, in the menu and in the request step | spec §5.13; before, unreachable contacts could be selected | Yes — stricter |
+| Waiting step shows one status line ("Sent · waiting" / "Denied"), not one row per contact | the relay returns approved/denied for the request, not per contact | Limit |
+| "Enter the code %@ received" names the email contact when exactly one was asked; otherwise the existing sentence | names unknown after resume | Yes |
+| Phrase entry: "Word 12 of 100" in the time style, "%d mistakes left" when mistakes are limited (unlimited keeps "Mistakes: %d"); error haptic on a reset | spec §5.13 | Yes |
+| Password field keeps .textContentType(.password) as before | gate unchanged | Yes |
+| Translated eight older gate/extra-time messages missing from fr/pt/pl/tr/hi | they show in the new sheet | Yes |
+| Step 4 (`41e7d00`): AddSkipWaySheet (choose → details → ChangeReceiptView pushed), SkipWayDetailView, SkipPermissionsChecklist, PasswordSecretChangeView, PhraseWordsChangeView | §5.9, §5.10, Y5, Y11 | Yes |
+| Receipt extension: ChangeReceiptView (embeddable, several actions) + .changeReceiptBatch sheet; ChangeReceiptSheet left untouched (its guards) | spec §7 extension a+b | Yes |
+| Batch receipt queues actions in order; a refusal after the first stays on the receipt with "Part of this was saved and is waiting in Changes…" and never re-queues a done part | engine has no dry run | Yes — owner may check |
+| New contact form hides the type picker unless EmailCodeService.isConfigured (owner answer 2); duplicate check also covers contacts still waiting to be added | old form only checked saved contacts | Yes |
+| Password plain text is hashed on Continue, fields cleared then and on disappear; going back from the receipt means typing it again | no plaintext kept in drafts | Yes |
+| Contact may be narrowed to nothing (as before); a password or phrase needs ≥1 capability ("Choose at least one thing it can skip.") | engine rejects empty for those | Yes |
+| Detail page disables the checklist, Change the words and Remove while a change to that item waits; "A change is already waiting" | engine refuses a second change (conflict key) | Yes |
+| GrantProfileView "Add as trusted contact" now ends on the batch receipt (was a direct queue) | Y11 | Yes |
+| PasswordPolicyEditor / PhrasePolicyEditor / AddContactView keep their (now unreachable) direct-queue paths: onboarding and the migration welcome use them with onStage/onAdd, and OnboardingOverridesHarness guards their structure | | Limit — onboarding spec should make staging required |
+| Step 5 (`b62f699`): How Demora works = 4 static pages (TabView, symbols); no state, guard checks it | Y10 | Yes |
+| Guide: 11 bodies + 2 topic titles/1 summary rewritten for Today/Rules/Insights/You; topic ids unchanged; harness now forbids old route names in the Guide | §8 | Yes |
+| Also repointed: welcome line (:280), onboarding help/contacts lines, language update line, add-contact code hint — routes that this build removed | §8 | Yes |
+| Not repointed (tabs still exist until the switch): onboarding "Limits & blocks", "Schedules → Day & night", Day & night "Wake up tap on Home" | onboarding spec / four-tab switch | Interim |
+| Walkthrough: replayTutorial and beginTutorial deleted (nothing called them; `tutorial` is in-memory so nothing can resume it); replay recovery (restoreFromReplay on launch) kept for a replay interrupted in an older build | owner answer 4; brief: delete only if nothing can resume | Yes |
+| Remaining tutorial branches (legacyHome, LimitsView, tutorial editors, Schedules tutorial routing, TutorialCallout/Blocker/FinishView, AppModel step machine, harness guards on them) stay for the four-tab switch, which retires those screens anyway | removing them touches Today/Rules/Schedules files and their guards | Interim — four-tab switch |
+| 119 replaced strings removed from the seven tables after checking no source uses them | | Yes |
+| Step 6 (`e86f704`): removed ExtraOverridesView, FineTuneOverridesView, PasswordPoliciesView, PhrasePoliciesView, OverridesGridView, RulesGridView, DelaysGridView, ContactsOverrideEditor, ContactsHubView, ContactsDetailView, TrustedContactApprovalRow, ContactProfileView, EmailContactProfileView, ContactApprovalSummary, ContactPermissionsEditor (view), PreventDisablingGateView, PreventGuideGateView, PasscodeHubView, PasscodeViewGateView, MathGateView, PasswordGateView, MathOverrideEditor, PasswordOverrideEditor, queueSection, DelayEditorView, addTutorialContact; 108 strings only they used left the tables | §8, once nothing routed to them | Yes |
+| **Still on the Delays tab for the four-tab switch to remove:** `DelaysOverridesTabView` (title "Delays & overrides", tagline, `DelayPolicyNavigationRows` — a duplicate of Rules → Your waits — and one "Ways to skip a wait · Open You" row); tab 4 in `LatchApp`; the "Delays" item in `DemoraTabBar`; the old dotted-separator request in `CLAUDE.md` goes with `DelayPolicyNavigationRows` | brief placement | Interim — four-tab switch |
+| **Walkthrough remnants for the four-tab switch:** `HomeView.legacyHome`, `LimitsView` and `TutorialLimitEditorView`, `TutorialScheduleEditorView` and the Schedules tutorial routing, `TutorialCallout`/`TutorialBlocker`/`TutorialDemoBanner`/`TutorialFinishView`, `tutorialHighlight`/`TutorialHoleKey`/`TutorialCountdownText`, `AppModel` step machine (`tutorial`, `advanceTutorial`, `freezePending`, `skipTutorial`, `finishTutorial`), the onboarding overlay line "It's always available again in Settings → Help.", and the harness guards that keep them | nothing can reach them; they share files and guards with the legacy tabs | Interim — four-tab switch |
+| Tab 3 keeps the "Settings" label and slider icon; the invite dot already sits on it (Y7) | FoundationsComponentsHarness guards the five-tab bar | Interim — four-tab switch |
+| `ContactPermissionPresentation` stays in `ContactPermissionsEditor.swift` with no caller | the verify command compiles it from that file | Limit |
+| Synthetic renders not made; no simulator, no device | | Limit |
+
+## You review fixes
+A fresh reviewer read the whole You diff (d7dd92e..e86f704) with no conclusions from the build. It found no new way to bypass a wait, no secret leakage and no gate that skips verification. Fixed in `17ec17f`, each with a regression check in `YouPresentationHarness`:
+
+| Bug | Fix | Test |
+| --- | --- | --- |
+| After a contact request was sent, Apply now opened on the request and the password/phrase for the same change were unreachable | Only "Waiting for…" (`SkipWaitTarget.request`) reopens on the status; Apply now always shows every eligible way (the contact step still resumes the sent request) | Pure: a sent request with a password still opens the menu; source: ledger and Today use `.request(` only for Waiting for… |
+| The sheet's plan was recomputed on every state refresh, so the root could swap under a pushed step or drop a typed password | The plan is computed once when the target is set and kept with it (`PresentedSkip`) | Source: `plan(for:)` called once, in the target's `onChange`; the sheet presents `presented` |
+| After Save changes → Confirm, the checklist showed the queued permissions as if live | The receipt's `onQueued` resets the checklist to the current permissions | Source guard |
+| "Changes to your ways to skip a wait can never be skipped." was false: the engine maps adding, removing and pausing contacts to `.contactChanges`, so a way allowed "Trusted contacts" can skip them | Copy now says "Changes to passwords, phrases and what anyone may skip can never be skipped early."; engine unchanged (brief) | Guard: the old sentence can't return |
+| (Found while fixing) You's `onReceive(model.$state)` read the state it was about to replace | Reads the published value | Source guard |
+
+Not changed: a new phrase defaults to 0 allowed mistakes — the reviewer thought this was new, but the old editor also set 0 for new phrases. **Owner decision:** should adding/removing/pausing contacts stop being skippable (engine returns no capability for them), and should new contacts stop getting "Trusted contacts" by default? Both are engine/model changes outside this build.
