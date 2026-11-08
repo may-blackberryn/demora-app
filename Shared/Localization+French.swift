@@ -1140,7 +1140,7 @@ let frenchStrings: [String: String] = [
     "Passcode": "Code passe",
     "Pick someone you trust and can reach. If the passcode and its recovery Apple ID are both lost, removing it may require erasing the device.": "Choisissez quelqu'un en qui vous avez confiance et pouvez atteindre. Si le code passe et son identifiant Apple de récupération sont tous les deux perdus, supprimer il peut nécessiter l'effacement de l'appareil.",
     "Prevent disabling": "Empêcher l'infirmité",
-    "Protection": "Protection des personnes",
+    "Protection": "Protection",
     "Replay walkthrough": "Rejouer la marche à travers",
     "Request access": "Demande d'accès",
     "Save": "Enregistrer",
@@ -1386,4 +1386,15 @@ let frenchStrings: [String: String] = [
     "This change could not be saved. Review it and try again.": "Ce changement n'a pas pu être enregistré. Vérifiez-le et réessayez.",
     // Cancel in Changes (docs/rules-redesign.md §8)
     "A change for this setting is already pending. Cancel it in Changes first if you want something different.": "Un changement est déjà en attente pour ce réglage. Annulez-le d'abord dans Changements si vous voulez autre chose.",
+    // You: what a way may skip (docs/you-redesign.md §5.3)
+    "limits": "limites",
+    "schedules": "horaires",
+    "sessions": "sessions",
+    "your waits": "vos délais",
+    "protection": "protection",
+    "trusted contacts": "contacts de confiance",
+    "Everything": "Tout",
+    "Everything except extra time": "Tout sauf le temps supplémentaire",
+    "Only extra time": "Seulement le temps supplémentaire",
+    "Nothing": "Rien",
 ]

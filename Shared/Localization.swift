@@ -1497,4 +1497,15 @@ let spanishStrings: [String: String] = [
     "This change could not be saved. Review it and try again.": "No se pudo guardar este cambio. Revísalo e inténtalo de nuevo.",
     // Cancel in Changes (docs/rules-redesign.md §8)
     "A change for this setting is already pending. Cancel it in Changes first if you want something different.": "Ya hay un cambio pendiente para este ajuste. Cancélalo primero en Cambios si quieres otro.",
+    // You: what a way may skip (docs/you-redesign.md §5.3)
+    "limits": "límites",
+    "schedules": "horarios",
+    "sessions": "sesiones",
+    "your waits": "tus esperas",
+    "protection": "protección",
+    "trusted contacts": "contactos de confianza",
+    "Everything": "Todo",
+    "Everything except extra time": "Todo menos el tiempo extra",
+    "Only extra time": "Solo tiempo extra",
+    "Nothing": "Nada",
 ]

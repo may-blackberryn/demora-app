@@ -1422,4 +1422,15 @@ let germanStrings: [String: String] = [
     "This change could not be saved. Review it and try again.": "Diese Änderung konnte nicht gespeichert werden. Prüfe sie und versuche es erneut.",
     // Cancel in Changes (docs/rules-redesign.md §8)
     "A change for this setting is already pending. Cancel it in Changes first if you want something different.": "Für diese Einstellung wartet schon eine Änderung. Brich sie zuerst in Änderungen ab, wenn du etwas anderes willst.",
+    // You: what a way may skip (docs/you-redesign.md §5.3)
+    "limits": "Zeitlimits",
+    "schedules": "Zeitpläne",
+    "sessions": "Sitzungen",
+    "your waits": "deine Wartezeiten",
+    "protection": "Schutz",
+    "trusted contacts": "vertrauenswürdige Kontakte",
+    "Everything": "Alles",
+    "Everything except extra time": "Alles außer Zusatzzeit",
+    "Only extra time": "Nur Zusatzzeit",
+    "Nothing": "Nichts",
 ]

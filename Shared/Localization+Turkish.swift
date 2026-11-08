@@ -1089,7 +1089,7 @@ let turkishStrings: [String: String] = [
     "Passcode": "Şifre",
     "Pick someone you trust and can reach. If the passcode and its recovery Apple ID are both lost, removing it may require erasing the device.": "Güvenebileceğiniz ve ulaşabileceğiniz birini seçin. Şifre ve kurtarma Apple Kimliği her ikisi de kaybolursa, onu kaldırmak cihazı silebilir hale getirmeyi gerektirebilir.",
     "Prevent disabling": "Devre dışı bırakılmasını önleyin",
-    "Protection": "koruma",
+    "Protection": "Koruma",
     "Replay walkthrough": "Tekrar oynatma rehberi",
     "Request access": "Erişim iste",
     "Save": "korumak",
@@ -1387,4 +1387,15 @@ let turkishStrings: [String: String] = [
     "This change could not be saved. Review it and try again.": "Bu değişiklik kaydedilemedi. Gözden geçirip yeniden dene.",
     // Cancel in Changes (docs/rules-redesign.md §8)
     "A change for this setting is already pending. Cancel it in Changes first if you want something different.": "Bu ayar için zaten bekleyen bir değişiklik var. Farklı bir şey istiyorsan önce Değişiklikler'den iptal et.",
+    // You: what a way may skip (docs/you-redesign.md §5.3)
+    "limits": "süre sınırları",
+    "schedules": "programlar",
+    "sessions": "oturumlar",
+    "your waits": "bekleme süreleriniz",
+    "protection": "koruma",
+    "trusted contacts": "güvenilir kişiler",
+    "Everything": "Her şey",
+    "Everything except extra time": "Ek süre dışında her şey",
+    "Only extra time": "Yalnızca ek süre",
+    "Nothing": "Hiçbir şey",
 ]

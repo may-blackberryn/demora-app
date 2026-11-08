@@ -1387,4 +1387,15 @@ let polishStrings: [String: String] = [
     "This change could not be saved. Review it and try again.": "Nie udało się zapisać tej zmiany. Sprawdź ją i spróbuj ponownie.",
     // Cancel in Changes (docs/rules-redesign.md §8)
     "A change for this setting is already pending. Cancel it in Changes first if you want something different.": "Zmiana tego ustawienia już czeka. Jeśli chcesz czegoś innego, najpierw anuluj ją w Zmianach.",
+    // You: what a way may skip (docs/you-redesign.md §5.3)
+    "limits": "limity",
+    "schedules": "harmonogramy",
+    "sessions": "sesje",
+    "your waits": "twoje oczekiwania",
+    "protection": "ochrona",
+    "trusted contacts": "zaufane kontakty",
+    "Everything": "Wszystko",
+    "Everything except extra time": "Wszystko oprócz dodatkowego czasu",
+    "Only extra time": "Tylko dodatkowy czas",
+    "Nothing": "Nic",
 ]

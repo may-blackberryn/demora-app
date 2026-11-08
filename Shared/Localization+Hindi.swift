@@ -1387,4 +1387,15 @@ let hindiStrings: [String: String] = [
     "This change could not be saved. Review it and try again.": "यह बदलाव सहेजा नहीं जा सका। इसे देखकर फिर कोशिश करें।",
     // Cancel in Changes (docs/rules-redesign.md §8)
     "A change for this setting is already pending. Cancel it in Changes first if you want something different.": "इस सेटिंग के लिए एक बदलाव पहले से बाकी है। कुछ और चाहिए तो पहले उसे बदलावों में रद्द करें।",
+    // You: what a way may skip (docs/you-redesign.md §5.3)
+    "limits": "समय सीमाएँ",
+    "schedules": "शेड्यूल",
+    "sessions": "सत्र",
+    "your waits": "आपके इंतज़ार",
+    "protection": "संरक्षण",
+    "trusted contacts": "विश्वसनीय संपर्क",
+    "Everything": "सब कुछ",
+    "Everything except extra time": "अतिरिक्त समय को छोड़कर सब कुछ",
+    "Only extra time": "सिर्फ़ अतिरिक्त समय",
+    "Nothing": "कुछ नहीं",
 ]
