@@ -56,7 +56,7 @@ def main():
     settings = (ROOT / 'Latch/SettingsView.swift').read_text()
     guide = settings.split('struct GuideTopic:', 1)[1].split('// MARK: - Language', 1)[0]
     required = calls(host, 'tr') | calls(guide, 'tr') | {
-        'Find practical instructions and troubleshooting in Settings → Help → Guide.'
+        'Find practical instructions and troubleshooting in You → Help & guide → Guide.'
     }
     shared = {}
     languages = {'es': '', 'de': '+German', 'fr': '+French', 'pt': '+Portuguese',

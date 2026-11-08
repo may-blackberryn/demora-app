@@ -543,28 +543,12 @@ final class AppModel: ObservableObject {
         }
     }
 
-    // MARK: - Guided tutorial
+    // MARK: - Guided tutorial (retired)
 
-    /// Start the first-run tutorial from a clean slate, with dummy delays
-    /// (5 min strict / 15 min lenient). Nothing is marked set-up yet.
-    func beginTutorial() {
-        var s = SharedStore.loadState()
-        s.limits = []; s.schedules = []; s.exemptions = []
-        s.planned = []; s.sessions = []; s.pending = []
-        s.strictDelay = 5 * 60
-        s.lenientDelay = 15 * 60
-        var o = OverridesConfig()
-        o.contactsEnabled = false
-        s.overrides = o
-        s.isSetUp = false
-        SharedStore.simulating = true     // no real blocks during the tour
-        SharedStore.save(s)
-        state = s
-        ShieldController.refresh()         // clears any shields under simulation
-        tutorial = .addLimit
-        selectedTab = 1   // Limits
-        tutorialScreen = "limits"
-    }
+    // Nothing starts the walkthrough any more (docs/you-redesign.md Y10,
+    // owner answer 4). The remaining tutorial branches go with the legacy
+    // screens at the four-tab switch; replay recovery below stays so a
+    // replay interrupted in an older build still restores the real setup.
 
     private func advanceTutorial(to step: TutorialStep) {
         tutorial = step
@@ -626,25 +610,6 @@ final class AppModel: ObservableObject {
         let total: TimeInterval = change.direction == .stricter ? 5 * 60 : 15 * 60
         let floor = total - 60
         return max(floor, total - Date().timeIntervalSince(start))
-    }
-
-    /// Finish the tour: write the user's real delays + overrides, clear the
-    /// dummy state, and enter the app for real.
-    /// Replay the walkthrough non-destructively: stash the user's real state,
-    /// then run the tour over sample data. `finishReplay()` restores it.
-    func replayTutorial() {
-        // Refuse to start unless the real setup is provably backed up. If the
-        // backup can't be written, a replay could lose the user's limits or lift
-        // their blocks with no way to restore — so we bail and warn instead.
-        guard SharedStore.saveBackup(SharedStore.loadState()) else {
-            replayFailed = true
-            return
-        }
-        SharedStore.isReplaying = true
-        isReplay = true
-        // Pop You's stack back to its root so the tour doesn't end mid-page.
-        youPath = []
-        beginTutorial()
     }
 
     /// End a replay: put the user's real limits, schedules, delays, overrides,

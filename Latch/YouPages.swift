@@ -386,6 +386,10 @@ struct HelpGuideView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: DemoraSpace.sectionGap) {
                 VStack(spacing: 0) {
+                    NavigationLink { HowDemoraWorksView() } label: {
+                        YouRowLabel(title: tr("How Demora works"), value: tr("four short pages"))
+                    }
+                    YouRowDivider()
                     NavigationLink { GuideView() } label: {
                         YouRowLabel(title: tr("Guide"), value: tr("how each part works"))
                     }

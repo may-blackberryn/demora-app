@@ -32,7 +32,7 @@ struct LanguageExpansionUpdateView: View {
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
 
-                    Text(tr("Choose your language here. You can change it anytime under Settings → Appearance → Language."))
+                    Text(tr("Choose your language here. You can change it anytime under You → Appearance → Language."))
                         .font(.subheadline)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)

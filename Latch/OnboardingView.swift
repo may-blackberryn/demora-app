@@ -354,7 +354,7 @@ struct OnboardingView: View {
             }
             WeeklyUsageEstimateDraft(enabled: $wantsUsageEstimate, minutes: $usageEstimateMinutes)
                 .demoraSurface()
-            Text(tr("Find practical instructions and troubleshooting in Settings → Help → Guide."))
+            Text(tr("Find practical instructions and troubleshooting in You → Help & guide → Guide."))
                 .font(.footnote).foregroundStyle(Ink.faint).demoraSurface()
         }
     }
@@ -383,7 +383,7 @@ struct OnboardingView: View {
             OnboardingOverridesDraftView(overrides: $overrides, isDemo: isDemo)
             Text(tr("These choices apply when you finish setup. Later additions and permission changes follow your delays."))
                 .font(.footnote).foregroundStyle(Ink.faint)
-            Text(tr("Contact invitations are sent after setup. Contacts must confirm before they can approve; manage them in Delays → Trusted contacts."))
+            Text(tr("Contact invitations are sent after setup. Contacts must confirm before they can approve; manage them in You → Ways to skip a wait."))
                 .font(.footnote).foregroundStyle(Ink.faint)
         }
     }
@@ -629,7 +629,7 @@ struct OnboardingOverrideSheet: View {
                     Label(tr("Add contact…"), systemImage: "person.badge.plus")
                 }
             }
-            Text(tr("A person you choose approves skipping a countdown — by email code or from their own Demora app. You can also add more later in Settings → Trusted contacts."))
+            Text(tr("A person you choose approves skipping a countdown — by email code or from their own Demora app. You can also add more later in You → Ways to skip a wait."))
                 .font(.footnote).foregroundStyle(Ink.faint)
         }
     }

@@ -1621,7 +1621,7 @@ struct AddContactView: View {
                             Text(tr("Email contacts aren't available yet in this build."))
                                 .foregroundStyle(Ink.danger)
                         } else if type == .latchUser {
-                            Text(tr("Ask them for the code in their Demora settings. They'll get a request to accept before they can approve for you."))
+                            Text(tr("Ask them for the code under You → Your code in their Demora. They'll get a request to accept before they can approve for you."))
                         }
                         Text(tr("Email contacts have a daily send limit; Demora-user contacts don't."))
                     }

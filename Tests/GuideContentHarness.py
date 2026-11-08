@@ -44,11 +44,11 @@ class GuideContentTests(unittest.TestCase):
             self.assertGreaterEqual(topic.count("GuideSection("), 2)
         # Every path named by the guide still has a destination surface.
         sources = "\n".join((ROOT / path).read_text() for path in [
-            "Latch/SchedulesView.swift", "Latch/DayNightViews.swift",
-            "Latch/ScheduleConflictsView.swift", "Latch/LimitsView.swift"])
-        for label in ["Sessions", "Day & night", "Calendar", "Now", "Planned",
-                      "Recurring", "Schedule conflicts", "Recheck blocked limits",
-                      "New limit"]:
+            "Latch/RulesView.swift", "Latch/DayNightViews.swift", "Latch/HomeView.swift",
+            "Latch/ScheduleConflictsView.swift", "Latch/RuleEditors.swift"])
+        for label in ["New rule", "Daily limit", "Block now", "Plan a block", "Repeating block",
+                      "Day & night", "Calendar", "Conflicts", "Recheck blocked limits",
+                      "Manual extra time"]:
             self.assertTrue(f'"{label}"' in sources, f"Missing destination: {label}")
         self.assertIn("UsageInsightsView()", (ROOT / "Latch/HomeView.swift").read_text())
         usage = (ROOT / "Latch/UsageInsightsView.swift").read_text()
@@ -74,14 +74,24 @@ class GuideContentTests(unittest.TestCase):
                          "Couldn't start the walkthrough", ".alert("]:
             self.assertNotIn(obsolete, GUIDE)
         model = (ROOT / "Latch/AppModel.swift").read_text()
-        self.assertIn("func replayTutorial()", model)  # recovery engine retained
+        # You build (Y10, owner answer 4): nothing can start the walkthrough;
+        # recovery of a replay interrupted in an older build is retained.
+        self.assertNotIn("func replayTutorial()", model)
+        self.assertNotIn("func beginTutorial()", model)
+        self.assertIn("private func restoreFromReplay()", model)
+        self.assertIn("if SharedStore.isReplaying {\n            restoreFromReplay()", model)
+        help_page = (ROOT / "Latch/YouPages.swift").read_text()
+        self.assertIn("NavigationLink { HowDemoraWorksView() }", help_page)
+        explainer = (ROOT / "Latch/HowDemoraWorksView.swift").read_text()
+        for forbidden in ("model", "SharedStore", "@AppStorage", "queue(", "Tutorial"):
+            self.assertNotIn(forbidden, explainer.split("import SwiftUI", 1)[1])
 
     def test_delay_and_limit_invariants(self):
         for phrase in ["separate waits", "one shared wait", "immediate tightening",
                        "current policy, not the new one", "keep their deadlines",
                        "Background application depends on iOS callbacks"]:
             self.assertIn(phrase, TOPICS["delays"])
-        for phrase in ["tap New limit", "Different limits by weekday", "three portions",
+        for phrase in ["tap New rule", "Different limits by weekday", "three portions",
                        "two-portion", "carryover", "does not give it a fresh",
                        "Selection edits follow the less-strict delay",
                        "five ordered uses", "app-usage minutes",
@@ -102,7 +112,7 @@ class GuideContentTests(unittest.TestCase):
                        "Both actions always queue a less-strict change",
                        "last one promoted applies last"]:
             self.assertIn(phrase, TOPICS["conflicts"])
-        for phrase in ["Now, Planned or Recurring", "duration starts when it takes effect",
+        for phrase in ["Block now, Plan a block or Repeating block", "duration starts when it takes effect",
                        "Screen Time checkpoints", "not the same as free usage",
                        "less-strict delay"]:
             self.assertIn(phrase, TOPICS["schedules"])
@@ -139,6 +149,10 @@ class GuideContentTests(unittest.TestCase):
                        "Apple's website", "App Attest", "not the enforcement mechanism"]:
             self.assertIn(phrase, TOPICS["notifications"])
         self.assertNotIn("no data sharing", GUIDE)
+        # You build (§8): the Guide names today's places only.
+        for gone in ["Delays →", "Settings →", "Fine-tune", "Limits & blocks", "Schedules →",
+                     "on Home", "Home shows", "Extra overrides"]:
+            self.assertNotIn(gone, GUIDE)
         self.assertNotIn("no data collection", GUIDE)
 
 

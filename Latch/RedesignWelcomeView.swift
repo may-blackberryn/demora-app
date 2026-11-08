@@ -277,7 +277,7 @@ struct RedesignWelcomeView: View {
                 .demoraSurface()
             Text(tr("You're ready. Your rules are still yours."))
                 .font(.system(.title2, design: .serif))
-            Text(tr("The optional walkthrough is always in Settings → Help."))
+            Text(tr("How Demora works is always in You → Help & guide."))
                 .font(.footnote).foregroundStyle(Ink.faint)
         }
     }
