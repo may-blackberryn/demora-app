@@ -50,14 +50,12 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .largeTitle) private var dateSize: CGFloat = 43
-    @State private var overrideTarget: PendingChange?
     @State private var inbox: [IncomingRequest] = []
     @State private var selecting = false
     @State private var selection: Set<UUID> = []
-    @State private var bulkChanges: [PendingChange] = []
-    @State private var showBulkOverride = false
     @State private var outgoing: [ContactsRelay.OutgoingRequest] = []
-    @State private var resumeTarget: ResumeTarget?
+    /// Apply now, the bulk bar, "Waiting for…" and extra time open Skip the wait.
+    @State private var skipTarget: SkipWaitTarget?
     @State private var homeNotice: String?
     @State private var startingWake = false
     @State private var wakeSaveFailed = false
@@ -73,20 +71,11 @@ struct HomeView: View {
     @State private var ruleSheet: RuleSummaryRequest?
     @State private var showAddLimit = false
     @State private var showSession = false
-    @State private var extraPasswordTarget: AppLimit?
-    @State private var extraPhraseTarget: AppLimit?
-    @State private var extraContactTarget: ExtraContactContext?
 
     private static let inboxAnchor = "today-inbox"
 
     private var needsWakeTap: Bool {
         wakePresentation.contains { $0.wallRelease == nil }
-    }
-
-    /// A sent contact request the user wants to reopen (e.g. to enter the code).
-    struct ResumeTarget: Identifiable {
-        let id: String
-        let changes: [PendingChange]
     }
 
     var body: some View {
@@ -143,21 +132,10 @@ struct HomeView: View {
                 await loadInbox()
                 loadOutgoing()
             }
-            .sheet(item: $overrideTarget) { change in
-                OverrideGateView(changes: [change])
-            }
-            .sheet(isPresented: $showBulkOverride) {
-                OverrideGateView(changes: bulkChanges)
-            }
-            .sheet(item: $resumeTarget, onDismiss: { loadOutgoing() }) { target in
-                ContactGateView(changes: target.changes, showChangeList: true,
-                                onSuccess: {
-                                    #if DEBUG
-                                    print("✅ approval resolved \(target.changes.count) change(s)")
-                                    #endif
-                                    model.refreshAfterExternalApply()
-                                })
-            }
+            .skipWaitSheet($skipTarget, onDismiss: {
+                loadOutgoing()
+                refreshSnapshot(state: model.state)
+            })
             .alert(tr("Heads up"), isPresented: Binding(
                 get: { homeNotice != nil },
                 set: { if !$0 { homeNotice = nil } })) {
@@ -239,16 +217,6 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showAddLimit) { LimitEditorView(existing: nil) }
         .sheet(isPresented: $showSession) { SessionStartView() }
-        .sheet(item: $extraPasswordTarget) { limit in
-            ExtraTimePasswordGate(limitID: limit.id)
-        }
-        .sheet(item: $extraPhraseTarget) { limit in
-            ExtraTimePhraseGate(limitID: limit.id)
-        }
-        .sheet(item: $extraContactTarget) { context in
-            ContactGateView(changes: [], extraContext: context,
-                            onSuccess: { model.tick() })
-        }
     }
 
     private var limitsSection: some View {
@@ -314,7 +282,7 @@ struct HomeView: View {
                         canOverride: ChangeEngine.hasOverride(for: [change], state: model.state),
                         waiting: waiting,
                         onCancel: { model.cancel(change) },
-                        onOverride: { overrideTarget = change },
+                        onOverride: { skipTarget = .changes([change]) },
                         onDebugApply: { model.applyNow(change) },
                         onOpenRequest: { openRequest(waiting) }
                     )
@@ -465,8 +433,7 @@ struct HomeView: View {
                             #if DEBUG
                             print("📂 resume req=\(req.requestId.prefix(8)) changeIds=\(req.changeIds.count) reqChanges=\(reqChanges.count)")
                             #endif
-                            resumeTarget = ResumeTarget(id: req.requestId,
-                                                        changes: reqChanges)
+                            skipTarget = .changes(reqChanges)
                         } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
@@ -554,7 +521,7 @@ struct HomeView: View {
                                     || model.tutorial == .applyViaContact)
                                     && model.tutorialScreen == "home",
                                 onCancel: { model.cancel(change) },
-                                onOverride: { overrideTarget = change },
+                                onOverride: { skipTarget = .changes([change]) },
                                 onDebugApply: { model.applyNow(change) }
                             )
                         }
@@ -692,9 +659,13 @@ struct HomeView: View {
     /// Opens the limit's next extra-time gate: contact, password, phrase or wait.
     private func requestExtraTime(for limit: AppLimit, remaining: Int) {
         switch ExtraTimeRoute.route(for: limit, remaining: remaining) {
-        case .contact(let context): extraContactTarget = context
-        case .password: extraPasswordTarget = limit
-        case .phrase: extraPhraseTarget = limit
+        case .contact(let context): skipTarget = .extraContact(context)
+        case .password:
+            skipTarget = ExtraTimeUse(limit: limit, remaining: remaining,
+                                      policies: model.state.overrides).map(SkipWaitTarget.extraPassword)
+        case .phrase:
+            skipTarget = ExtraTimeUse(limit: limit, remaining: remaining,
+                                      policies: model.state.overrides).map(SkipWaitTarget.extraPhrase)
         case .wait:
             let id = limit.id
             Task {
@@ -712,7 +683,8 @@ struct HomeView: View {
         guard let waiting,
               let request = activeOutgoing.first(where: { $0.requestId == waiting.requestID })
         else { return }
-        resumeTarget = ResumeTarget(id: request.requestId, changes: pendingChanges(for: request))
+        // Opens straight on the request's status (it was already sent).
+        skipTarget = .changes(pendingChanges(for: request))
     }
 
     private var selectedChanges: [PendingChange] {
@@ -731,8 +703,7 @@ struct HomeView: View {
         let needGate = chosen.filter { !$0.isDue }
         if !needGate.isEmpty {
             if ChangeEngine.hasOverride(for: needGate, state: model.state) {
-                bulkChanges = needGate
-                showBulkOverride = true
+                skipTarget = .changes(needGate)
             } else {
                 // No override to skip the wait — say so instead of doing nothing.
                 homeNotice = tr("Those changes are still counting down. Wait them out or use an available override.")

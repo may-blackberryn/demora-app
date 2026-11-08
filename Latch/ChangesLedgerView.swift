@@ -169,11 +169,9 @@ struct ChangesLedgerView: View {
     var scrollTo: PendingChange.ID? = nil
     @State private var selecting = false
     @State private var selection: Set<UUID> = []
-    @State private var overrideTarget: PendingChange?
-    @State private var bulkChanges: [PendingChange] = []
-    @State private var showBulkOverride = false
     @State private var confirmBulkCancel = false
-    @State private var resumeTarget: ChangeRequestTarget?
+    /// Apply now, the bulk bar and "Waiting for…" all open Skip the wait.
+    @State private var skipTarget: SkipWaitTarget?
     @State private var notice: String?
 
     var body: some View {
@@ -262,16 +260,7 @@ struct ChangesLedgerView: View {
             }
             Button(tr("Keep editing"), role: .cancel) {}
         }
-        .sheet(item: $overrideTarget) { change in
-            OverrideGateView(changes: [change])
-        }
-        .sheet(isPresented: $showBulkOverride) {
-            OverrideGateView(changes: bulkChanges)
-        }
-        .sheet(item: $resumeTarget, onDismiss: onRequestsChanged) { target in
-            ContactGateView(changes: target.changes, showChangeList: true,
-                            onSuccess: { model.refreshAfterExternalApply() })
-        }
+        .skipWaitSheet($skipTarget, onDismiss: onRequestsChanged)
         .alert(tr("Heads up"), isPresented: Binding(
             get: { notice != nil },
             set: { if !$0 { notice = nil } })) {
@@ -317,7 +306,7 @@ struct ChangesLedgerView: View {
                 canOverride: ChangeEngine.hasOverride(for: [change], state: model.state),
                 waiting: waiting,
                 onCancel: { model.cancel(change) },
-                onOverride: { overrideTarget = change },
+                onOverride: { skipTarget = .changes([change]) },
                 onDebugApply: { model.applyNow(change) },
                 onOpenRequest: { openRequest(waiting) }
             )
@@ -339,9 +328,8 @@ struct ChangesLedgerView: View {
         guard let waiting,
               let request = outgoing.first(where: { $0.requestId == waiting.requestID })
         else { return }
-        resumeTarget = ChangeRequestTarget(
-            id: request.requestId,
-            changes: model.state.pending.filter { request.changeIds.contains($0.id) })
+        // Opens straight on the request's status (it was already sent).
+        skipTarget = .changes(model.state.pending.filter { request.changeIds.contains($0.id) })
     }
 
     private var selectedChanges: [PendingChange] {
@@ -360,8 +348,7 @@ struct ChangesLedgerView: View {
         let needGate = chosen.filter { !$0.isDue }
         if !needGate.isEmpty {
             if ChangeEngine.hasOverride(for: needGate, state: model.state) {
-                bulkChanges = needGate
-                showBulkOverride = true
+                skipTarget = .changes(needGate)
             } else {
                 // No override to skip the wait — say so instead of doing nothing.
                 notice = tr("Those changes are still counting down. Wait them out or use an available override.")
@@ -376,10 +363,4 @@ private struct LedgerSection: Identifiable {
     let bucket: LedgerGrouping.Bucket
     let changes: [PendingChange]
     var id: LedgerGrouping.Bucket { bucket }
-}
-
-/// A sent contact request to reopen (for example to enter the email code).
-struct ChangeRequestTarget: Identifiable {
-    let id: String
-    let changes: [PendingChange]
 }

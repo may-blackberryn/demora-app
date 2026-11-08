@@ -418,6 +418,37 @@ with tempfile.TemporaryDirectory(prefix='demora-you-') as directory:
                     '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
 
+# --- Skip the wait (Y4): the checks underneath are the existing ones -------
+sheet = (ROOT / 'Latch/SkipWaitSheet.swift').read_text()
+for forbidden in ('model.applyNow(', 'applyNowOffMain(', 'applyNowAndWait(', 'print(', 'UIPasteboard',
+                  'UserDefaults', 'SharedStore.save', 'Keychain', 'OverrideGateView', 'TutorialContactGateView'):
+    assert forbidden not in sheet, ('Skip the wait never bypasses a check or logs', forbidden)
+for required in (
+        # Contact: approval re-checked on the serialized queue, then confirmed applied.
+        'await ContactsRelay.applyKnownApproval(requestId: reqId)',
+        'await ContactsRelay.consumeVerifiedEmailRequest(requestId: reqId)',
+        'guard requestWasApplied else {', 'try await EmailCodeService.verify(',
+        'ContactsRelay.recordOutgoing(requestId: requestId,', 'ContactsRelay.recordOutgoingExtra(extraContext,',
+        # Password: only a hash leaves the field, the field clears after every attempt.
+        'let hash = AppModel.hash(password)', 'password = ""',
+        'ChangeEngine.applyNowWithPasswordOffMain(', 'limitID: extraTime.limitID, candidateHash: hash)',
+        # Phrase: the word-by-word entry with its own scope.
+        'PhraseEntry(policy: policy,', 'ChangeEngine.applyNowWithPhraseOffMain(',
+        'limitID: limitID, phraseProofID: proofID)'):
+    assert required in sheet, ('gate logic kept', required)
+assert sheet.count('ok = count == changes.count') == 1 and 'if count == changes.count {' in sheet, \
+    'success only when every change applied'
+phrase_src = (ROOT / 'Latch/PhraseOverrides.swift').read_text()
+assert 'if action == #selector(paste(_:)) || action == #selector(cut(_:)) {' in phrase_src
+assert 'field.removeInteraction(dropInteraction)' in phrase_src and 'override func paste(_ sender: Any?) {}' in phrase_src
+assert 'NoPasteWordField(text: $input, onSubmit: submit)' in phrase_src
+for gone in ('struct OverrideGateView', 'struct PasswordChangeGate', 'struct PhraseChangeGate',
+             'struct ContactGateView', 'struct ExtraTimePasswordGate', 'struct ExtraTimePhraseGate'):
+    for name in ('Latch/OverrideGateView.swift', 'Latch/ContactsOverrideViews.swift',
+                 'Latch/PhraseOverrides.swift', 'Latch/LimitsView.swift'):
+        assert gone not in (ROOT / name).read_text(), ('replaced by SkipWaitSheet', gone, name)
+print('Skip the wait guards passed: no direct apply, no logging, contact/password/phrase checks unchanged')
+
 # --- Every word You shows is translated, in all seven tables ----------------
 STRING = r'"((?:[^"\\]|\\.)*)"'
 keys = set(re.findall(r'translate\(' + STRING + r'\)', code))

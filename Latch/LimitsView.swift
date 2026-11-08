@@ -1023,55 +1023,6 @@ struct TutorialLimitEditorView: View {
     }
 }
 
-struct ExtraTimePasswordGate: View {
-    let limitID: UUID
-    @EnvironmentObject private var model: AppModel
-    @Environment(\.dismiss) private var dismiss
-    @State private var password = ""
-    @State private var working = false
-    @State private var failed = false
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(tr("Enter the password for this extra-time use."))
-                    SecureField(tr("Password"), text: $password)
-                        .textContentType(.password)
-                    if failed {
-                        Text(tr("Wrong password or this extra-time use is no longer available."))
-                            .font(.footnote).foregroundStyle(.red)
-                    }
-                    Button(working ? tr("Checking…") : tr("Get extra time")) {
-                        guard !working else { return }
-                        working = true
-                        let hash = AppModel.hash(password)
-                        Task {
-                            let started = await ChangeEngine.requestExtraTimeOffMain(
-                                limitID: limitID, candidateHash: hash)
-                            password = ""
-                            working = false
-                            model.tick()
-                            if started { dismiss() } else { failed = true }
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(password.isEmpty || working)
-                }
-                .demoraSurface()
-                .padding(20)
-            }
-            .background(Ink.paper.ignoresSafeArea())
-            .casedNavigationTitle(tr("Extra time"))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(tr("Close")) { dismiss() }
-                }
-            }
-        }
-    }
-}
-
 /// Hosts FamilyActivityPicker in its own sheet with an explicit Done button.
 /// The .familyActivityPicker modifier is unstable on iOS 17/18 — the
 /// system picker runs out-of-process, and when it crashes it dismisses the

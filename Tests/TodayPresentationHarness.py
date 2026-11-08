@@ -269,7 +269,7 @@ limits = (ROOT / 'Latch/LimitsView.swift').read_text()
 # Rules build: the legacy tutorial keeps its own limit editor (it queues
 # directly, as its steps expect); everyone else uses the rebuilt editor,
 # which only ever queues through the receipt. Removing moved to the sheet.
-editor = section(limits, 'struct TutorialLimitEditorView: View {', '\nstruct ExtraTimePasswordGate')
+editor = section(limits, 'struct TutorialLimitEditorView: View {', '\n/// Hosts FamilyActivityPicker')
 submit = section(editor, 'private func submit(_ action: ChangeAction) {', '\n    }\n')
 assert 'if model.inTutorial {' in submit and 'receipt = ChangeReceiptRequest(action: action)' in submit
 assert editor.count('model.queue(') == 1, 'the tutorial editor queues only through submit'
@@ -342,8 +342,13 @@ assert 'if pendingIDs.isEmpty { selecting = false }' in ledger_view
 assert 'confirmBulkCancel = true' in ledger_view and '.confirmationDialog(tr("Cancel these changes?")' in ledger_view, \
     'bulk cancel asks once'
 assert 'onCancel: { model.cancel(change) }' in ledger_view, 'a single cancel stays immediate'
-assert 'OverrideGateView(changes: [change])' in ledger_view and 'OverrideGateView(changes: bulkChanges)' in ledger_view
-assert 'ContactGateView(changes: target.changes, showChangeList: true,' in ledger_view
+# You build (Y4): Apply now, the bulk bar and "Waiting for…" open one Skip the wait sheet.
+assert 'onOverride: { skipTarget = .changes([change]) }' in ledger_view
+assert 'skipTarget = .changes(needGate)' in ledger_view
+assert 'skipTarget = .changes(model.state.pending.filter { request.changeIds.contains($0.id) })' in ledger_view
+assert '.skipWaitSheet($skipTarget, onDismiss: onRequestsChanged)' in ledger_view
+for gone in ('OverrideGateView', 'ContactGateView', '.sheet('):
+    assert gone not in ledger_view, ('one sheet, steps inside it', gone)
 assert 'ChangeEngine.hasOverride(for: needGate, state: model.state)' in ledger_view
 waiting = section(ledger, 'struct ChangeWaiting: Equatable {', '\n}\n')
 assert '$0.changeIds.contains(change.id)' in waiting and 'contacts.first { $0.id == id }' in waiting
@@ -369,8 +374,12 @@ assert '.safeAreaInset(edge: .bottom)' in today
 assert 'ChangesLedgerView(outgoing: activeOutgoing, onRequestsChanged: loadOutgoing,\n                              scrollTo: ledgerTarget)' in today
 assert 'LimitEditorView(existing: nil)' in today and 'model.selectedTab = 1 } label' not in today, \
     'the empty state opens the editor, not a tab switch'
-assert 'ExtraTimePasswordGate(limitID:' in today and 'ExtraTimePhraseGate(limitID:' in today \
-    and 'ContactGateView(changes: [], extraContext: context' in today, 'existing extra-time gates'
+# You build (Y4): extra time opens Skip the wait on the step's own method.
+assert 'case .contact(let context): skipTarget = .extraContact(context)' in home
+assert 'policies: model.state.overrides).map(SkipWaitTarget.extraPassword)' in home
+assert 'policies: model.state.overrides).map(SkipWaitTarget.extraPhrase)' in home
+assert home.count('.skipWaitSheet($skipTarget') == 1 and 'OverrideGateView' not in home \
+    and 'ContactGateView' not in home, 'one Skip the wait sheet on Today'
 assert 'CompactHomeUsageReport(limits: model.state.limits,\n                                       reloadRequest: usageRefreshRequest)' in body
 assert 'pending.prefix(2)' in body and 'String(format: tr("All %d"), pending.count)' in body
 # You build: the Help link opens You's Help & guide page until the four-tab switch.

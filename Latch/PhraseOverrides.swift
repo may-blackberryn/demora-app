@@ -136,70 +136,6 @@ struct PhrasePolicyEditor: View {
     }
 }
 
-struct ExtraTimePhraseGate: View {
-    let limitID: UUID
-    @EnvironmentObject private var model: AppModel
-    @Environment(\.dismiss) private var dismiss
-    @State private var attemptID = UUID()
-    @State private var failed = false
-
-    private var nextStep: (policy: PhrasePolicy, index: Int)? {
-        guard let limit = model.state.limits.first(where: { $0.id == limitID }),
-              let steps = limit.extraTime?.effectiveSteps,
-              case .ready(let remaining) = LimitFeatures.extraTimeState(for: limit),
-              steps.indices.contains(steps.count - remaining),
-              let id = steps[steps.count - remaining].phrasePolicyID,
-              let policy = model.state.overrides.phrasePolicies.first(where: {
-                  $0.id == id && $0.allowed.contains(.extraTime)
-              }) else { return nil }
-        return (policy, steps.count - remaining)
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    if let nextStep {
-                        Text(tr("Type every word to receive this use of extra time."))
-                        PhraseEntry(policy: nextStep.policy,
-                                    scope: .extraTime(
-                                        limitID: limitID,
-                                        day: SharedStore.dayKey(for: TimeGuard.now()),
-                                        step: nextStep.index)) { proofID in
-                            Task {
-                                let started = await ChangeEngine.requestExtraTimeOffMain(
-                                    limitID: limitID, phraseProofID: proofID)
-                                model.tick()
-                                if started {
-                                    dismiss()
-                                } else {
-                                    failed = true
-                                    attemptID = UUID()
-                                }
-                            }
-                        }
-                        .id(attemptID)
-                    } else {
-                        Text(tr("This extra-time use is no longer available."))
-                    }
-                    if failed {
-                        Text(tr("Extra time could not be started safely. Your limit is still in place; try again later."))
-                            .font(.footnote).foregroundStyle(.red)
-                    }
-                }
-                .demoraSurface().padding(20)
-            }
-            .background(Ink.paper.ignoresSafeArea())
-            .casedNavigationTitle(tr("Extra time"))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(tr("Close")) { dismiss() }
-                }
-            }
-        }
-    }
-}
-
 /// A word-at-a-time challenge. Long random phrases are shown in 20-word
 /// pages; they never leave memory or touch the trusted-contact server.
 struct PhraseEntry: View {
@@ -222,12 +158,15 @@ struct PhraseEntry: View {
         VStack(alignment: .leading, spacing: 12) {
             if words.isEmpty {
                 Text(tr("Phrase unavailable. Close this screen and try again."))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Ink.danger)
             } else {
                 Text(String(format: tr("Word %d of %d"), index + 1, words.count))
-                    .font(.headline)
-                Text(String(format: tr("Mistakes: %d"), mistakes))
-                    .font(.footnote).foregroundStyle(.secondary)
+                    .demoraType(.time)
+                    .foregroundStyle(Ink.ink)
+                Text(policy.allowedErrors.map {
+                    String(format: tr("%d mistakes left"), max(0, $0 - mistakes))
+                } ?? String(format: tr("Mistakes: %d"), mistakes))
+                    .demoraType(.meta).foregroundStyle(Ink.inkSoft)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 90))], alignment: .leading) {
                     ForEach(pageStart..<pageEnd, id: \.self) { position in
                         Text("\(position + 1). \(words[position])")
@@ -243,10 +182,10 @@ struct PhraseEntry: View {
                     .background(Ink.paper, in: RoundedRectangle(cornerRadius: 9))
                     .accessibilityLabel(tr("Type the highlighted word"))
                 if !message.isEmpty {
-                    Text(message).font(.footnote).foregroundStyle(.red)
+                    Text(message).demoraType(.meta).foregroundStyle(Ink.danger)
                 }
                 Button(tr("Check word"), action: submit)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(DemoraPrimaryButtonStyle())
                     .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                               || completed)
             }
@@ -285,6 +224,7 @@ struct PhraseEntry: View {
         case .reset:
             restart() // random policies draw a new challenge after a reset
             message = tr("Too many mistakes. Start again.")
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
         case .completed(let proofID):
             completed = true
             message = ""
