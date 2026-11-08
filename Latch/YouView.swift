@@ -31,8 +31,7 @@ struct YouView: View {
     @State private var outgoing: [ContactsRelay.OutgoingRequest] = []
     @State private var blockTarget: ContactsRelay.IncomingInvite?
     @State private var receipt: ChangeReceiptRequest?
-    @State private var adding: SkipWayKind?
-    @State private var showAddChoice = false
+    @State private var showAdd = false
     @AppStorage("appearance") private var appearanceRaw = Appearance.system.rawValue
     @AppStorage("textCasing") private var textCasingRaw = TextCasing.fallback.rawValue
     @AppStorage("latch.accentColor", store: SharedStore.defaults)
@@ -59,7 +58,7 @@ struct YouView: View {
                     }
                     WaysToSkipSection(
                         onOpen: open,
-                        onAdd: { showAddChoice = true },
+                        onAdd: { showAdd = true },
                         onToggleContacts: { enabled in
                             receipt = ChangeReceiptRequest(action: .setContactsOverride(enabled: enabled))
                         },
@@ -94,16 +93,7 @@ struct YouView: View {
                 destination(route).toolbar(.visible, for: .navigationBar)
             }
             .changeReceipt($receipt)
-            .confirmationDialog(tr("Add a way to skip a wait"), isPresented: $showAddChoice,
-                                titleVisibility: .visible) {
-                Button(tr("Someone you trust")) { adding = .contact }
-                Button(tr("A password")) { adding = .password }
-                Button(tr("A phrase")) { adding = .phrase }
-                Button(tr("Cancel"), role: .cancel) {}
-            }
-            .sheet(item: $adding) { kind in
-                AddSkipWayInterim(kind: kind)
-            }
+            .sheet(isPresented: $showAdd) { AddSkipWaySheet() }
             .confirmationDialog(tr("Block this person? They can't send you requests."),
                                 isPresented: Binding(get: { blockTarget != nil },
                                                      set: { if !$0 { blockTarget = nil } }),
@@ -225,7 +215,7 @@ struct YouView: View {
         case .approveFor: ApproveForView()
         case .blocked: BlockedUsersView()
         case .requestsSent: SentHistoryView()
-        case .way(let kind, let id): SkipWayInterimDetail(kind: kind, id: id)
+        case .way(let kind, let id): SkipWayDetailView(kind: kind, id: id)
         case .ledger(let id):
             ChangesLedgerView(outgoing: outgoing, onRequestsChanged: readLocal, scrollTo: id)
         }
@@ -411,12 +401,13 @@ struct YouRowLabel: View {
     var value: String? = nil
     var valueStyle: DemoraType = .meta
     var chevron = true
+    var titleColor: Color = Ink.ink
 
     var body: some View {
         HStack(spacing: DemoraSpace.s) {
             Text(title)
                 .demoraType(.body)
-                .foregroundStyle(Ink.ink)
+                .foregroundStyle(titleColor)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: DemoraSpace.xs)
             if let value {

@@ -1240,6 +1240,7 @@ struct GrantProfileView: View {
     @State private var error: String?
     @State private var name = ""
     @State private var avatar = ContactAvatar()
+    @State private var receipt: ChangeReceiptBatchRequest?
 
     private var alreadyContact: Bool {
         model.state.overrides.contacts.contains { $0.latchUserCode == grant.id }
@@ -1308,6 +1309,7 @@ struct GrantProfileView: View {
         }
         .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(navTitle)
+        .changeReceiptBatch($receipt) { added = true }
         .onAppear {
             name = resolvedName(forCode: grant.id, model: model, fallback: "")
             avatar = resolvedAvatar(forCode: grant.id, model: model) ?? ContactAvatar()
@@ -1325,8 +1327,13 @@ struct GrantProfileView: View {
                                    kind: .latchUser(code: grant.id),
                                    accepted: false, inviteId: UUID().uuidString)
         draft.avatar = resolvedAvatar(forCode: grant.id, model: model)
-        model.queue(.addContact(draft))
-        added = true
+        let actions = SkipWayAddPlan.actions(adding: .contact(draft), overrides: model.state.overrides,
+                                             pending: model.state.pending)
+        receipt = ChangeReceiptBatchRequest(
+            actions: actions,
+            lines: actions.count > 1 ? [tr("Also turns on contact approvals")] : [],
+            note: String(format: tr("%@ must also accept before they can approve."),
+                         displayName.isEmpty ? tr("This contact") : displayName))
     }
 }
 

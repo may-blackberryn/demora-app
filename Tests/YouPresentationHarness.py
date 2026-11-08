@@ -449,13 +449,49 @@ for gone in ('struct OverrideGateView', 'struct PasswordChangeGate', 'struct Phr
         assert gone not in (ROOT / name).read_text(), ('replaced by SkipWaitSheet', gone, name)
 print('Skip the wait guards passed: no direct apply, no logging, contact/password/phrase checks unchanged')
 
+# --- Adding, editing and removing a way: receipt only (Y5, Y11) ------------
+editors = (ROOT / 'Latch/SkipWayEditors.swift').read_text()
+for forbidden in ('model.queue(', 'ChangeEngine.queue', 'print(', 'UserDefaults', 'Keychain', 'applyNow'):
+    assert forbidden not in editors, ('every change goes through the receipt, nothing logged', forbidden)
+assert editors.count('updatePasswordPolicySecretNow(') == 1, 'one immediate path: the secret only'
+secret = editors.split('private struct PasswordSecretChangeView: View {', 1)[1].split('\n// MARK:', 1)[0]
+assert 'updatePasswordPolicySecretNow(id: id, current: current,' in secret and 'allowed' not in secret, \
+    'knowing a password changes only the secret'
+assert 'current = ""; new = ""; confirm = ""' in secret
+add_password = editors.split('private struct AddPasswordDetails: View {', 1)[1].split('\n/// The phrase fields', 1)[0]
+assert 'hash: AppModel.hash(password)' in add_password and 'password = ""' in add_password
+assert '.onDisappear { password = ""; confirm = "" }' in add_password, 'plain passwords never outlive the page'
+for action in ('.setContactPermissions(id: id, allowed: allowed)', '.upsertPasswordPolicy(policy)',
+               '.upsertPhrasePolicy(policy)', '.removeContact(id: id)', '.removePasswordPolicy(id: id)',
+               '.removePhrasePolicy(id: id)', 'ChangeReceiptRequest(action: .upsertPhrasePolicy(changed))'):
+    assert action in editors, ('receipt for', action)
+assert 'receipt = ChangeReceiptRequest(action: removal)' in editors and 'receipt = ChangeReceiptRequest(action: action)' in editors
+assert 'SkipWayAddPlan.actions(adding: draft, overrides: model.state.overrides,' in editors
+assert 'guard value != ContactsRelay.myCode else {' in editors and 'ContactsRelay.codeExists(value)' in editors, \
+    'own-code and code-exists checks kept'
+assert 'if EmailCodeService.isConfigured {\n                        Picker(tr("Type")' in editors, \
+    'email contacts offered only when this build can send email (owner answer 2)'
+receipt_src = (ROOT / 'Latch/ChangeReceiptSheet.swift').read_text()
+batch = receipt_src.split('struct ChangeReceiptView: View {', 1)[1].split('\n/// A horizontal line', 1)[0]
+assert batch.count('model.queue(') == 1 and 'guard model.queue(actions[queuedCount]) != nil else {' in batch, \
+    'the batch receipt queues each action once, in order, only on confirm'
+assert 'let plan = ReceiptBatch.plan(parts, now: now)' in batch and 'model.preview(action)' in batch
+contacts_src = (ROOT / 'Latch/ContactsOverrideViews.swift').read_text()
+grant = contacts_src.split('struct GrantProfileView: View {', 1)[1].split('\n// MARK:', 1)[0]
+assert 'model.queue(' not in grant and '.changeReceiptBatch($receipt) { added = true }' in grant, \
+    'adding someone you approve for ends on the receipt'
+you_src = (ROOT / 'Latch/YouView.swift').read_text() + (ROOT / 'Latch/SkipWayViews.swift').read_text()
+assert 'model.queue(' not in you_src and 'ChangeReceiptRequest(action: .setContactsOverride(enabled: enabled))' in you_src
+print('Receipt guards passed: adds, permission edits, removals and pause end on the receipt; secret-only immediate change')
+
 # --- Every word You shows is translated, in all seven tables ----------------
 STRING = r'"((?:[^"\\]|\\.)*)"'
 keys = set(re.findall(r'translate\(' + STRING + r'\)', code))
 keys.update(k for k in re.findall(r'return ' + STRING, code))
 for pair in re.findall(r'translate\(extra \? ' + STRING + r' : ' + STRING + r'\)', code):
     keys.update(pair)
-YOU_FILES = [p for p in ('Latch/YouView.swift', 'Latch/YouPages.swift', 'Latch/SkipWayViews.swift', 'Latch/SkipWaitSheet.swift',
+YOU_FILES = [p for p in ('Latch/YouView.swift', 'Latch/YouPages.swift', 'Latch/SkipWayViews.swift',
+                         'Latch/SkipWayEditors.swift', 'Latch/SkipWaitSheet.swift', 'Latch/ChangeReceiptSheet.swift',
                          'Latch/HowDemoraWorksView.swift') if (ROOT / p).exists()]
 for name in YOU_FILES:
     text = (ROOT / name).read_text()
