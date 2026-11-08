@@ -1,34 +1,6 @@
 import SwiftUI
 import UIKit
 
-struct PhrasePoliciesView: View {
-    @EnvironmentObject private var model: AppModel
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(tr("Each phrase can unlock only the changes you choose. Adding or changing one waits through your less-strict delay."))
-                    .font(.subheadline).foregroundStyle(.secondary)
-                ForEach(model.state.overrides.phrasePolicies) { policy in
-                    NavigationLink { PhrasePolicyEditor(existing: policy) } label: {
-                        GridCard(symbol: "text.cursor", title: policy.name,
-                                 subtitle: policy.allowed.map(\.label).sorted().joined(separator: " · "))
-                    }
-                }
-                NavigationLink { PhrasePolicyEditor(existing: nil) } label: {
-                    Label(tr("Add phrase"), systemImage: "plus.circle")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .demoraSurface()
-                }
-            }
-            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.plain)
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Phrases"))
-    }
-}
-
 struct PhrasePolicyEditor: View {
     let existing: PhrasePolicy?
     /// Staging a migration replacement uses the same editor, but does not

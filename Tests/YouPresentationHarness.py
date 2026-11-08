@@ -444,9 +444,9 @@ assert 'field.removeInteraction(dropInteraction)' in phrase_src and 'override fu
 assert 'NoPasteWordField(text: $input, onSubmit: submit)' in phrase_src
 for gone in ('struct OverrideGateView', 'struct PasswordChangeGate', 'struct PhraseChangeGate',
              'struct ContactGateView', 'struct ExtraTimePasswordGate', 'struct ExtraTimePhraseGate'):
-    for name in ('Latch/OverrideGateView.swift', 'Latch/ContactsOverrideViews.swift',
-                 'Latch/PhraseOverrides.swift', 'Latch/LimitsView.swift'):
-        assert gone not in (ROOT / name).read_text(), ('replaced by SkipWaitSheet', gone, name)
+    for path in (ROOT / 'Latch').glob('*.swift'):
+        assert gone not in path.read_text(), ('replaced by SkipWaitSheet', gone, path.name)
+assert not (ROOT / 'Latch/OverrideGateView.swift').exists(), 'the retired gates file is gone'
 print('Skip the wait guards passed: no direct apply, no logging, contact/password/phrase checks unchanged')
 
 # --- Adding, editing and removing a way: receipt only (Y5, Y11) ------------
@@ -483,6 +483,18 @@ assert 'model.queue(' not in grant and '.changeReceiptBatch($receipt) { added = 
 you_src = (ROOT / 'Latch/YouView.swift').read_text() + (ROOT / 'Latch/SkipWayViews.swift').read_text()
 assert 'model.queue(' not in you_src and 'ChangeReceiptRequest(action: .setContactsOverride(enabled: enabled))' in you_src
 print('Receipt guards passed: adds, permission edits, removals and pause end on the receipt; secret-only immediate change')
+
+# --- Step 6: one place for each fact (§4, §8) -------------------------------
+latch = '\n'.join(path.read_text() for path in (ROOT / 'Latch').glob('*.swift'))
+for gone in ('ExtraOverridesView', 'FineTuneOverridesView', 'PasswordPoliciesView', 'PhrasePoliciesView',
+             'OverridesGridView', 'RulesGridView', 'ContactsOverrideEditor', 'ContactsDetailView',
+             'ContactsHubView', 'TrustedContactApprovalRow', 'ContactProfileView', 'EmailContactProfileView',
+             'ContactApprovalSummary', 'struct ContactPermissionsEditor', 'PreventDisablingGateView',
+             'PreventGuideGateView', 'PasscodeHubView', 'PasscodeViewGateView', 'HelpHubView',
+             'MathOverrideEditor', 'PasswordOverrideEditor', 'func queueSection', 'struct SettingsView',
+             'SettingsRoute', 'settingsPath', 'func replayTutorial', 'func beginTutorial'):
+    assert gone not in latch, ('duplicate screen removed', gone)
+print('One-place guards passed: duplicate contact, password, phrase, prevent-disabling and help screens are gone')
 
 # --- Every word You shows is translated, in all seven tables ----------------
 STRING = r'"((?:[^"\\]|\\.)*)"'

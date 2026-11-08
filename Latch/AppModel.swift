@@ -572,20 +572,6 @@ final class AppModel: ObservableObject {
         if tutorial == .exploreCalendar { advanceTutorial(to: .removeSchedule) }
     }
 
-    /// Adds a usable sample Demora contact instantly (no relay) during the tour,
-    /// then moves to applying the removals via that contact.
-    func addTutorialContact(_ contact: TrustedContact) {
-        guard tutorial == .addContact else { return }
-        var s = SharedStore.loadState()
-        s.overrides.contactsEnabled = true
-        var c = contact
-        c.accepted = true                 // usable immediately during the tour
-        if s.overrides.contacts.isEmpty { s.overrides.contacts.append(c) }
-        SharedStore.save(s)
-        state = s
-        advanceTutorial(to: .applyBoth)
-    }
-
     /// When the current tutorial change was frozen — anchors the countdown.
     private var tutorialFreezeStart: Date?
 

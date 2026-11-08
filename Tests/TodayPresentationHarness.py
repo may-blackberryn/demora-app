@@ -290,10 +290,11 @@ assert 'model.queue(' in recurring and recurring.count('model.queue(') == 1 \
     and 'if model.inTutorial {\n            model.queue(action)' in recurring, 'only the tutorial queues directly'
 for view in (detail, recurring, section(schedules, 'struct PlannedListView: View {', '\nstruct RecurringListView')):
     assert '.changeReceipt($receipt)' in view
-contacts = (ROOT / 'Latch/ContactsOverrideViews.swift').read_text()
+# You build: contact removal moved to the one detail page (SkipWayEditors.swift).
+contacts = (ROOT / 'Latch/ContactsOverrideViews.swift').read_text() + (ROOT / 'Latch/SkipWayEditors.swift').read_text()
 assert 'model.queue(.removeContact(' not in contacts
-assert contacts.count('receipt = ChangeReceiptRequest(action: .removeContact(id: contactID))') == 2
-assert contacts.count('.changeReceipt($receipt)') == 2
+assert 'case .contact: return .removeContact(id: id)' in contacts
+assert 'receipt = ChangeReceiptRequest(action: removal)' in contacts and '.changeReceipt($receipt)' in contacts
 
 # --- Every word on the new screens is translated ---------------------------
 TABLES = {'es': '', 'de': '+German', 'fr': '+French', 'pt': '+Portuguese',
