@@ -1373,7 +1373,6 @@ let turkishStrings: [String: String] = [
     "Change the password": "Şifreyi değiştir",
     "Change the words": "Kelimeleri değiştir",
     "Changes that wait": "Bekleyen değişiklikler",
-    "Changes to your ways to skip a wait can never be skipped.": "Beklemeyi atlama yollarınızdaki değişiklikler asla atlanamaz.",
     "Choose at least one thing it can skip.": "Atlayabileceği en az bir şey seçin.",
     "Current password": "Mevcut şifre",
     "Demora code %@": "Demora kodu %@",
@@ -1429,4 +1428,6 @@ let turkishStrings: [String: String] = [
     "A person you choose approves skipping a countdown — by email code or from their own Demora app. You can also add more later in You → Ways to skip a wait.": "Seçtiğiniz bir kişi geri sayımın atlanmasını e-posta koduyla ya da kendi Demora uygulamasından onaylar. Daha sonra Siz → Beklemeyi atlamanın yolları'ndan başkalarını da ekleyebilirsiniz.",
     "Choose your language here. You can change it anytime under You → Appearance → Language.": "Dilinizi buradan seçin. İstediğiniz zaman Siz → Görünüm → Dil'den değiştirebilirsiniz.",
     "Ask them for the code under You → Your code in their Demora. They'll get a request to accept before they can approve for you.": "Kodu onların Demora'sındaki Siz → Kodunuz bölümünden isteyin. Sizin için onaylayabilmeden önce kabul etmeleri gereken bir istek alırlar.",
+    // You review fix: what can never be skipped early
+    "Changes to passwords, phrases and what anyone may skip can never be skipped early.": "Şifrelerde, ifadelerde ve kimin neyi atlayabileceğindeki değişiklikler asla erkene alınamaz.",
 ]

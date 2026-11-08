@@ -36,7 +36,7 @@ struct SkipPermissionsChecklist: View {
                 toggle(.extraTime, detail: tr("Also needs a limit whose extra time asks for this."))
             }
             .paperCard(padding: 0)
-            Text(tr("Changes to your ways to skip a wait can never be skipped."))
+            Text(tr("Changes to passwords, phrases and what anyone may skip can never be skipped early."))
                 .demoraType(.meta)
                 .foregroundStyle(Ink.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
@@ -557,7 +557,16 @@ struct SkipWayDetailView: View {
         .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .changeReceipt($receipt) { if closeAfterReceipt { closeAfterReceipt = false; dismiss() } }
+        .changeReceipt($receipt) {
+            if closeAfterReceipt {
+                closeAfterReceipt = false
+                dismiss()
+            } else if let current {
+                // The queued set shows in the strip above; the checklist
+                // never pretends it is live (§5.10.2, review fix).
+                allowed = current
+            }
+        }
         .onAppear(perform: load)
         .onChange(of: current) { _ in load() }
     }

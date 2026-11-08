@@ -316,19 +316,22 @@ check(SkipWayEligibility.extraTimeContacts(overrides: paused, unavailableCodes: 
 
 // MARK: Where the sheet opens
 let onePassword = [EligibleWay(way: .password(work), unavailable: nil)]
-check(SkipWayStart.initial(onePassword, requestSent: false) == .way(.password(work)), "one way opens directly")
-check(SkipWayStart.initial([EligibleWay(way: .contact(alex), unavailable: nil)], requestSent: false)
+check(SkipWayStart.initial(onePassword, reopensRequest: false) == .way(.password(work)), "one way opens directly")
+check(SkipWayStart.initial([EligibleWay(way: .contact(alex), unavailable: nil)], reopensRequest: false)
       == .contactRequest(selected: [alex.id]), "one contact opens the request")
-check(SkipWayStart.initial([EligibleWay(way: .contact(alex), unavailable: .cantReach)], requestSent: false)
+check(SkipWayStart.initial([EligibleWay(way: .contact(alex), unavailable: .cantReach)], reopensRequest: false)
       == .menu, "an unusable only way shows why")
-check(SkipWayStart.initial([], requestSent: false) == .none, "none eligible")
-check(SkipWayStart.initial(onePassword + [EligibleWay(way: .phrase(mine), unavailable: nil)], requestSent: false)
+check(SkipWayStart.initial([], reopensRequest: false) == .none, "none eligible")
+check(SkipWayStart.initial(onePassword + [EligibleWay(way: .phrase(mine), unavailable: nil)], reopensRequest: false)
       == .menu, "two ways: menu")
 check(SkipWayStart.initial([EligibleWay(way: .contact(alex), unavailable: nil),
                             EligibleWay(way: .contact(lee), unavailable: .cantReach)] + onePassword,
-                           requestSent: true) == .contactRequest(selected: [alex.id]),
+                           reopensRequest: true) == .contactRequest(selected: [alex.id]),
       "a sent request reopens on its status")
 check(SkipWayStart.start(for: .phrase(mine)) == .way(.phrase(mine)), "phrase step")
+// Review fix: Apply now with a request already sent still offers every way.
+check(SkipWayStart.initial([EligibleWay(way: .contact(alex), unavailable: nil)] + onePassword,
+                           reopensRequest: false) == .menu, "a sent request doesn't hide the password")
 
 // MARK: Add plan (Y3)
 let addAlex = SkipWayDraft.contact(newContact)
@@ -447,6 +450,14 @@ for gone in ('struct OverrideGateView', 'struct PasswordChangeGate', 'struct Phr
     for path in (ROOT / 'Latch').glob('*.swift'):
         assert gone not in path.read_text(), ('replaced by SkipWaitSheet', gone, path.name)
 assert not (ROOT / 'Latch/OverrideGateView.swift').exists(), 'the retired gates file is gone'
+# Review fixes: the plan is fixed when the sheet opens; only "Waiting for…" reopens a request.
+presenter = sheet.split('private struct SkipWaitPresenter: ViewModifier {', 1)[1].split('\nstruct SkipWaitPlan', 1)[0]
+assert presenter.count('plan(for: target)') == 1 and 'presented = PresentedSkip(target: target, plan: plan(for: target))' in presenter
+assert '.sheet(item: $presented' in presenter and '.sheet(item: $target' not in presenter
+assert 'if case .request = target { reopens = true }' in presenter
+for name in ('Latch/ChangesLedgerView.swift', 'Latch/HomeView.swift'):
+    src = (ROOT / name).read_text()
+    assert 'skipTarget = .changes([change])' in src and 'skipTarget = .request(' in src, name
 print('Skip the wait guards passed: no direct apply, no logging, contact/password/phrase checks unchanged')
 
 # --- Adding, editing and removing a way: receipt only (Y5, Y11) ------------
@@ -482,6 +493,13 @@ assert 'model.queue(' not in grant and '.changeReceiptBatch($receipt) { added = 
     'adding someone you approve for ends on the receipt'
 you_src = (ROOT / 'Latch/YouView.swift').read_text() + (ROOT / 'Latch/SkipWayViews.swift').read_text()
 assert 'model.queue(' not in you_src and 'ChangeReceiptRequest(action: .setContactsOverride(enabled: enabled))' in you_src
+detail = editors.split('struct SkipWayDetailView: View {', 1)[1].split('\n/// Avatar, name', 1)[0]
+assert '} else if let current {' in detail and 'allowed = current' in detail.split('.changeReceipt($receipt) {', 1)[1], \
+    'review fix: after a queued edit the checklist shows the current permissions'
+assert 'can never be skipped.")' not in editors.replace('can never be skipped early.")', ''), \
+    'review fix: contact add/remove/pause can be skipped by ways allowed Trusted contacts'
+assert '.onReceive(model.$state) { readLocal(pending: $0.pending) }' in you_src, \
+    'review fix: You reads the published state, not the one it replaces'
 print('Receipt guards passed: adds, permission edits, removals and pause end on the receipt; secret-only immediate change')
 
 # --- Step 6: one place for each fact (§4, §8) -------------------------------

@@ -1373,7 +1373,6 @@ let polishStrings: [String: String] = [
     "Change the password": "Zmień hasło",
     "Change the words": "Zmień słowa",
     "Changes that wait": "Zmiany, które czekają",
-    "Changes to your ways to skip a wait can never be skipped.": "Zmian w sposobach na pominięcie oczekiwania nigdy nie da się pominąć.",
     "Choose at least one thing it can skip.": "Wybierz co najmniej jedną rzecz do pomijania.",
     "Current password": "Obecne hasło",
     "Demora code %@": "Kod Demora %@",
@@ -1429,4 +1428,6 @@ let polishStrings: [String: String] = [
     "A person you choose approves skipping a countdown — by email code or from their own Demora app. You can also add more later in You → Ways to skip a wait.": "Wybrana osoba zatwierdza pominięcie odliczania — kodem z e-maila lub w swojej aplikacji Demora. Więcej możesz dodać później w Ty → Sposoby na pominięcie oczekiwania.",
     "Choose your language here. You can change it anytime under You → Appearance → Language.": "Wybierz tu język. Możesz go zmienić w dowolnej chwili w Ty → Wygląd → Język.",
     "Ask them for the code under You → Your code in their Demora. They'll get a request to accept before they can approve for you.": "Poproś o kod z Ty → Twój kod w ich Demorze. Dostaną prośbę do zaakceptowania, zanim będą mogli zatwierdzać za ciebie.",
+    // You review fix: what can never be skipped early
+    "Changes to passwords, phrases and what anyone may skip can never be skipped early.": "Zmian haseł, fraz i tego, co ktokolwiek może pominąć, nigdy nie da się przyspieszyć.",
 ]

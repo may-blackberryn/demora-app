@@ -433,7 +433,7 @@ struct HomeView: View {
                             #if DEBUG
                             print("📂 resume req=\(req.requestId.prefix(8)) changeIds=\(req.changeIds.count) reqChanges=\(reqChanges.count)")
                             #endif
-                            skipTarget = .changes(reqChanges)
+                            skipTarget = .request(reqChanges)
                         } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
@@ -684,7 +684,7 @@ struct HomeView: View {
               let request = activeOutgoing.first(where: { $0.requestId == waiting.requestID })
         else { return }
         // Opens straight on the request's status (it was already sent).
-        skipTarget = .changes(pendingChanges(for: request))
+        skipTarget = .request(pendingChanges(for: request))
     }
 
     private var selectedChanges: [PendingChange] {

@@ -346,7 +346,7 @@ assert 'onCancel: { model.cancel(change) }' in ledger_view, 'a single cancel sta
 # You build (Y4): Apply now, the bulk bar and "Waiting for…" open one Skip the wait sheet.
 assert 'onOverride: { skipTarget = .changes([change]) }' in ledger_view
 assert 'skipTarget = .changes(needGate)' in ledger_view
-assert 'skipTarget = .changes(model.state.pending.filter { request.changeIds.contains($0.id) })' in ledger_view
+assert 'skipTarget = .request(model.state.pending.filter { request.changeIds.contains($0.id) })' in ledger_view
 assert '.skipWaitSheet($skipTarget, onDismiss: onRequestsChanged)' in ledger_view
 for gone in ('OverrideGateView', 'ContactGateView', '.sheet('):
     assert gone not in ledger_view, ('one sheet, steps inside it', gone)

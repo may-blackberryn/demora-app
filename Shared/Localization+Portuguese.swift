@@ -1372,7 +1372,6 @@ let portugueseStrings: [String: String] = [
     "Change the password": "Mudar a senha",
     "Change the words": "Mudar as palavras",
     "Changes that wait": "Mudanças que esperam",
-    "Changes to your ways to skip a wait can never be skipped.": "Mudanças nas suas formas de pular uma espera nunca podem ser puladas.",
     "Choose at least one thing it can skip.": "Escolha pelo menos uma coisa que ela possa pular.",
     "Current password": "Senha atual",
     "Demora code %@": "Código Demora %@",
@@ -1428,4 +1427,6 @@ let portugueseStrings: [String: String] = [
     "A person you choose approves skipping a countdown — by email code or from their own Demora app. You can also add more later in You → Ways to skip a wait.": "Uma pessoa que você escolher aprova pular uma contagem, por código no e-mail ou pelo próprio app Demora. Você também pode adicionar mais depois em Você → Formas de pular uma espera.",
     "Choose your language here. You can change it anytime under You → Appearance → Language.": "Escolha seu idioma aqui. Você pode mudar quando quiser em Você → Aparência → Idioma.",
     "Ask them for the code under You → Your code in their Demora. They'll get a request to accept before they can approve for you.": "Peça o código em Você → Seu código no Demora da pessoa. Ela vai receber um pedido para aceitar antes de poder aprovar por você.",
+    // You review fix: what can never be skipped early
+    "Changes to passwords, phrases and what anyone may skip can never be skipped early.": "Mudanças em senhas, frases e no que cada um pode pular nunca podem ser antecipadas.",
 ]

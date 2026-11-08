@@ -1373,7 +1373,6 @@ let hindiStrings: [String: String] = [
     "Change the password": "पासवर्ड बदलें",
     "Change the words": "शब्द बदलें",
     "Changes that wait": "इंतज़ार करने वाले बदलाव",
-    "Changes to your ways to skip a wait can never be skipped.": "इंतज़ार छोड़ने के आपके तरीकों में बदलाव कभी नहीं छोड़े जा सकते।",
     "Choose at least one thing it can skip.": "कम से कम एक चीज़ चुनें जिसे यह छोड़ सके।",
     "Current password": "मौजूदा पासवर्ड",
     "Demora code %@": "Demora कोड %@",
@@ -1429,4 +1428,6 @@ let hindiStrings: [String: String] = [
     "A person you choose approves skipping a countdown — by email code or from their own Demora app. You can also add more later in You → Ways to skip a wait.": "आपका चुना व्यक्ति उलटी गिनती छोड़ने की मंज़ूरी देता है — ईमेल कोड से या अपने Demora ऐप से। बाद में आप → इंतज़ार छोड़ने के तरीके में और जोड़ सकते हैं।",
     "Choose your language here. You can change it anytime under You → Appearance → Language.": "यहाँ अपनी भाषा चुनें। आप इसे कभी भी आप → दिखावट → भाषा में बदल सकते हैं।",
     "Ask them for the code under You → Your code in their Demora. They'll get a request to accept before they can approve for you.": "उनसे उनके Demora में आप → आपका कोड से कोड माँगें। आपके लिए मंज़ूरी देने से पहले उन्हें स्वीकार करने का अनुरोध मिलेगा।",
+    // You review fix: what can never be skipped early
+    "Changes to passwords, phrases and what anyone may skip can never be skipped early.": "पासवर्ड, वाक्यांश और कौन क्या छोड़ सकता है, इनमें बदलाव कभी पहले लागू नहीं हो सकते।",
 ]

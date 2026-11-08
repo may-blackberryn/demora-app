@@ -329,7 +329,7 @@ struct ChangesLedgerView: View {
               let request = outgoing.first(where: { $0.requestId == waiting.requestID })
         else { return }
         // Opens straight on the request's status (it was already sent).
-        skipTarget = .changes(model.state.pending.filter { request.changeIds.contains($0.id) })
+        skipTarget = .request(model.state.pending.filter { request.changeIds.contains($0.id) })
     }
 
     private var selectedChanges: [PendingChange] {

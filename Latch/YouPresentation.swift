@@ -392,9 +392,12 @@ enum SkipWayStart: Equatable {
     /// "None of your ways can skip this change."
     case none
 
-    /// One usable way opens directly; a sent request reopens on its status.
-    static func initial(_ ways: [EligibleWay], requestSent: Bool) -> SkipWayStart {
-        if requestSent {
+    /// One usable way opens directly. Reopening a sent request (the
+    /// ledger's "Waiting for…") opens on its status; Apply now always offers
+    /// every eligible way, so a password or phrase stays usable while a
+    /// contact request waits (review fix).
+    static func initial(_ ways: [EligibleWay], reopensRequest: Bool) -> SkipWayStart {
+        if reopensRequest {
             return .contactRequest(selected: Set(ways.filter {
                 $0.way.kind == .contact && $0.unavailable == nil
             }.map(\.id)))

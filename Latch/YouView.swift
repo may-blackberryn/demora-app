@@ -87,8 +87,9 @@ struct YouView: View {
                 await reload()
             }
             .refreshable { await reload() }
-            .onAppear(perform: readLocal)
-            .onReceive(model.$state) { _ in readLocal() }
+            .onAppear { readLocal() }
+            // The published value, not the state it is about to replace.
+            .onReceive(model.$state) { readLocal(pending: $0.pending) }
             .navigationDestination(for: YouRoute.self) { route in
                 destination(route).toolbar(.visible, for: .navigationBar)
             }
@@ -217,7 +218,7 @@ struct YouView: View {
         case .requestsSent: SentHistoryView()
         case .way(let kind, let id): SkipWayDetailView(kind: kind, id: id)
         case .ledger(let id):
-            ChangesLedgerView(outgoing: outgoing, onRequestsChanged: readLocal, scrollTo: id)
+            ChangesLedgerView(outgoing: outgoing, onRequestsChanged: { readLocal() }, scrollTo: id)
         }
     }
 
@@ -233,10 +234,10 @@ struct YouView: View {
 
     /// Local reads: blocked count, sent history and sent requests for the
     /// ledger. Called on appear and when saved state changes.
-    private func readLocal() {
+    private func readLocal(pending: [PendingChange]? = nil) {
         blockedCount = ContactsRelay.blockedCodes().count
         hasSentHistory = !ContactsRelay.sentRequestHistory().isEmpty
-        let pendingIDs = Set(model.state.pending.map(\.id))
+        let pendingIDs = Set((pending ?? model.state.pending).map(\.id))
         outgoing = ContactsRelay.outgoingRequests().filter {
             $0.changeIds.contains(where: pendingIDs.contains)
         }

@@ -1389,7 +1389,6 @@ let germanStrings: [String: String] = [
     "Change the password": "Passwort ändern",
     "Change the words": "Wörter ändern",
     "Changes that wait": "Änderungen, die warten",
-    "Changes to your ways to skip a wait can never be skipped.": "Änderungen an deinen Wegen zum Überspringen lassen sich nie überspringen.",
     "Choose at least one thing it can skip.": "Wähle mindestens eine Sache, die übersprungen werden darf.",
     "Current password": "Aktuelles Passwort",
     "Demora code %@": "Demora-Code %@",
@@ -1437,4 +1436,6 @@ let germanStrings: [String: String] = [
     "A person you choose approves skipping a countdown — by email code or from their own Demora app. You can also add more later in You → Ways to skip a wait.": "Eine Person deiner Wahl stimmt dem Überspringen eines Countdowns zu – per E-Mail-Code oder in ihrer eigenen Demora-App. Du kannst später unter Du → Wege, eine Wartezeit zu überspringen weitere hinzufügen.",
     "Choose your language here. You can change it anytime under You → Appearance → Language.": "Wähle hier deine Sprache. Du kannst sie jederzeit unter Du → Darstellung → Sprache ändern.",
     "Ask them for the code under You → Your code in their Demora. They'll get a request to accept before they can approve for you.": "Frag sie nach dem Code unter Du → Dein Code in ihrem Demora. Sie bekommen eine Anfrage, die sie annehmen müssen, bevor sie für dich zustimmen können.",
+    // You review fix: what can never be skipped early
+    "Changes to passwords, phrases and what anyone may skip can never be skipped early.": "Änderungen an Passwörtern, Sätzen und daran, was jemand überspringen darf, lassen sich nie vorziehen.",
 ]

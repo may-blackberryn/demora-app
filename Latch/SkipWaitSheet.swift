@@ -18,6 +18,8 @@ import UIKit
 enum SkipWaitTarget: Identifiable {
     /// Apply now (one change) or the bulk bar (several).
     case changes([PendingChange])
+    /// "Waiting for…": the sent contact request for these changes, on its status.
+    case request([PendingChange])
     /// A limit's next extra-time use that asks a contact. Reopens a sent request.
     case extraContact(ExtraContactContext)
     /// A limit's next extra-time use that asks for its password or phrase.
@@ -27,6 +29,7 @@ enum SkipWaitTarget: Identifiable {
     var id: String {
         switch self {
         case .changes(let changes): return "changes-" + changes.map(\.id.uuidString).joined()
+        case .request(let changes): return "request-" + changes.map(\.id.uuidString).joined()
         case .extraContact(let context): return "contact-" + context.requestID
         case .extraPassword(let use): return "password-\(use.limitID)-\(use.stepIndex)"
         case .extraPhrase(let use): return "phrase-\(use.limitID)-\(use.stepIndex)"
@@ -75,11 +78,24 @@ private struct SkipWaitPresenter: ViewModifier {
     @EnvironmentObject private var model: AppModel
     @Binding var target: SkipWaitTarget?
     let onDismiss: () -> Void
+    /// The target with its plan, fixed when the target is set (review fix:
+    /// computing it while drawing re-ran it on every state refresh and could
+    /// swap the root step under a pushed one).
+    @State private var presented: PresentedSkip?
 
     func body(content: Content) -> some View {
-        content.sheet(item: $target, onDismiss: onDismiss) { target in
-            SkipWaitSheet(target: target, plan: plan(for: target))
-        }
+        content
+            .sheet(item: $presented, onDismiss: {
+                target = nil
+                onDismiss()
+            }) { presented in
+                SkipWaitSheet(target: presented.target, plan: presented.plan)
+            }
+            .onChange(of: target?.id) { _ in
+                guard let target else { presented = nil; return }
+                guard presented?.id != target.id else { return }
+                presented = PresentedSkip(target: target, plan: plan(for: target))
+            }
     }
 
     /// Decided once, when the sheet opens, so the steps don't jump while a
@@ -87,14 +103,13 @@ private struct SkipWaitPresenter: ViewModifier {
     private func plan(for target: SkipWaitTarget) -> SkipWaitPlan {
         let email = EmailCodeService.isConfigured
         switch target {
-        case .changes(let changes):
+        case .changes(let changes), .request(let changes):
             let ways = SkipWayEligibility.ways(for: changes, overrides: model.state.overrides,
                                                unavailableCodes: model.unavailableContactCodes,
                                                emailAvailable: email)
-            let requestID = changes.first?.id.uuidString ?? ""
-            let sent = !requestID.isEmpty
-                && (ContactsRelay.wasSentEmail(requestID) || ContactsRelay.wasSentRelay(requestID))
-            return SkipWaitPlan(ways: ways, start: SkipWayStart.initial(ways, requestSent: sent))
+            var reopens = false
+            if case .request = target { reopens = true }
+            return SkipWaitPlan(ways: ways, start: SkipWayStart.initial(ways, reopensRequest: reopens))
         case .extraContact(let context):
             let ways = SkipWayEligibility.extraTimeContacts(
                 overrides: model.state.overrides, unavailableCodes: model.unavailableContactCodes,
@@ -116,6 +131,12 @@ private struct SkipWaitPresenter: ViewModifier {
 struct SkipWaitPlan {
     let ways: [EligibleWay]
     let start: SkipWayStart
+}
+
+private struct PresentedSkip: Identifiable {
+    let target: SkipWaitTarget
+    let plan: SkipWaitPlan
+    var id: String { target.id }
 }
 
 /// Steps pushed inside the sheet.
@@ -144,15 +165,17 @@ struct SkipWaitSheet: View {
     }
 
     private var changes: [PendingChange] {
-        if case .changes(let changes) = target { return changes }
-        return []
+        switch target {
+        case .changes(let changes), .request(let changes): return changes
+        default: return []
+        }
     }
 
     // MARK: Root: the step itself when there is only one, else the menu
 
     @ViewBuilder private var root: some View {
         switch target {
-        case .changes:
+        case .changes, .request:
             switch plan.start {
             case .contactRequest(let selected): stepView(.contact(selected))
             case .way(let way): stepView(step(for: way))
@@ -259,7 +282,7 @@ struct SkipWaitSheet: View {
 
     private var header: SkipWaitHeader {
         switch target {
-        case .changes(let changes): return SkipWaitHeader(content: .changes(changes))
+        case .changes(let changes), .request(let changes): return SkipWaitHeader(content: .changes(changes))
         case .extraContact(let context):
             return SkipWaitHeader(content: .extraTime(name: context.limitName, minutes: context.step.minutes))
         case .extraPassword(let use), .extraPhrase(let use):
