@@ -476,3 +476,59 @@ because the phone was **Locked** — this was a device launch denial, not an
 observed app crash. No interactive phone check or live contact/email round trip
 was performed. The owner can unlock the phone and open the installed dev app;
 the App Store app remains separate. Nothing was pushed, merged or submitted.
+
+## Setup, intro and welcome build — 2026-11-09
+
+First step of `docs/onboarding-shield-widgets-redesign.md`. Shield, widgets,
+dead beta/language-screen cleanup and the tab switch are separate following
+steps; this build does not claim them complete.
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| Five setup steps; optional mornings/nights and ways-to-skip sheets on Make it yours, followed by the summary | Approved O1/O2: preserve every choice and the one-time setup benefit without treating extras as required pages. Drafts remain in the parent view and invalid groups/overrides still prevent the final commit | Yes |
+| Preserve permission text verbatim, Continue, the single authorization path and denial-then-Continue behavior | Apple-sensitive copy and 5.1.1(iv); beta-language notices remain a separate tap from permission requests and final saving | Yes |
+| Use the shared selected-card delay picker and existing wheel bindings | Same policy edits and validation, clearer selection; durations are inside the selected card. The picker is also used by Your waits and local migration previews | Yes |
+| Fresh/upgrader intro variants derive only from the published isSetUp value; demos explicitly choose their variant | O3: fresh users never see 2.0 or an upgrade slogan. Timing, intrinsic wordmark reveal, accessibility/cancellation and intro completion marker remain unchanged | Yes |
+| Welcome uses stable rules/dayNight/changes page identities, not mutable array offsets | An optional day/night offer disappears after a successful save. Advancing explicitly to Changes prevents skipping/duplicating a page when the array shrinks. Back remains useful if eligibility changes; all saves/Skip still use the existing one-shot guards | Yes |
+| Math replacement appears once, on the first welcome page; final page offers the ordinary delayed policy editor | O4: no duplicated offer, no new waiver. The demo still opens only a local policy draft | Yes |
+| Optional estimate is collapsed in setup and welcome | O6: the existing draft persists only after the original successful setup/welcome path, not when expanded or edited. Demos cannot save it | Yes |
+| Summary uses localized category labels plus counts, hiding zero kinds and using Not yet when empty | Avoids “1 contacts” and incorrect plural forms; translated labels work without inventing plural rules for Polish and other languages | Yes |
+| New setup titles omit the repeated logo; optional actions explicitly use plain text, progress is a 4-point capsule, successful setup gives a haptic only after saving succeeds | Approved presentation; one primary action remains pinned. No implicit page animation or added authorization prompt | Yes |
+| Restore missing Passwords translations in all seven catalogs and Phrases in five | The broader setup-copy guard exposed pre-existing omissions; current setup/intro/welcome/math copy is checked across 121 keys × seven catalogs | Yes |
+| Existing five-tab route copy stays temporarily; four-tab descriptions land with the actual switch | Spec §8 requires truthful paths at each integration point. The welcome introduction uses an interim Your setup header, not “Four tabs now” before the switch | Interim — four-tab switch |
+| Staging callbacks and initial/migration commit APIs are unchanged | No engine/model/service, deadlines, accounting, markers, waiver or contact-policy changes are authorized here. Existing real drafts, consent validation, retry behavior and demo isolation remain | Preserved |
+
+A fresh read-only reviewer checked the step and rechecked the summary/layout/
+translation refinements without writing them; no concrete functional regression
+was found. The lead inspected native macOS synthetic renders of the actual
+setup body/components in light/English (390 pt), dark/red/German (320 pt) and
+Hindi (320 pt). These are not iOS screenshots or proof of device Dynamic Type,
+VoiceOver, permission prompts or sheet transitions. The fixture uses no real
+rules, tokens, usage, preferences or contact services; its saved group names and
+delay string are synthetic. `Tests/RenderSetupPreview.py` reproduces the renders.
+
+Final verification: all **30 Python harnesses**, both standalone Swift harnesses,
+generated report localization (67 keys × seven tables) and `git diff --check`
+passed. Setup adds 26 pure page-identity/routing checks; intro keeps its 16 gate
+combinations, phase timings and intrinsic glyph/layout checks. The complete
+setup/intro/welcome/math key scan covers 121 keys × seven catalogs. Existing
+initial-setup/migration, waiver, permission, demo-isolation and enforcement
+regressions remain green; no engine/model/service files changed.
+
+Sequential unsigned arm64 Debug and Release builds passed with stable Xcode
+27.0 (27A266a), followed by signed Debug. Debug emitted no warnings; Release
+and signed Debug emitted only skipped AppIntents metadata extraction. Logs and
+synthetic PNGs are now under
+`/Users/matiasmoran/Library/Logs/DemoraRedesign/` (`onboarding-verify.log`,
+`onboarding-debug.log`, `onboarding-release.log`, `onboarding-signed-debug.log`,
+`setup-light.png`, `setup-german-dark.png`, `setup-hindi.png`), rather than the
+cleared temporary directory. DerivedData is outside the repository.
+
+The owner's iPhone was **unavailable** on 2026-11-09, so this step was not
+installed or interactively checked. When connected, install the signed Debug
+artifact and try You (still labelled Settings) → Developer → Setup demos:
+New-user (five pages, both permission responses, optional extras, Back and
+estimate), then migration (math offer once, 2/3 pages, Skip, day/night save,
+delayed policy editor). Demos must never change real rules or welcome markers.
+Fresh-install permission sheets, iOS large text/VoiceOver, the pinned footer and
+extras' pushed editor dismissal remain device checks. Nothing pushed or merged.

@@ -23,22 +23,25 @@ above describes the last released app, not this working tree.
 
 Features:
 
-- A once-only 2.0 opening before fresh setup or the upgrade welcome: the
-  original Demora logo expands into the wordmark, followed by 2.0 and
-  “more powerful, more intuitive”. Completion has its own marker, so closing
+- A once-only opening before fresh setup or the upgrade welcome: the
+  original Demora logo expands into the wordmark. Upgraders see 2.0 and
+  “more powerful, more intuitive”; fresh installs see “Give yourself time to
+  decide.” without a version. Completion has its own marker, so closing
   later setup pages does not replay it. Reduce Motion uses gentle transitions;
   VoiceOver users continue at their own pace. Both debug setup previews replay
   it without changing real welcome markers or rules.
-- A seven-step real first-run setup: purpose, delay policy, permissions, optional
-  first limit, optional day/night groups, optional trusted contacts/phrases/passwords,
-  and confirmation. Each override's allowed uses can be chosen before committing
+- A five-step real first-run setup: purpose, delay policy, permissions, optional
+  first limit, and Make it yours. The last page stages optional day/night groups
+  and trusted contacts/phrases/passwords in separate sheets, shows a setup summary,
+  and offers a collapsed optional starting-estimate draft. Each override's allowed
+  uses can be chosen before committing
   setup. Contacts remain unconfirmed and invitations follow the normal consent
   flow after setup; passwords persist only as hashes. Developer previews stage
   these choices without persistence or contact-service calls. Screen Time denial is respected; setup can
   finish without blocking. Help → Guide now provides practical 2.0 instructions;
   the obsolete public Replay walkthrough entry is removed. The old tutorial
   recovery engine remains available for safely restoring any interrupted replay.
-- Existing users get a separate four-page 2.0 introduction once
+- Existing users get a separate two- or three-page 2.0 introduction once
   completed. Migration keeps rule IDs, budgets, contact scopes, and pending
   deadlines, and backs up the saved blob before re-encoding. A legacy saved
   Screen Time passcode is verified in Keychain and removed from the blob before

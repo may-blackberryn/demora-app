@@ -40,6 +40,8 @@ struct OnboardingView: View {
     @State private var overrides = OverridesConfig()
     @State private var wantsUsageEstimate = false
     @State private var usageEstimateMinutes = 21 * 60
+    @State private var showDayNight = false
+    @State private var showOverrides = false
 
     private var dayNightLimits: [AppLimit] { firstLimit.map { [$0] } ?? [] }
     private var dayNightValid: Bool {
@@ -84,20 +86,18 @@ struct OnboardingView: View {
                     #if DEBUG
                     if isDemo { DeveloperDemoNotice() }
                     #endif
-                    DemoraWelcomeProgress(step: step, total: 7)
+                    DemoraWelcomeProgress(step: step, total: 5)
                     Group {
                         switch step {
                         case 0: purposeStep
                         case 1: delayStep
                         case 2: authStep
                         case 3: firstLimitStep
-                        case 4: dayNightStep
-                        case 5: overridesStep
-                        default: readyStep
+                        default: makeYoursStep
                         }
                     }
                 }
-                .padding(24)
+                .padding(DemoraSpace.pageGutter)
                 .frame(maxWidth: 640)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
@@ -129,7 +129,7 @@ struct OnboardingView: View {
                     Button(action: continueSetup) {
                         HStack(spacing: 10) {
                             if isCompleting || isRequestingAuthorization { ProgressView().tint(Ink.buttonText) }
-                            Text(step == 6 ? tr("Start using Demora") : tr("Continue"))
+                            Text(step == 4 ? tr("Start using Demora") : tr("Continue"))
                         }
                     }
                     .buttonStyle(DemoraPrimaryButtonStyle())
@@ -137,8 +137,8 @@ struct OnboardingView: View {
                               || (step == 1 && !policy.isValid)
                               || (step == 3 && wantsLimit && !hasSelection)
                               || (step >= 4 && !dayNightValid)
-                              || (step >= 5 && !overrides.isValidInitialSetup)
-                              || (step == 6 && (!policy.isValid || (wantsLimit && !hasSelection))))
+                              || (step == 4 && !overrides.isValidInitialSetup)
+                              || (step == 4 && (!policy.isValid || (wantsLimit && !hasSelection))))
                     if step == 3 {
                         Button(tr("Set a limit later")) {
                             wantsLimit = false
@@ -149,7 +149,7 @@ struct OnboardingView: View {
                         .frame(minHeight: 44)
                     }
                 }
-                .padding(.horizontal, 24).padding(.vertical, 14)
+                .padding(.horizontal, DemoraSpace.pageGutter).padding(.vertical, 14)
                 .frame(maxWidth: 640)
                 .frame(maxWidth: .infinity)
                 .background(Ink.paper)
@@ -168,6 +168,40 @@ struct OnboardingView: View {
             }
             .sheet(isPresented: $showAppPicker) {
                 AppPickerSheet(selection: $selection)
+            }
+            .sheet(isPresented: $showDayNight) {
+                NavigationStack {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: DemoraSpace.l) {
+                            #if DEBUG
+                            if isDemo { DeveloperDemoNotice() }
+                            #endif
+                            dayNightStep
+                        }
+                        .padding(DemoraSpace.pageGutter)
+                    }
+                    .paper()
+                    .toolbar { ToolbarItem(placement: .confirmationAction) {
+                        Button(tr("Done")) { showDayNight = false }
+                    } }
+                }
+            }
+            .sheet(isPresented: $showOverrides) {
+                NavigationStack {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: DemoraSpace.l) {
+                            #if DEBUG
+                            if isDemo { DeveloperDemoNotice() }
+                            #endif
+                            overridesStep
+                        }
+                        .padding(DemoraSpace.pageGutter)
+                    }
+                    .paper()
+                    .toolbar { ToolbarItem(placement: .confirmationAction) {
+                        Button(tr("Done")) { showOverrides = false }
+                    } }
+                }
             }
         }
         .interactiveDismissDisabled(isCompleting || isRequestingAuthorization)
@@ -209,7 +243,7 @@ struct OnboardingView: View {
 
     private var purposeStep: some View {
         VStack(alignment: .leading, spacing: 28) {
-            DemoraPageTitle(title: tr("Make room for what matters."))
+            Text(tr("Make room for what matters.")).demoraType(.pageTitle)
             Text(tr("Choose your boundaries now. Give yourself time before changing them later."))
                 .font(.title3).foregroundStyle(Ink.faint)
             VStack(alignment: .leading, spacing: 22) {
@@ -218,15 +252,15 @@ struct OnboardingView: View {
                 DemoraWelcomeEntry(symbol: "hourglass", title: tr("Let the impulse pass"),
                                    detail: tr("A change can wait without taking away your ability to choose."))
             }
-            .demoraSurface()
-            Text(tr("Free. No account, ads, or analytics. Your app choices and usage stay on your device."))
-                .font(.footnote).foregroundStyle(Ink.faint)
+            .paperCard()
+            Text(tr("Free. No account, ads, or analytics. Your app choices and usage stay on this device."))
+                .demoraType(.meta).foregroundStyle(Ink.inkSoft)
         }
     }
 
     private var delayStep: some View {
         VStack(alignment: .leading, spacing: 24) {
-            DemoraPageTitle(title: tr("A pause, on your terms."))
+            Text(tr("A pause, on your terms.")).demoraType(.pageTitle)
             Text(tr("Choose separate waits, one shared wait, or a wait only when loosening rules."))
                 .foregroundStyle(Ink.faint)
             DelayPolicyPicker(policy: $policy)
@@ -237,10 +271,13 @@ struct OnboardingView: View {
 
     private var authStep: some View {
         VStack(alignment: .leading, spacing: 24) {
-            DemoraPageTitle(title: tr("Permissions"))
+            Text(tr("Permissions")).demoraType(.pageTitle)
             Image(systemName: "checkmark.shield")
-                .font(.system(size: 52, weight: .ultraLight))
-                .foregroundStyle(accent).accessibilityHidden(true)
+                .font(.system(size: 56, weight: .ultraLight))
+                .foregroundStyle(accent)
+                .frame(width: 96, height: 96)
+                .background(accent.opacity(0.12), in: Circle())
+                .accessibilityHidden(true)
             // Approved permission copy: retain verbatim, including after denial.
             Text(tr("Demora needs Screen Time access to set limits and block apps, and notifications to tell you when a pending change is ready. iOS will ask for each."))
                 .foregroundStyle(Ink.faint)
@@ -256,23 +293,23 @@ struct OnboardingView: View {
             }
             #endif
             if accessGranted {
-                Label(tr("Authorized ✓"), systemImage: "checkmark")
-                    .foregroundStyle(accent)
+                StateChip(kind: .free, text: tr("Allowed"))
             } else if authTried {
                 Text(tr("That's okay. Without Screen Time access Demora can't block apps, but you can continue and turn it on later."))
                     .font(.footnote).foregroundStyle(Ink.faint)
-                    .demoraSurface()
+                    .paperCard()
             }
         }
     }
 
     private var firstLimitStep: some View {
         VStack(alignment: .leading, spacing: 24) {
-            DemoraPageTitle(title: tr("Start with one boundary."))
+            Text(tr("Start with one boundary.")).demoraType(.pageTitle)
             Text(isDemo ? "Choose the sample group and a daily allowance. This limit only exists in the preview."
-                 : tr("Optional: choose an app or a group and a daily allowance. This will be a real limit, not a demo."))
-                .foregroundStyle(Ink.faint)
+                 : tr("Optional. This is a real limit, not a demo."))
+                .demoraType(.meta).foregroundStyle(Ink.inkSoft)
             if accessGranted || (wantsLimit && hasSelection) {
+                VStack(alignment: .leading, spacing: DemoraSpace.m) {
                 Button {
                     wantsLimit = true
                     #if DEBUG
@@ -284,8 +321,8 @@ struct OnboardingView: View {
                     #endif
                     showAppPicker = true
                 } label: {
-                    GridCard(symbol: "app.badge", title: tr("Choose apps"),
-                             subtitle: hasSelection ? tr("Edit your selection") : tr("One app or a shared group"))
+                    FactRow(label: tr("Apps"), value: hasSelection
+                            ? String(format: tr("%d items"), selectedItemCount) : tr("Choose"), chevron: true)
                 }
                 .buttonStyle(.plain)
                 .disabled(!accessGranted)
@@ -293,75 +330,92 @@ struct OnboardingView: View {
                     Text(tr("That's okay. Without Screen Time access Demora can't block apps, but you can continue and turn it on later."))
                         .font(.footnote).foregroundStyle(Ink.faint)
                 }
-                if wantsLimit && hasSelection {
-                    VStack(alignment: .leading, spacing: 18) {
-                        TextField(tr("Limit name"), text: $limitName)
+                    Rectangle().fill(Ink.hairline).frame(height: 1).accessibilityHidden(true)
+                    HStack {
+                        Text(tr("Name")).demoraType(.meta).foregroundStyle(Ink.inkSoft)
+                        TextField(tr("My first limit"), text: $limitName)
                             .textInputAutocapitalization(.sentences)
                             .submitLabel(.done)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    Rectangle().fill(Ink.hairline).frame(height: 1).accessibilityHidden(true)
                         Stepper(value: $minutes, in: 5...720, step: 5) {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(tr("Daily allowance")).foregroundStyle(Ink.faint)
+                                Text(tr("Each day")).demoraType(.meta).foregroundStyle(Ink.inkSoft)
                                 Text(String(format: tr("%d min"), minutes))
-                                    .font(.system(.title, design: .serif))
+                                    .demoraType(.time)
                             }
                         }
-                        Text(tr("The selected apps share this allowance. You can fine-tune it later in Limits & blocks."))
-                            .font(.footnote).foregroundStyle(Ink.faint)
-                    }
-                    .demoraSurface()
+                        Text(tr("The selected apps share this allowance."))
+                            .demoraType(.meta).foregroundStyle(Ink.inkSoft)
                 }
+                .paperCard()
             } else {
                 Text(tr("You can add a limit after enabling Screen Time access. For now, continue without one."))
-                    .foregroundStyle(Ink.faint).demoraSurface()
+                    .foregroundStyle(Ink.inkSoft).paperCard()
             }
         }
     }
 
-    private var readyStep: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            DemoraPageTitle(title: tr("Your next chapter."))
-            DemoraWelcomeEntry(symbol: "hourglass", title: tr("Your delay policy"), detail: policySummary)
-                .demoraSurface()
-            if !dayNightGroups.isEmpty {
-                DemoraWelcomeEntry(symbol: "sun.max", title: tr("Day & night"),
-                                   detail: dayNightGroups.map(\.name).joined(separator: " · "))
+    private var selectedItemCount: Int {
+        #if DEBUG
+        if isDemo { return demoSelection ? 1 : 0 }
+        #endif
+        return selection.applicationTokens.count + selection.categoryTokens.count + selection.webDomainTokens.count
+    }
+
+    private var overridesSummary: String {
+        [(tr("Trusted contacts"), overrides.contacts.count),
+         (tr("Phrases"), overrides.phrasePolicies.count),
+         (tr("Passwords"), overrides.passwordPolicies.count)]
+            .filter { $0.1 > 0 }
+            .map { $0.0 + ": " + $0.1.formatted() }
+            .joined(separator: " · ")
+    }
+
+    private var makeYoursStep: some View {
+        VStack(alignment: .leading, spacing: DemoraSpace.sectionGap) {
+            Text(tr("Make it yours.")).demoraType(.pageTitle)
+            Text(tr("Both are optional. You can add them now without waiting."))
+                .demoraType(.meta).foregroundStyle(Ink.inkSoft)
+            SetupOptionalCard(title: tr("Mornings & nights"), symbol: "sun.horizon",
+                detail: dayNightGroups.isEmpty
+                    ? tr("One Wake up tap starts all eligible groups together. Give each group its own wait and sleep time.")
+                    : dayNightGroups.map(\.name).joined(separator: " · "),
+                actionTitle: dayNightGroups.isEmpty ? tr("Set up") : tr("Edit")) { showDayNight = true }
+            if !dayNightValid {
+                Text(tr("Review your day/night groups after changing your limits."))
+                    .demoraType(.meta).foregroundStyle(Ink.danger)
             }
-            if !overrides.contacts.isEmpty {
-                DemoraWelcomeEntry(symbol: "person.2", title: tr("Trusted contacts"),
-                                   detail: overrides.contacts.map(\.name).joined(separator: " · "))
+            SetupOptionalCard(title: tr("Ways to skip a wait"), symbol: "person.2",
+                detail: overrides.contacts.isEmpty && overrides.phrasePolicies.isEmpty && overrides.passwordPolicies.isEmpty
+                    ? tr("A trusted contact, a phrase, or a password. You choose what each can approve.") : overridesSummary,
+                actionTitle: overrides.contacts.isEmpty && overrides.phrasePolicies.isEmpty && overrides.passwordPolicies.isEmpty
+                    ? tr("Set up") : tr("Edit")) { showOverrides = true }
+            VStack(alignment: .leading, spacing: DemoraSpace.m) {
+                SectionHeader(tr("Your setup"))
+                FactRow(label: tr("Waits"), value: policySummary)
+                FactRow(label: tr("First limit"), value: firstLimit.map {
+                    $0.name + " · " + String(format: tr("%d min a day"), $0.minutesPerDay)
+                } ?? tr("Not yet"))
+                FactRow(label: tr("Mornings & nights"), value: dayNightGroups.isEmpty
+                        ? tr("Not yet") : dayNightGroups.map(\.name).joined(separator: " · "))
+                FactRow(label: tr("Ways to skip a wait"), value: overridesSummary.isEmpty ? tr("Not yet") : overridesSummary)
             }
-            if !overrides.phrasePolicies.isEmpty {
-                DemoraWelcomeEntry(symbol: "text.cursor", title: tr("Phrases"),
-                                   detail: overrides.phrasePolicies.map(\.name).joined(separator: " · "))
-            }
-            if !overrides.passwordPolicies.isEmpty {
-                DemoraWelcomeEntry(symbol: "key", title: tr("Passwords"),
-                                   detail: overrides.passwordPolicies.map(\.name).joined(separator: " · "))
-            }
-            if let limit = firstLimit {
-                DemoraWelcomeEntry(symbol: "app.badge", title: limit.name,
-                                   detail: String(format: tr("Daily allowance: %d min"), limit.minutesPerDay))
-                Text(isDemo ? "Finishing shows your sample choices without saving them."
-                     : tr("This limit will be saved when you start. Your initial setup doesn't need to wait."))
-                    .font(.footnote).foregroundStyle(Ink.faint)
-            } else {
-                Text(tr("No limit yet. Add one whenever you're ready in Limits & blocks."))
-                    .foregroundStyle(Ink.faint)
-            }
+            .paperCard()
             if !accessGranted {
                 Text(tr("That's okay. Without Screen Time access Demora can't block apps, but you can continue and turn it on later."))
-                    .font(.footnote).foregroundStyle(Ink.faint)
+                    .demoraType(.meta).foregroundStyle(Ink.inkSoft)
             }
-            WeeklyUsageEstimateDraft(enabled: $wantsUsageEstimate, minutes: $usageEstimateMinutes)
-                .demoraSurface()
-            Text(tr("Find practical instructions and troubleshooting in You → Help & guide → Guide."))
-                .font(.footnote).foregroundStyle(Ink.faint).demoraSurface()
+            SetupEstimateDisclosure(enabled: $wantsUsageEstimate, minutes: $usageEstimateMinutes)
+            Text(tr("How Demora works is in You → Help & guide."))
+                .demoraType(.meta).foregroundStyle(Ink.inkSoft)
         }
     }
 
     private var dayNightStep: some View {
         VStack(alignment: .leading, spacing: 24) {
-            DemoraPageTitle(title: tr("Make room for your mornings and nights."))
+            Text(tr("Make room for your mornings and nights.")).demoraType(.pageTitle)
             Text(tr("Optional: choose your limit groups and extra apps, then give each day/night group its own timing. One Wake up tap starts all eligible waits."))
                 .foregroundStyle(Ink.faint)
             DayNightSetupDraftView(limits: dayNightLimits, groups: $dayNightGroups,
@@ -377,7 +431,7 @@ struct OnboardingView: View {
 
     private var overridesStep: some View {
         VStack(alignment: .leading, spacing: 24) {
-            DemoraPageTitle(title: tr("A backup, if you want one."))
+            Text(tr("A backup, if you want one.")).demoraType(.pageTitle)
             Text(tr("Optional: add a trusted contact, a phrase, or a password. Choose exactly what each can approve or unlock."))
                 .foregroundStyle(Ink.faint)
             OnboardingOverridesDraftView(overrides: $overrides, isDemo: isDemo)
@@ -415,7 +469,7 @@ struct OnboardingView: View {
             // Reading the notice and opening a system authorization sheet must
             // be separate actions. Also don't dismiss setup before a late notice
             // can be read. The next Continue proceeds without repeating it.
-            if step == 2 || step == 6 { return }
+            if step == 2 || step == 4 { return }
         }
         switch step {
         case 0:
@@ -450,12 +504,6 @@ struct OnboardingView: View {
         case 3:
             guard !wantsLimit || hasSelection else { return }
             move(to: 4)
-        case 4:
-            guard dayNightValid else { return }
-            move(to: 5)
-        case 5:
-            guard overrides.isValidInitialSetup else { return }
-            move(to: 6)
         default:
             guard policy.isValid, dayNightValid, overrides.isValidInitialSetup,
                   !wantsLimit || hasSelection else { return }
@@ -478,6 +526,7 @@ struct OnboardingView: View {
                 isCompleting = false
                 if saved, let chosenEstimate { WeeklyUsageEstimate.save(minutes: chosenEstimate) }
                 if !saved { showCompletionError = true }
+                if saved { UINotificationFeedbackGenerator().notificationOccurred(.success) }
             }
         }
     }
@@ -486,17 +535,23 @@ struct OnboardingView: View {
 /// Shared editorial furniture for first-run setup and the read-only 2.0 welcome.
 struct DemoraWelcomeProgress: View {
     @AppAccent private var accent
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let step: Int
     let total: Int
 
     var body: some View {
-        HStack(spacing: 8) {
-            ForEach(0..<total, id: \.self) { index in
-                Rectangle().fill(index <= step ? accent : Ink.rule).frame(height: 2)
+        VStack(alignment: .leading, spacing: DemoraSpace.xs) {
+            GeometryReader { geometry in
+                Capsule().fill(Ink.hairline)
+                    .overlay(alignment: .leading) {
+                        Capsule().fill(accent)
+                            .frame(width: geometry.size.width * CGFloat(min(total, max(1, step + 1))) / CGFloat(max(1, total)))
+                    }
             }
-            Text(String(format: tr("%d of %d"), step + 1, total))
-                .font(.system(.caption, design: .monospaced)).foregroundStyle(Ink.faint)
-                .fixedSize()
+            .frame(height: 4)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: step)
+            Text(String(format: tr("Step %d of %d"), step + 1, total))
+                .demoraType(.label).foregroundStyle(Ink.inkSoft)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(format: tr("Step %d of %d"), step + 1, total))
@@ -514,13 +569,54 @@ struct DemoraWelcomeEntry: View {
             Image(systemName: symbol).font(.system(size: 24, weight: .light))
                 .foregroundStyle(accent).frame(width: 30).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 8) {
-                Text(title).font(.system(.title3, design: .serif)).foregroundStyle(Ink.ink)
-                Text(detail).font(.subheadline).foregroundStyle(Ink.faint)
+                Text(title).demoraType(.cardTitle).foregroundStyle(Ink.ink)
+                Text(detail).demoraType(.meta).foregroundStyle(Ink.inkSoft)
             }
             .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Optional setup choices stay visible without looking like required steps.
+struct SetupOptionalCard: View {
+    @AppAccent private var accent
+    let title: String
+    let symbol: String
+    let detail: String
+    let actionTitle: String
+    let action: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DemoraSpace.m) {
+            DemoraWelcomeEntry(symbol: symbol, title: title, detail: detail)
+            Button(actionTitle, action: action)
+                .buttonStyle(.plain)
+                .font(DemoraType.button).foregroundStyle(accent)
+                .frame(minHeight: 44)
+        }
+        .paperCard()
+    }
+}
+
+/// Merely expands a local draft; no preference is saved until setup succeeds.
+struct SetupEstimateDisclosure: View {
+    @Binding var enabled: Bool
+    @Binding var minutes: Int
+    @State private var expanded = false
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            WeeklyUsageEstimateDraft(enabled: $enabled, minutes: $minutes)
+                .padding(.top, DemoraSpace.s)
+        } label: {
+            VStack(alignment: .leading, spacing: DemoraSpace.xxs) {
+                Text(tr("Your starting point")).demoraType(.cardTitle)
+                Text(tr("Add a rough weekly estimate")).demoraType(.meta).foregroundStyle(Ink.inkSoft)
+            }
+        }
+        .paperCard()
     }
 }
 

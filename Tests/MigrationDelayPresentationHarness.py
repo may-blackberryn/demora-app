@@ -43,8 +43,8 @@ class MigrationDelayPresentationTests(unittest.TestCase):
                              "struct DelayPolicySettingsView:", "\0")
 
     def test_optional_entry_does_not_commit_on_continue_or_finish(self):
-        page = between(self.welcome, "private var navigationPage:",
-                       "private var delaySetupOffer:")
+        page = between(self.welcome, "private var changesPage:",
+                       "private func countRow(")
         self.assertIn("delaySetupOffer", page)
         self.assertIn("If you skip this, your delay settings stay unchanged.", self.offer)
         self.assertIn("Countdowns already running keep their original deadline.", self.offer)

@@ -8,6 +8,7 @@ struct DelayPolicyPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             ForEach(DelayMode.allCases) { mode in
+                VStack(alignment: .leading, spacing: DemoraSpace.m) {
                 Button {
                     policy.mode = mode
                     if mode == .separate && policy.strictDelay < 60 { policy.strictDelay = 300 }
@@ -16,9 +17,9 @@ struct DelayPolicyPicker: View {
                         Image(systemName: policy.mode == mode ? "checkmark.circle.fill" : "circle")
                             .font(.title2).foregroundStyle(accent)
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(mode.label).font(.system(.title3, design: .serif))
+                            Text(mode.label).demoraType(.cardTitle)
                                 .foregroundStyle(Ink.ink)
-                            Text(mode.explanation).font(.subheadline).foregroundStyle(Ink.faint)
+                            Text(mode.explanation).demoraType(.meta).foregroundStyle(Ink.inkSoft)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -26,23 +27,32 @@ struct DelayPolicyPicker: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(policy.mode == mode ? .isSelected : [])
+                if policy.mode == mode {
+                    Rectangle().fill(Ink.hairline).frame(height: 1).accessibilityHidden(true)
+                    if policy.mode == .separate {
+                        DelayPicker(title: tr("More-strict delay"), seconds: $policy.strictDelay)
+                    }
+                    DelayPicker(title: policy.mode == .shared ? tr("Delay for every change")
+                                : tr("Less-strict delay"), seconds: $policy.lenientDelay)
+                    if policy.mode == .lenientOnly {
+                        Text(tr("More-strict changes apply immediately."))
+                            .demoraType(.meta).foregroundStyle(Ink.inkSoft)
+                    }
+                }
+                }
+                .paperCard()
+                .overlay {
+                    if policy.mode == mode {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .strokeBorder(accent, lineWidth: 1)
+                            .allowsHitTesting(false)
+                    }
+                }
             }
-            VStack(alignment: .leading, spacing: 12) {
-                if policy.mode == .separate {
-                    DelayPicker(title: tr("More-strict delay"), seconds: $policy.strictDelay)
-                }
-                DelayPicker(title: policy.mode == .shared ? tr("Delay for every change")
-                            : tr("Less-strict delay"), seconds: $policy.lenientDelay)
-                if policy.mode == .lenientOnly {
-                    Text(tr("More-strict changes apply immediately."))
-                        .font(.footnote).foregroundStyle(Ink.faint)
-                }
-                if !policy.isValid {
-                    Text(tr("Choose a delay of at least one minute."))
-                        .font(.footnote).foregroundStyle(Ink.danger)
-                }
+            if !policy.isValid {
+                Text(tr("Choose a delay of at least one minute."))
+                    .demoraType(.meta).foregroundStyle(Ink.danger)
             }
-            .demoraSurface()
         }
     }
 }

@@ -172,7 +172,9 @@ struct RootView: View {
                 tutorialActive: model.tutorial != nil,
                 welcomeSeen: redesignWelcomeSeen, introSeen: redesignIntroSeen
             ) {
-                RedesignIntroView { redesignIntroSeen = true }
+                RedesignIntroView(variant: RedesignIntroGate.variant(isSetUp: model.state.isSetUp)) {
+                    redesignIntroSeen = true
+                }
             } else if model.state.isSetUp, model.tutorial == nil, !redesignWelcomeSeen {
                 RedesignWelcomeView {
                     redesignWelcomeSeen = true

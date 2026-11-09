@@ -50,7 +50,12 @@ assert 'tr("Go to Today")' in insights and 'requestAuthorization' not in usage
 assert 'openSettingsURLString' not in usage and 'ScreenTimeReauthBanner' not in usage
 refresh = block(usage, 'private func refresh()')
 assert 'refreshedAt = Date()' in refresh and 'max(' not in refresh
-assert 'WeeklyUsageEstimateDraft' in onboarding and 'WeeklyUsageEstimateDraft' in welcome
+assert 'SetupEstimateDisclosure(enabled: $wantsUsageEstimate, minutes: $usageEstimateMinutes)' in onboarding
+assert 'SetupEstimateDisclosure(enabled: $wantsUsageEstimate, minutes: $usageEstimateMinutes)' in welcome
+disclosure = block(onboarding, 'struct SetupEstimateDisclosure:')
+assert 'WeeklyUsageEstimateDraft(enabled: $enabled, minutes: $minutes)' in disclosure
+assert '@State private var expanded = false' in disclosure
+assert 'WeeklyUsageEstimate.save' not in disclosure, 'expansion only stages a local estimate'
 setup = block(onboarding, 'private func continueSetup()')
 assert setup.index('demo.onComplete') < setup.index('WeeklyUsageEstimate.save')
 assert 'if saved, let chosenEstimate' in setup

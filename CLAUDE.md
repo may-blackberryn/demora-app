@@ -1,6 +1,6 @@
 # Demora iOS — primary development handoff
 
-Updated 2026-11-08 (Codex independent You verification). This is the iPhone/iPad handoff, not
+Updated 2026-11-09 (onboarding verified). This is the iPhone/iPad handoff, not
 the Mac app (the Mac app has its own handoff in the workspace root `CLAUDE.md`).
 Codex reads `AGENTS.md`, which points here. Keep durable decisions current here;
 put build decisions in `docs/redesign-review.md` and older implementation
@@ -44,7 +44,7 @@ Run `git status --short` and inspect the relevant diff. All current tracked and
 untracked work must be preserved unless the user explicitly says otherwise.
 Do not use reset/checkout to clean the tree or discard unfamiliar files.
 
-## Current state: full redesign in progress (2026-11-08)
+## Current state: full redesign in progress (2026-11-09)
 
 All redesign work is on branch **`design/full-redesign`** (You build through
 `7be509d`, handoff `5c5c502`, followed by the independent verification fixes).
@@ -72,7 +72,8 @@ You**. Read before any redesign work:
 | Rules (behind tab 1, still labelled "Limits") | Built, reviewed, re-verified, on the iPhone |
 | Insights (opened from Today until the tab switch) | Built, reviewed, re-verified, on the iPhone |
 | You (behind the Settings tab), commits `4492d82..7be509d` plus verification fixes | Independently reviewed and corrected; see `docs/redesign-review.md` → Independent You verification for evidence and remaining device checks |
-| Onboarding, shield and widgets | Spec approved; not built |
+| Onboarding, intro and migration welcome | Built, freshly reviewed and verified: 30 Python harnesses, both Swift harnesses, localization, unsigned Debug/Release and signed Debug. Device unavailable for install; see the dated setup build in the review log |
+| Shield and widgets | Spec approved; not built. Shield naming remains behind the device spike |
 | Four-tab switch (drop Delays/Schedules tabs, move badges, retire the legacy tutorial and its dormant code, restyle Calendar) | Not built |
 | Device test pass | Partial (owner tried Today) |
 
@@ -89,7 +90,7 @@ You**. Read before any redesign work:
   localization and diff checks pass. Unsigned Debug/Release and signed Debug
   pass; installed as dev demora on the owner's iPhone, but launch was denied
   because it was locked. Interactive checks remain. Details live in the log.
-- **Next build: onboarding/shield/widgets, then the four-tab switch**, one
+- **Next: shield/widgets, then the four-tab switch**, one
   approved step at a time. Shield phase 1 stays generic; phase 2 naming needs
   the signed-device token spike. Follow `docs/onboarding-shield-widgets-redesign.md`
   and the owner answers. Do not change engine/model/service behavior without
@@ -130,7 +131,7 @@ submitting are not.
 | Redesign foundations | `Latch/Theme.swift` (`InkPalette`, `Ink`, `DemoraType`), `DemoraComponents.swift`; report copy in `LatchReport/ReportTheme.swift` |
 | Delay policy | `Latch/DelayPolicyViews.swift` (shown as Rules → Your waits) |
 | You tab, appearance, help | `Latch/YouView.swift`, `YouPages.swift`, `YouPresentation.swift` (pure), `HowDemoraWorksView.swift`; remaining `SettingsView.swift` |
-| Onboarding/migration | `Latch/OnboardingView.swift`, `RedesignWelcomeView.swift`, `RedesignIntroView.swift`, `MathPhraseMigrationView.swift`, setup demo helpers |
+| Onboarding/migration | `Latch/OnboardingView.swift`, `RedesignWelcomeView.swift`, `RedesignIntroView.swift`, `SetupPresentation.swift` (pure welcome page identities), `MathPhraseMigrationView.swift`, setup demo helpers |
 | Trusted contacts and email security | `Latch/ContactsService.swift`, `AppAttest.swift`, `ContactsOverrideViews.swift` |
 | Ways to skip a wait, password/phrase challenges | `Latch/SkipWaitSheet.swift` (replaces the deleted `OverrideGateView.swift`), `SkipWayViews.swift`, `SkipWayEditors.swift`, `PhraseOverrides.swift` |
 | Private usage rendering | `LatchReport/` (self-contained; does not import all of `Shared`) |

@@ -28,8 +28,10 @@ delays = block((ROOT / "Latch/DelayPolicyViews.swift").read_text(), "struct Dela
 model = block((ROOT / "Latch/AppModel.swift").read_text(), "func completeInitialSetup(")
 welcome = (ROOT / "Latch/MathPhraseMigrationView.swift").read_text()
 
-assert "total: 7" in onboarding and "case 5: overridesStep" in onboarding
-assert 'step == 6 ? tr("Start using Demora")' in onboarding
+assert "total: 5" in onboarding and "default: makeYoursStep" in onboarding
+assert 'step == 4 ? tr("Start using Demora")' in onboarding
+assert '.sheet(isPresented: $showOverrides)' in onboarding and 'overridesStep' in onboarding
+assert '.sheet(isPresented: $showDayNight)' in onboarding and 'dayNightStep' in onboarding
 assert "overrides: chosenOverrides" in onboarding
 complete = block(onboarding, "private func continueSetup()")
 assert complete.index("demo.onComplete") < complete.index("model.completeInitialSetup")

@@ -17,7 +17,7 @@ root = (ROOT / "Latch/LatchApp.swift").read_text()
 demos = (ROOT / "Latch/DeveloperDemosView.swift").read_text()
 store = (ROOT / "Shared/SharedStore.swift").read_text()
 
-pure_types = intro[intro.index("enum RedesignIntroGate"):
+pure_types = intro[intro.index("enum RedesignIntroVariant"):
                    intro.index("/// The same short opening")]
 checks = []
 for unavailable, tutorial, welcome, seen in itertools.product([False, True], repeat=4):
@@ -29,6 +29,8 @@ for unavailable, tutorial, welcome, seen in itertools.product([False, True], rep
                   + ") == " + expected + ")")
 program = "import Foundation\n" + pure_types + "\n" + "\n".join(checks) + """
 precondition(RedesignIntroPhase.allCases == [.logo, .wordmark, .version, .tagline])
+precondition(RedesignIntroGate.variant(isSetUp: false) == .fresh)
+precondition(RedesignIntroGate.variant(isSetUp: true) == .upgrader)
 precondition(RedesignIntroPhase.allCases.reduce(UInt64(0)) { $0 + $1.holdNanoseconds }
              == 4_100_000_000)
 for phase in RedesignIntroPhase.allCases {
@@ -54,7 +56,8 @@ body = root[root.index("    var body: some View {", root.index("struct RootView"
             root.index("    private func requestUpdateReviewIfNeeded")]
 assert body.index("if model.setupStorageUnavailable") < body.index("RedesignIntroGate.shouldShow")
 assert body.index("RedesignIntroView") < body.index("RedesignWelcomeView") < body.index("OnboardingView()")
-assert "RedesignIntroView { redesignIntroSeen = true }" in body
+assert 'RedesignIntroView(variant: RedesignIntroGate.variant(isSetUp: model.state.isSetUp))' in body
+assert 'redesignIntroSeen = true' in body
 assert "static let redesignIntroKey" in store
 assert "@AppStorage(SharedStore.redesignIntroKey, store: SharedStore.defaults)" in root
 assert "showRedesignWelcome" not in root  # no underlying Home flash/presentation race
@@ -72,6 +75,8 @@ heading = intro[intro.index("    private func heading("):intro.index("    privat
 assert "HStack(alignment: .firstTextBaseline" in heading
 assert 'wordmark(fontSize: fontSize, reveals: reveals)' in heading
 assert 'Text("2.0")' in heading and intro.count('Text("2.0")') == 1
+assert 'if variant == .upgrader {' in heading
+assert 'variant == .fresh ? tr("Give yourself time to decide.")' in intro
 assert "fontSize * 0.65" in heading
 wordmark = intro[intro.index("    private func wordmark("):intro.index("    private func heading(")]
 assert 'IntroWordmarkReveal(progress: reveals ? 1 : 0)' in wordmark
@@ -160,6 +165,8 @@ with tempfile.TemporaryDirectory(prefix="demora-intro-layout-") as temporary:
 for forbidden in ("SharedStore.", "ChangeEngine.", "requestAuthorization", "ContactsRelay."):
     assert forbidden not in intro, forbidden
 assert demos.count("RedesignIntroView(") == 2
+assert 'RedesignIntroView(variant: .fresh, onComplete:' in demos
+assert 'RedesignIntroView(variant: .upgrader, onComplete:' in demos
 assert demos.count("onComplete: { introPlayed = true }, isDemo: true") == 2
 assert "finished = false; introPlayed = false" in demos
 assert "introPlayed = false; showWelcome = true" in demos

@@ -18,7 +18,7 @@ struct MathPhraseMigrationView: View {
                     #if DEBUG
                     if isDemo { DeveloperDemoNotice() }
                     #endif
-                    DemoraPageTitle(title: tr("From math to phrases"))
+                    Text(tr("From math to phrases")).demoraType(.pageTitle)
                     Text(tr("Math problems have been replaced with phrases. Since you used math overrides, you can add replacement phrases now without waiting."))
                         .foregroundStyle(Ink.faint)
                     Text(tr("Choose what each phrase can approve. This one-time offer covers pending changes, not extra time. Later additions and edits follow your delays."))
@@ -26,9 +26,9 @@ struct MathPhraseMigrationView: View {
                     ForEach(phrases) { phrase in
                         HStack {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(phrase.name).font(.system(.title3, design: .serif))
+                                Text(phrase.name).demoraType(.cardTitle)
                                 Text(phrase.allowed.map(\.label).sorted().joined(separator: " · "))
-                                    .font(.caption).foregroundStyle(Ink.faint)
+                                    .demoraType(.meta).foregroundStyle(Ink.inkSoft)
                             }
                             Spacer()
                             Button(role: .destructive) {
@@ -36,7 +36,7 @@ struct MathPhraseMigrationView: View {
                             } label: { Image(systemName: "minus.circle") }
                                 .accessibilityLabel(tr("Remove phrase"))
                         }
-                        .padding(.vertical, 8)
+                        .paperCard()
                     }
                     if phrases.count < 5 {
                         Button { showEditor = true } label: {
@@ -54,7 +54,7 @@ struct MathPhraseMigrationView: View {
                     } label: {
                         HStack {
                             if saving { ProgressView().tint(Ink.buttonText) }
-                            Text(tr("Use these phrases now"))
+                            Text(tr("Install phrases"))
                         }
                     }
                     .buttonStyle(DemoraPrimaryButtonStyle())

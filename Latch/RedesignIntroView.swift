@@ -2,7 +2,12 @@ import SwiftUI
 import UIKit
 
 /// Presentation only: separate from setup completion and migration state.
+enum RedesignIntroVariant { case fresh, upgrader }
+
 enum RedesignIntroGate {
+    static func variant(isSetUp: Bool) -> RedesignIntroVariant {
+        isSetUp ? .upgrader : .fresh
+    }
     static func shouldShow(storageUnavailable: Bool, tutorialActive: Bool,
                            welcomeSeen: Bool, introSeen: Bool) -> Bool {
         !storageUnavailable && !tutorialActive && !welcomeSeen && !introSeen
@@ -25,6 +30,7 @@ enum RedesignIntroPhase: Int, CaseIterable {
 /// The same short opening for fresh setup, upgrades, and isolated dev previews.
 /// Its owner decides whether to persist completion; this view never saves rules.
 struct RedesignIntroView: View {
+    var variant: RedesignIntroVariant = .upgrader
     let onComplete: () -> Void
     var isDemo = false
     var onClose: (() -> Void)? = nil
@@ -65,7 +71,8 @@ struct RedesignIntroView: View {
                                 .offset(y: expanded ? 0 : 20)
                         }
 
-                        Text(tr("more powerful, more intuitive"))
+                        Text(variant == .fresh ? tr("Give yourself time to decide.")
+                             : tr("more powerful, more intuitive"))
                             .font(.system(.subheadline, design: .serif))
                             .foregroundStyle(Ink.faint)
                             .multilineTextAlignment(.center)
@@ -122,9 +129,10 @@ struct RedesignIntroView: View {
     }
 
     private func heading(fontSize: CGFloat, reveals: Bool) -> some View {
-        let showsVersion = phase.rawValue >= RedesignIntroPhase.version.rawValue
+        let showsVersion = variant == .upgrader && phase.rawValue >= RedesignIntroPhase.version.rawValue
         return HStack(alignment: .firstTextBaseline, spacing: 0) {
             wordmark(fontSize: fontSize, reveals: reveals)
+            if variant == .upgrader {
             Text("2.0")
                 .font(.system(size: fontSize * 0.65, weight: .light, design: .serif))
                 .foregroundStyle(accent)
@@ -133,14 +141,17 @@ struct RedesignIntroView: View {
                        alignment: .trailing)
                 .clipped()
                 .opacity(showsVersion ? 1 : 0)
+            }
         }
     }
 
     private var accessibilityTitle: String {
         switch phase {
         case .logo, .wordmark: return "demora"
-        case .version: return "demora 2.0"
-        case .tagline: return "demora 2.0. " + tr("more powerful, more intuitive")
+        case .version: return variant == .upgrader ? "demora 2.0" : "demora"
+        case .tagline:
+            return variant == .upgrader ? "demora 2.0. " + tr("more powerful, more intuitive")
+                : "demora. " + tr("Give yourself time to decide.")
         }
     }
 

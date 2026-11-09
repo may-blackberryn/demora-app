@@ -75,7 +75,7 @@ private struct DeveloperOnboardingDemoView: View {
 
     var body: some View {
         if !introPlayed {
-            RedesignIntroView(onComplete: { introPlayed = true }, isDemo: true,
+            RedesignIntroView(variant: .fresh, onComplete: { introPlayed = true }, isDemo: true,
                               onClose: { dismiss() })
         } else if finished {
             NavigationStack {
@@ -266,7 +266,7 @@ private struct DeveloperMigrationDemoView: View {
     var body: some View {
         if showWelcome, let migrated = sample.migrated {
             if !introPlayed {
-                RedesignIntroView(onComplete: { introPlayed = true }, isDemo: true,
+                RedesignIntroView(variant: .upgrader, onComplete: { introPlayed = true }, isDemo: true,
                                   onClose: { dismiss() })
             } else {
                 RedesignWelcomeView(onComplete: { showWelcome = false }, demoState: migrated,
