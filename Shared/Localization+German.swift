@@ -6,6 +6,16 @@
 import Foundation
 
 let germanStrings: [String: String] = [
+    // Widget redesign: gallery and runtime copy (existing shared terms reused).
+    "Now & next": "Jetzt & danach",
+    "See what's on now and what's next.": "Sieh, was gerade aktiv ist und was als Nächstes kommt.",
+    "Your next change and when it lands.": "Deine nächste Änderung und wann sie wirksam wird.",
+    "Used up today": "Für heute aufgebraucht",
+    "Nothing blocked": "Nichts gesperrt",
+    "Changes you make wait here.": "Deine Änderungen warten hier.",
+    "Good morning. Tap to wake up.": "Guten Morgen. Tippe zum Aufwachen.",
+    "Open Demora": "Demora öffnen",
+    "Next %@ · %@": "Danach %@ · %@",
     // Generic shield.
     "Blocked by your Demora rules": "Durch deine Demora-Regeln blockiert",
     "You set this earlier so it would hold.": "Du hast das vorher so festgelegt, damit es Bestand hat.",

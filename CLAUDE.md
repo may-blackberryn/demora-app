@@ -1,6 +1,6 @@
 # Demora iOS — primary development handoff
 
-Updated 2026-11-09 (setup and generic shield verified). This is the iPhone/iPad handoff, not
+Updated 2026-11-09 (setup, shield and widget display). This is the iPhone/iPad handoff, not
 the Mac app (the Mac app has its own handoff in the workspace root `CLAUDE.md`).
 Codex reads `AGENTS.md`, which points here. Keep durable decisions current here;
 put build decisions in `docs/redesign-review.md` and older implementation
@@ -72,15 +72,15 @@ You**. Read before any redesign work:
 | Rules (behind tab 1, still labelled "Limits") | Built, reviewed, re-verified, on the iPhone |
 | Insights (opened from Today until the tab switch) | Built, reviewed, re-verified, on the iPhone |
 | You (behind the Settings tab), commits `4492d82..7be509d` plus verification fixes | Independently reviewed and corrected; see `docs/redesign-review.md` → Independent You verification for evidence and remaining device checks |
-| Onboarding, intro and migration welcome | Built, freshly reviewed and verified: 30 Python harnesses, both Swift harnesses, localization, unsigned Debug/Release and signed Debug. Device unavailable for install; see the dated setup build in the review log |
-| Generic shield | Built, independently reviewed; 31 Python harnesses, both Swift harnesses and unsigned Debug/Release pass. Rule naming remains behind the device spike |
-| Widgets | Spec approved; next step |
+| Onboarding, intro and migration welcome | Built, freshly reviewed and verified; now included in the installed combined dev build. Phone locked, so interactive setup checks remain; see the dated setup build in the review log |
+| Generic shield | Built, independently reviewed, verified and installed in the combined dev build. Rule naming remains behind the device spike |
+| Widgets | Display/navigation built, independently reviewed and verified: 31 Python harnesses, existing Swift harnesses, 40 actual-model checks per environment, both localization generators, unsigned Debug/Release and signed Debug. Installed; launch denied Locked. Live wake reminder deferred pending the owner's read-boundary approval |
 | Four-tab switch (drop Delays/Schedules tabs, move badges, retire the legacy tutorial and its dormant code, restyle Calendar) | Not built |
 | Device test pass | Partial (owner tried Today) |
 
 ### Open items to do first
 
-- **Report the independent You checkpoint before building anything new.**
+- **Completed independent You checkpoint (reported before new builds).**
   App Attest was a stale suspicion: its bytes and Git blob are identical before
   and after You; no revert was needed. Five new autofill hints were removed
   from add/change-password forms (the old skip-gate hint stays). Fixed six
@@ -91,11 +91,17 @@ You**. Read before any redesign work:
   localization and diff checks pass. Unsigned Debug/Release and signed Debug
   pass; installed as dev demora on the owner's iPhone, but launch was denied
   because it was locked. Interactive checks remain. Details live in the log.
-- **Next: widgets, then the four-tab switch**, one
+- **Next: four-tab switch**, one
   approved step at a time. Shield phase 1 stays generic; phase 2 naming needs
   the signed-device token spike. Follow `docs/onboarding-shield-widgets-redesign.md`
   and the owner answers. Do not change engine/model/service behavior without
   first asking the owner. No new feature was started during the You checkpoint.
+- **Wake widget reminder approval pending:** current wake readers can repair
+  clock/runtime metadata; publishing cached Home state can overwrite newer
+  monitor projections. Ask before adding a narrowly scoped read-safe API and
+  post-wake refresh hook. The optional schema/renderer is tested, but every live
+  widget publication writes nil wakeDue until this is authorized and verified.
+  No engine, runtime-file format or enforcement change was made for widgets.
 - **Owner decision pending (don't implement without asking):** should adding,
   removing or pausing contacts stop being skippable via the "Trusted contacts"
   capability, and should new contacts stop getting it by default? Both are
@@ -137,7 +143,7 @@ submitting are not.
 | Ways to skip a wait, password/phrase challenges | `Latch/SkipWaitSheet.swift` (replaces the deleted `OverrideGateView.swift`), `SkipWayViews.swift`, `SkipWayEditors.swift`, `PhraseOverrides.swift` |
 | Private usage rendering | `LatchReport/` (self-contained; does not import all of `Shared`) |
 | Usage report host vs extension | `Latch/UsageInsightsView.swift` vs `LatchReport/UsageInsightsView.swift` — different responsibilities |
-| Widgets/notifications | `LatchWidgets/`, `Shared/DemoraWidgetSnapshot.swift`, `DemoraNotifications.swift` |
+| Widgets/notifications | `LatchWidgets/DemoraWidgets.swift`, `WidgetTheme.swift`, generated `Localizable.xcstrings`; `Shared/DemoraWidgetSnapshot.swift` (projection/pure decisions/navigation URLs), `DemoraNotifications.swift` |
 | Translations | `Shared/Localization*.swift`, generated `LatchReport/UsageInsightsLocalization.swift` |
 
 ## Non-negotiable behavior and safety
@@ -264,6 +270,7 @@ swiftc Shared/PhraseWords.swift Tests/PhraseWordsHarness.swift -o /tmp/phrase-te
 (sed -n '/^enum ContactPermissionPresentation {/,/^}/p' Latch/ContactPermissionsEditor.swift; \
   cat Tests/ContactPermissionsPresentationHarness.swift) | swift - || verify_failed=1
 python3 Tests/GenerateUsageLocalization.py --check || verify_failed=1
+python3 Tests/GenerateWidgetLocalization.py --check || verify_failed=1
 git diff --check || verify_failed=1
 exit "$verify_failed"
 )
@@ -279,6 +286,12 @@ Translations: English + Spanish, German, French, Portuguese, Polish, Turkish,
 Hindi (not Urdu). Update all catalogs for visible copy. Report translations are
 generated from these catalogs; use the generator's `--patch` output through a
 patch tool rather than hand-diverging the generated snapshot.
+Widget gallery metadata is generated by `Tests/GenerateWidgetLocalization.py`
+from the same catalogs; use its `--patch`/`--check` workflow too. Gallery metadata
+follows the system language, while published widget copy follows in-app language.
+Widget taps only navigate through `demora-dev://today|changes` (Debug) or
+`demora://today|changes` (Release). Their schemes must remain configuration-
+specific in both the host Info.plist/build settings and pure destination type.
 
 Unsigned device build example (run Debug then Release sequentially; substitute
 the configuration, using a task-specific local DerivedData directory):

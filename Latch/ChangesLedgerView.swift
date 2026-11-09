@@ -167,6 +167,8 @@ struct ChangesLedgerView: View {
     /// A change to bring into view when the ledger opens (from a rule's
     /// pending line or summary sheet).
     var scrollTo: PendingChange.ID? = nil
+    /// A navigation request resets transient ledger UI, never saved requests.
+    var navigationReset: UUID? = nil
     @State private var selecting = false
     @State private var selection: Set<UUID> = []
     @State private var confirmBulkCancel = false
@@ -252,6 +254,13 @@ struct ChangesLedgerView: View {
             let pendingIDs = Set(state.pending.map(\.id))
             selection.formIntersection(pendingIDs)
             if pendingIDs.isEmpty { selecting = false }
+        }
+        .onChange(of: navigationReset) { _ in
+            skipTarget = nil
+            notice = nil
+            confirmBulkCancel = false
+            selecting = false
+            selection = []
         }
         .confirmationDialog(tr("Cancel these changes?"), isPresented: $confirmBulkCancel,
                             titleVisibility: .visible) {

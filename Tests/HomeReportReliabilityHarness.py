@@ -115,7 +115,12 @@ struct DemoraTabBar: View {
     let number: Int
     init() { Self.created += 1; number = Self.created }
 }
+enum WidgetDestination { case today, changes }
 struct HomeView: View {
+    @Binding var widgetDestination: WidgetDestination?
+    init(widgetDestination: Binding<WidgetDestination?> = .constant(nil)) {
+        _widgetDestination = widgetDestination
+    }
     @StateObject var lifetime = Lifetime()
     var body: some View { Text("home \(lifetime.number)") }
 }
@@ -126,6 +131,7 @@ struct YouView: View { var body: some View { Text("you") } }
 struct DelaysOverridesTabView: View { var body: some View { Text("delays") } }
 struct RetainedRoot: View {
     @EnvironmentObject var model: Model
+    @State private var widgetDestination: WidgetDestination?
     var body: some View { mainTabView }
     private var mainTabView: some View {
 '''+main_view+r'''

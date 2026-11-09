@@ -372,7 +372,7 @@ assert positions == sorted(positions), ('Today order', order)
 assert 'if !needsWakeTap {' in today and 'Label(tr("Block now")' in today and 'SessionStartView()' in today, \
     'Block now pinned, hidden while Wake up shows'
 assert '.safeAreaInset(edge: .bottom)' in today
-assert 'ChangesLedgerView(outgoing: activeOutgoing, onRequestsChanged: loadOutgoing,\n                              scrollTo: ledgerTarget)' in today
+assert 'ChangesLedgerView(outgoing: activeOutgoing, onRequestsChanged: loadOutgoing,\n                                  scrollTo: ledgerTarget, navigationReset: ledgerNavigationReset)' in today
 assert 'LimitEditorView(existing: nil)' in today and 'model.selectedTab = 1 } label' not in today, \
     'the empty state opens the editor, not a tab switch'
 # You build (Y4): extra time opens Skip the wait on the step's own method.

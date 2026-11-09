@@ -8,6 +8,7 @@
 import SwiftUI
 import UIKit
 import StoreKit
+import WidgetKit
 
 @main
 struct LatchApp: App {
@@ -59,6 +60,9 @@ struct LatchApp: App {
                 .onChange(of: appearanceRaw) { newValue in
                     SharedStore.defaults.set(newValue, forKey: "latch.appearance")
                 }
+                .onChange(of: accentColorRaw) { _ in
+                    WidgetCenter.shared.reloadAllTimelines()
+                }
         }
         .onChange(of: scenePhase) { phase in
             guard !model.setupStorageUnavailable else { return }
@@ -91,6 +95,7 @@ struct RootView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.requestReview) private var requestReview
     @State private var tutorialHoles: [CGRect] = []
+    @State private var widgetDestination: WidgetDestination?
     @AppStorage(SharedStore.redesignIntroKey, store: SharedStore.defaults)
     private var redesignIntroSeen = false
     @AppStorage(SharedStore.redesignWelcomeKey,
@@ -110,7 +115,7 @@ struct RootView: View {
                     ZStack {
                         // Keep the Home navigation/report hierarchy alive. A
                         // tab switch must not discard Apple's remote report.
-                        HomeView()
+                        HomeView(widgetDestination: $widgetDestination)
                             .opacity(homeSelected ? 1 : 0)
                             .allowsHitTesting(homeSelected)
                             .accessibilityHidden(!homeSelected)
@@ -228,6 +233,12 @@ struct RootView: View {
             } else {
                 OnboardingView()
             }
+        }
+        .onOpenURL { url in
+            guard model.state.isSetUp, !model.inTutorial, !model.setupStorageUnavailable,
+                  let destination = WidgetDestination.parse(url) else { return }
+            model.selectedTab = 0
+            widgetDestination = destination
         }
     }
 

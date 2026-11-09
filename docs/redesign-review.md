@@ -575,3 +575,90 @@ This shield build was **not installed or interactively verified**. When the
 phone is connected, try light/dark and blue/red, a blocked app and website,
 German/Hindi wrapping and Close. Use existing rules; do not reset state for
 the check. This does not complete the separate token-equality spike.
+
+## Widget display and navigation build — 2026-11-09
+
+O10–O12 implemented; O13's live wake observation remains **deferred pending
+owner approval** of a read-safe engine boundary. The optional schema and
+renderer support a wake interval, but every live publisher currently writes
+nil. Do not describe the reminder as enabled.
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| Paper/card/ink, the chosen blue/brick accent, serif rule names/times and system labels | Match foundations without compiling the host theme/engine into widgets. Ten palette pairs and 22 AA text/background combinations are checked | Yes |
+| iOS 17 container background/system margins; padded iOS 16 fallback | Adopt WidgetKit's presentation rather than baking a navy rectangle behind it. Accessory families have no painted card background | Yes |
+| Small/medium Now & next and Changing soon; inline/rectangular Lock Screen families | Same existing widget kinds/configurations, no interactive intents or new target. Only the app may act on rules | Yes |
+| Optional style/direction/copy fields; old snapshots decode with nil styles/directions and no guessed chip | Add presentation semantics without changing the persisted rule schema or breaking installed widget configurations | Yes |
+| Empty Now copy stays No timed rule active rather than Nothing blocked | The projection does not contain every permanent general or sleep block; absence of a timed item is not evidence all apps are available | Yes |
+| Next shows a future start or change, not the current item's end again | Until already displays that end. End boundaries remain timeline entries, so they still trigger a display transition | Yes |
+| Names/summaries and combined accessibility groups marked privacy-sensitive | Keep private user-written rule content inside the system redaction boundary. Actual Lock Screen redaction remains a device check | Yes |
+| Loading placeholders are redacted; gallery snapshots are readable, synthetic and never load saved rules | A useful preview must not be a permanent skeleton or disclose real configuration | Yes |
+| Four gallery strings generated from the seven existing dictionaries plus English | Gallery metadata follows system language; published copy follows the in-app language. Generator checks inline entries, duplicates and format placeholders | Yes |
+| Separate demora-dev / demora URL schemes, only today/changes hosts, no query/path/fragment/user/port/foreign scheme | Route to a specific screen without IDs or mutation commands. Setup/recovery/tutorial gates remain in place | Yes |
+| Today owns an explicit navigation path; widget taps reset transient Home and ledger UI | Opening Today/Changes must not restore an unrelated report, approval sheet or alert. No Home .id/remount, saved cancellation or rule action | Yes |
+| Accent changes request widget timeline reloads | Read-only palette preferences need a refresh request; the system still controls render timing | Yes |
+| Defer new wake publishing rather than calling status readers from the snapshot or publishing cached full UI state | Those readers can repair clocks, degradation or split readiness. A cached Home publication can overwrite newer monitor data; copying private runtime formats would create a second semantics implementation | Owner approval requested |
+
+A fresh independent read-only reviewer found a retained ledger override modal
+and a retained Home alert on repeated widget navigation; both now reset using
+an explicit transient ledger token. These changes never cancel/apply saved
+requests. The reviewer also identified permanently redacted gallery snapshots;
+only loading placeholders now redact. Lead inspection of synthetic native
+macOS renders caught a truncated Looser chip; fixed horizontal chip sizing and
+allowed the heading to wrap. Re-review found no outstanding actionable issue.
+
+`WidgetShieldPresentationHarness.py` compiles the **actual snapshot** with
+WIDGET_EXTENSION for both Debug and Release: 40 checks each, including legacy
+decoding, nil directions, future starts, overlaps/free/spent/empty, fifty
+unordered changes, deduplicated transitions, current-day wake support and DST
+23/25-hour midnights/first repeated ceilings. Wake test data is synthetic, not
+evidence of live publication. Source guards cover family/configuration
+stability, read-only preferences, privacy, no engine/network/interactive paths,
+separate schemes, bounded URL parsing, transient navigation resets and gallery
+preview/loading separation. The Home lifetime fixture was updated for the
+new binding and still proves the actual root retains Home on seven switches;
+no weakened lifecycle assertion or report remount was introduced.
+
+`Tests/RenderWidgetPreview.py` reproduces the inspected English/light,
+German/dark/red and Hindi/light layouts. It excludes the provider, substitutes
+fixture-only color/family environments (accessory families are unavailable on
+macOS), and never loads real preferences/rules/usage. These are **not iOS
+WidgetKit screenshots** or proof of system margins, tint, traits, live timeline
+delivery, Lock Screen privacy, Dynamic Type or VoiceOver behavior.
+
+References: [widget backgrounds](https://developer.apple.com/documentation/widgetkit/displaying-the-right-widget-background),
+[widget privacy](https://developer.apple.com/documentation/widgetkit/creating-a-widget-extension),
+[navigation links](https://developer.apple.com/documentation/widgetkit/linking-to-specific-app-scenes-from-your-widget-or-live-activity).
+
+Final verification: all **31 Python harnesses**, both pre-existing standalone
+Swift harnesses, the actual widget model's 40 checks in each build environment,
+both generated-localization checks and `git diff --check` passed. The first
+full run exposed a native Home-lifetime fixture missing the new binding; its
+stub now models that binding and all original retention assertions still run.
+Logs are in `/Users/matiasmoran/Library/Logs/DemoraRedesign/`:
+`widget-verify-final.log`, `widget-debug.log`, `widget-release.log`,
+`widget-signed-debug.log` and the three `widget-preview-*.png` fixtures.
+
+Sequential unsigned arm64 Debug and Release passed with no warnings, followed
+by signed Debug (only skipped AppIntents metadata extraction).
+`codesign --verify --deep --strict` passed. Built host Info.plists contain only
+their own navigation scheme and retain **dev demora** / **demora** names; the
+widget bundle contains all eight compiled Localizable.strings resources.
+No enforcement, saved-rule model/store, AppModel, AppAttest or contact-service
+file changed. Project changes are only the two host navigation-scheme values;
+no signing, entitlement, target, dependency or version changes.
+
+Installed successfully on **iphone de may** as `may.latch.dev`; launch was
+denied because the phone was **Locked**, not an observed crash. This combined
+artifact includes the setup and generic-shield steps, but their interactive
+checks remain unperformed. No production email/contact round trip was sent.
+Nothing pushed, merged, uploaded or submitted.
+
+When unlocked: add both Home Screen sizes and Lock Screen families; try the
+blue/red accent in light/dark, long German/Hindi names, empty/pending states,
+system tint and sensitive-content redaction. Tap each widget from another
+tab, from Today → Insights/Help, and while a Changes override sheet or alert
+is open. It must land on Today/Changes with no stale modal and without acting
+on a rule. Confirm the co-installed App Store app does not open. Then check
+the generic shield/Close and Setup demos described above. No reset of saved
+rules, markers, authorization or real device data is required for these checks.

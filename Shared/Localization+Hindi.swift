@@ -6,6 +6,16 @@
 import Foundation
 
 let hindiStrings: [String: String] = [
+    // Widget redesign: gallery and runtime copy (existing shared terms reused).
+    "Now & next": "अभी और आगे",
+    "See what's on now and what's next.": "देखें कि अभी क्या सक्रिय है और आगे क्या होगा।",
+    "Your next change and when it lands.": "आपका अगला बदलाव और वह कब लागू होगा।",
+    "Used up today": "आज का समय खत्म",
+    "Nothing blocked": "कुछ भी ब्लॉक नहीं है",
+    "Changes you make wait here.": "आपके किए गए बदलाव यहाँ इंतज़ार करते हैं।",
+    "Good morning. Tap to wake up.": "सुप्रभात। जागने के लिए टैप करें।",
+    "Open Demora": "Demora खोलें",
+    "Next %@ · %@": "आगे %@ · %@",
     // Generic shield.
     "Blocked by your Demora rules": "आपके Demora नियमों के अनुसार ब्लॉक है",
     "You set this earlier so it would hold.": "आपने इसे पहले ही तय किया था ताकि यह फ़ैसला कायम रहे।",

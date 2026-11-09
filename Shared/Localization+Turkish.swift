@@ -6,6 +6,16 @@
 import Foundation
 
 let turkishStrings: [String: String] = [
+    // Widget redesign: gallery and runtime copy (existing shared terms reused).
+    "Now & next": "Şimdi ve sonra",
+    "See what's on now and what's next.": "Şu an neyin etkin olduğunu ve sırada ne olduğunu görün.",
+    "Your next change and when it lands.": "Sıradaki değişikliğiniz ve ne zaman uygulanacağı.",
+    "Used up today": "Bugünlük tükendi",
+    "Nothing blocked": "Engellenen bir şey yok",
+    "Changes you make wait here.": "Yaptığınız değişiklikler burada bekler.",
+    "Good morning. Tap to wake up.": "Günaydın. Uyanmak için dokunun.",
+    "Open Demora": "Demora’yı aç",
+    "Next %@ · %@": "Sıradaki %@ · %@",
     // Generic shield.
     "Blocked by your Demora rules": "Demora kurallarınız tarafından engellendi",
     "You set this earlier so it would hold.": "Bu kararın geçerli kalması için bunu önceden ayarladınız.",

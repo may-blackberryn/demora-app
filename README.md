@@ -188,8 +188,13 @@ Features:
 - Five-minute limit warnings from DeviceActivity's threshold warning callback (not an
   estimated usage counter); suppressed for limits of 5 minutes or less and while
   a free period is active. Optional five-minute free-period boundary reminders.
-- Read-only Now & Next and Pending Change home-screen widgets. They consume a
-  small App Group projection, never FamilyControls tokens or raw usage.
+- Read-only Now & next and Changing soon widgets for the Home Screen and
+  inline/rectangular Lock Screen families. They consume a small App Group
+  projection, never FamilyControls tokens or raw usage, with paper/ink styling,
+  optional direction chips and localized gallery metadata. Taps only navigate
+  to Today or Changes; dev/release schemes are separate. Live wake reminders
+  remain deferred pending a read-safe engine boundary; no interactive wake or
+  time grant runs in the widget.
 - The generic block screen uses Demora's paper/ink palette, original mark and
   Close action. It never guesses which rule blocked the app or promises an
   instant unblock. Naming a rule remains gated on a signed-device token test.

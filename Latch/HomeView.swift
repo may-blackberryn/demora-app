@@ -45,6 +45,12 @@ struct ScreenTimeReauthBanner: View {
 
 
 struct HomeView: View {
+    @Binding var widgetDestination: WidgetDestination?
+
+    init(widgetDestination: Binding<WidgetDestination?> = .constant(nil)) {
+        _widgetDestination = widgetDestination
+    }
+
     @AppAccent private var accent
     @EnvironmentObject var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
@@ -66,8 +72,10 @@ struct HomeView: View {
     @State private var portionLimitIDs: Set<UUID> = []
     @State private var extraRequestPending: Set<UUID> = []
     @State private var extraTimes: [UUID: ExtraTimeState] = [:]
-    @State private var showLedger = false
+    private enum TodayRoute: Hashable { case changes, insights, help }
+    @State private var todayPath: [TodayRoute] = []
     @State private var ledgerTarget: PendingChange.ID?
+    @State private var ledgerNavigationReset: UUID?
     @State private var ruleSheet: RuleSummaryRequest?
     @State private var showAddLimit = false
     @State private var showSession = false
@@ -79,7 +87,7 @@ struct HomeView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $todayPath) {
             Group {
                 // An interrupted legacy tutorial resumes on the Home it was
                 // written for; everyone else gets Today.
@@ -114,8 +122,10 @@ struct HomeView: View {
             .onAppear {
                 refreshSnapshot(state: model.state)
                 loadOutgoing()
+                consumeWidgetDestination()
                 if model.inTutorial && model.selectedTab == 0 { model.tutorialScreen = "home" }
             }
+            .onChange(of: widgetDestination) { _ in consumeWidgetDestination() }
             .onChange(of: selecting) { _ in syncApplyBar() }
             .onChange(of: selection) { _ in syncApplyBar() }
             .onDisappear { model.applyBarVisible = false }
@@ -147,6 +157,24 @@ struct HomeView: View {
     }
 
     // MARK: Today (docs/today-redesign.md §5)
+
+    private func consumeWidgetDestination() {
+        guard model.state.isSetUp, !model.inTutorial, !model.setupStorageUnavailable,
+              let destination = widgetDestination else { return }
+        // Navigate out of transient UI without changing/cancelling saved rules
+        // or requests, and never remount the retained private usage report.
+        ruleSheet = nil
+        skipTarget = nil
+        homeNotice = nil
+        showAddLimit = false
+        showSession = false
+        selecting = false
+        selection = []
+        ledgerTarget = nil
+        ledgerNavigationReset = UUID()
+        todayPath = destination == .changes ? [.changes] : []
+        widgetDestination = nil
+    }
 
     private var today: some View {
         ScrollViewReader { proxy in
@@ -207,13 +235,20 @@ struct HomeView: View {
                 .background(Ink.paper)
             }
         }
-        .navigationDestination(isPresented: $showLedger) {
-            ChangesLedgerView(outgoing: activeOutgoing, onRequestsChanged: loadOutgoing,
-                              scrollTo: ledgerTarget)
+        .navigationDestination(for: TodayRoute.self) { route in
+            switch route {
+            case .changes:
+                ChangesLedgerView(outgoing: activeOutgoing, onRequestsChanged: loadOutgoing,
+                                  scrollTo: ledgerTarget, navigationReset: ledgerNavigationReset)
+            case .insights:
+                UsageInsightsView().toolbar(.visible, for: .navigationBar)
+            case .help:
+                HelpGuideView().toolbar(.visible, for: .navigationBar)
+            }
         }
         .ruleSummary($ruleSheet) { id in
             ledgerTarget = id
-            showLedger = true
+            todayPath = [.changes]
         }
         .sheet(isPresented: $showAddLimit) { LimitEditorView(existing: nil) }
         .sheet(isPresented: $showSession) { SessionStartView() }
@@ -271,7 +306,7 @@ struct HomeView: View {
                 SectionHeader(tr("Changing soon")) {
                     SectionHeaderLink(title: String(format: tr("All %d"), pending.count)) {
                         ledgerTarget = nil
-                        showLedger = true
+                        todayPath = [.changes]
                     }
                 }
                 ForEach(pending.prefix(2)) { change in
@@ -297,16 +332,12 @@ struct HomeView: View {
     /// Insights and help stay here until their tabs exist (§8).
     private var moreLinks: some View {
         VStack(alignment: .leading, spacing: 0) {
-            NavigationLink {
-                UsageInsightsView().toolbar(.visible, for: .navigationBar)
-            } label: {
+            NavigationLink(value: TodayRoute.insights) {
                 moreRow(tr("Insights"), symbol: "chart.bar")
             }
             Rectangle().fill(Ink.hairline).frame(height: 1)
                 .padding(.leading, DemoraSpace.cardPadding)
-            NavigationLink {
-                HelpGuideView().toolbar(.visible, for: .navigationBar)
-            } label: {
+            NavigationLink(value: TodayRoute.help) {
                 moreRow(tr("Help"), symbol: "questionmark.circle")
             }
         }

@@ -77,6 +77,16 @@ func tr(_ key: String) -> String {
 }
 
 let spanishStrings: [String: String] = [
+    // Widget redesign: gallery and runtime copy (existing shared terms reused).
+    "Now & next": "Ahora y después",
+    "See what's on now and what's next.": "Ve qué está activo ahora y qué viene después.",
+    "Your next change and when it lands.": "Tu próximo cambio y cuándo se aplica.",
+    "Used up today": "Agotado por hoy",
+    "Nothing blocked": "Nada bloqueado",
+    "Changes you make wait here.": "Los cambios que haces esperan aquí.",
+    "Good morning. Tap to wake up.": "Buenos días. Toca para despertar.",
+    "Open Demora": "Abrir Demora",
+    "Next %@ · %@": "Después %@ · %@",
     // Generic shield.
     "Blocked by your Demora rules": "Bloqueado por tus reglas de Demora",
     "You set this earlier so it would hold.": "Lo configuraste antes para que se mantuviera.",

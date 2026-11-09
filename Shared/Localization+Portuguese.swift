@@ -6,6 +6,16 @@
 import Foundation
 
 let portugueseStrings: [String: String] = [
+    // Widget redesign: gallery and runtime copy (existing shared terms reused).
+    "Now & next": "Agora e a seguir",
+    "See what's on now and what's next.": "Veja o que está ativo agora e o que vem a seguir.",
+    "Your next change and when it lands.": "Sua próxima alteração e quando ela entra em vigor.",
+    "Used up today": "Esgotado por hoje",
+    "Nothing blocked": "Nada bloqueado",
+    "Changes you make wait here.": "As alterações que você faz aguardam aqui.",
+    "Good morning. Tap to wake up.": "Bom dia. Toque para acordar.",
+    "Open Demora": "Abrir Demora",
+    "Next %@ · %@": "A seguir %@ · %@",
     // Generic shield.
     "Blocked by your Demora rules": "Bloqueado pelas suas regras do Demora",
     "You set this earlier so it would hold.": "Você definiu isso antes para que essa decisão fosse mantida.",
