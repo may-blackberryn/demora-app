@@ -77,6 +77,10 @@ func tr(_ key: String) -> String {
 }
 
 let spanishStrings: [String: String] = [
+    // Generic shield.
+    "Blocked by your Demora rules": "Bloqueado por tus reglas de Demora",
+    "You set this earlier so it would hold.": "Lo configuraste antes para que se mantuviera.",
+    "Open Demora to see what's on, or to ask for extra time if your limit has it.": "Abre Demora para ver qué está activo o para pedir tiempo extra si tu límite lo permite.",
     // Approved onboarding redesign.
     "Passwords": "Contraseñas",
     "Optional. This is a real limit, not a demo.": "Opcional. Es un límite real, no una demostración.",

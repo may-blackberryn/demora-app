@@ -532,3 +532,46 @@ estimate), then migration (math offer once, 2/3 pages, Skip, day/night save,
 delayed policy editor). Demos must never change real rules or welcome markers.
 Fresh-install permission sheets, iOS large text/VoiceOver, the pinned footer and
 extras' pushed editor dismissal remain device checks. Nothing pushed or merged.
+
+## Generic shield build — 2026-11-09
+
+Phase 1 of O7–O9 only. Rule names/end times remain behind the signed-device
+token-equality spike; the widget's overall active rule cannot identify what
+blocked a particular app.
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| Solid paper/ink, bounded 56-point original Demora mark, generic explanation and Close | Remove the obsolete immediate-unblock promise; all four application/category/domain callbacks return the same honest display | Yes |
+| Read only the configuration-specific App Group accent, not the saved rules | Display must not call `SharedStore.loadState()` (recovery writes), inspect private tokens, or change enforcement | Yes |
+| Paper-colored primary label rather than the proposal's literal white | White fails AA against the pale dark-mode accents. The matching light/dark paper foreground passes on both accents, as in app foundations | Yes |
+| Reuse the unmodified app PNG in the extension's own synchronized catalog; thumbnail and SF Symbol fallback | The extension cannot read the host catalog; no new target/project/signing change is needed | Yes |
+| Translate the generic copy and correct Turkish Close from “near” to the action Kapat | Seven catalogs plus English fallback; keep the shared action semantically correct | Yes |
+| No secondary button, action extension, instant grant or guessed rule details | Approved phase-1 scope, not an enforcement or capability change | Preserved |
+
+Fresh independent read-only review found no concrete bugs. The built Debug
+`LatchShieldUI.appex/Assets.car` contains DemoraLogo; its source bytes match the
+original SHA-256. `WidgetShieldPresentationHarness.py` checks five exact
+foundation palette pairs, eight AA contrast pairs, all four callbacks, read-only
+accent/group selection, asset identity and four strings × seven catalogs.
+The full **31 Python harnesses**, both Swift harnesses, generated report
+localization and diff checks passed (`shield-verify.log`). System trait
+propagation, logo sizing/tint, localized wrapping and default Close behavior
+remain signed-device checks, not established by source guards or compilation.
+
+API references: [ManagedSettingsUI](https://developer.apple.com/documentation/managedsettingsui),
+[shield blur](https://developer.apple.com/documentation/managedsettingsui/shieldconfiguration/backgroundblurstyle),
+[primary button fill](https://developer.apple.com/documentation/managedsettingsui/shieldconfiguration/primarybuttonbackgroundcolor).
+
+Sequential unsigned arm64 Debug and Release passed (`shield-debug.log`,
+`shield-release.log`). Debug emitted only the skipped AppIntents metadata
+warning; Release emitted no warnings. These are compilation checks, not the
+token spike or proof of system shield behavior. No engine/model/service,
+project/signing or version changes, and nothing pushed or merged.
+
+Signed Debug also passed with only skipped AppIntents metadata extraction;
+`codesign --verify --deep --strict` passed. The phone appeared paired, but the
+install connection was reset and launch could not acquire device services.
+This shield build was **not installed or interactively verified**. When the
+phone is connected, try light/dark and blue/red, a blocked app and website,
+German/Hindi wrapping and Close. Use existing rules; do not reset state for
+the check. This does not complete the separate token-equality spike.

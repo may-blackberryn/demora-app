@@ -6,6 +6,10 @@
 import Foundation
 
 let portugueseStrings: [String: String] = [
+    // Generic shield.
+    "Blocked by your Demora rules": "Bloqueado pelas suas regras do Demora",
+    "You set this earlier so it would hold.": "Você definiu isso antes para que essa decisão fosse mantida.",
+    "Open Demora to see what's on, or to ask for extra time if your limit has it.": "Abra o Demora para ver o que está ativo ou pedir tempo extra se o seu limite tiver essa opção.",
     // Approved onboarding redesign.
     "Passwords": "Senhas",
     "Phrases": "Frases",

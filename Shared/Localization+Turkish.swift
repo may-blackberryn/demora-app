@@ -6,6 +6,10 @@
 import Foundation
 
 let turkishStrings: [String: String] = [
+    // Generic shield.
+    "Blocked by your Demora rules": "Demora kurallarınız tarafından engellendi",
+    "You set this earlier so it would hold.": "Bu kararın geçerli kalması için bunu önceden ayarladınız.",
+    "Open Demora to see what's on, or to ask for extra time if your limit has it.": "Nelerin etkin olduğunu görmek veya sınırınızda bu seçenek varsa ek süre istemek için Demora'yı açın.",
     // Approved onboarding redesign.
     "Passwords": "Parolalar",
     "Phrases": "İfadeler",
@@ -826,7 +830,7 @@ let turkishStrings: [String: String] = [
     "Changes that make things STRICTER (add a limit, lower minutes, add a schedule) wait out your first delay.": "Her şeyi DAHA SIKI hale getiren değişiklikler (sınırlama ekleyin, dakikaları azaltın, bir program ekleyin) ilk gecikmenizi bekleyin.",
     "Changes you make will appear here with a countdown.": "Yaptığınız değişiklikler burada sayım geri çevirmesi ile görünecektir.",
     "Choose apps": "Uygulamaları seçin",
-    "Close": "yakın",
+    "Close": "Kapat",
     "Confirm password": "Şifreyi onayla",
     "Continue": "Devam et",
     "Couldn't load names (check iCloud/network).": "Adları yükleyemedim (iCloud/ağ kontrol edin).",

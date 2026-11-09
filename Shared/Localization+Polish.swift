@@ -6,6 +6,10 @@
 import Foundation
 
 let polishStrings: [String: String] = [
+    // Generic shield.
+    "Blocked by your Demora rules": "Blokada zgodnie z Twoimi zasadami Demora",
+    "You set this earlier so it would hold.": "To Twoja wcześniejsza decyzja, która miała pozostać w mocy.",
+    "Open Demora to see what's on, or to ask for extra time if your limit has it.": "Otwórz Demora, aby zobaczyć, co jest aktywne, lub poprosić o dodatkowy czas, jeśli Twój limit ma taką opcję.",
     // Approved onboarding redesign.
     "Passwords": "Hasła",
     "Phrases": "Frazy",

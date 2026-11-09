@@ -6,6 +6,10 @@
 import Foundation
 
 let hindiStrings: [String: String] = [
+    // Generic shield.
+    "Blocked by your Demora rules": "आपके Demora नियमों के अनुसार ब्लॉक है",
+    "You set this earlier so it would hold.": "आपने इसे पहले ही तय किया था ताकि यह फ़ैसला कायम रहे।",
+    "Open Demora to see what's on, or to ask for extra time if your limit has it.": "क्या सक्रिय है यह देखने के लिए Demora खोलें, या अगर आपकी सीमा में अतिरिक्त समय माँगने का विकल्प है तो उसके लिए अनुरोध करें।",
     // Approved onboarding redesign.
     "Passwords": "पासवर्ड",
     "Phrases": "वाक्यांश",

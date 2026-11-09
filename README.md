@@ -190,6 +190,9 @@ Features:
   a free period is active. Optional five-minute free-period boundary reminders.
 - Read-only Now & Next and Pending Change home-screen widgets. They consume a
   small App Group projection, never FamilyControls tokens or raw usage.
+- The generic block screen uses Demora's paper/ink palette, original mark and
+  Close action. It never guesses which rule blocked the app or promises an
+  instant unblock. Naming a rule remains gated on a signed-device token test.
 - Limits & blocks has a full-width New limit action; Home's Select action lives
   in Pending changes rather than the page header. The Guide covers real 2.0
   workflows, permissions, delays, overrides, overlaps and troubleshooting.

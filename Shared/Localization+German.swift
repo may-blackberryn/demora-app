@@ -6,6 +6,10 @@
 import Foundation
 
 let germanStrings: [String: String] = [
+    // Generic shield.
+    "Blocked by your Demora rules": "Durch deine Demora-Regeln blockiert",
+    "You set this earlier so it would hold.": "Du hast das vorher so festgelegt, damit es Bestand hat.",
+    "Open Demora to see what's on, or to ask for extra time if your limit has it.": "Öffne Demora, um zu sehen, was aktiv ist, oder um Zusatzzeit anzufragen, falls dein Limit das vorsieht.",
     // Approved onboarding redesign.
     "Passwords": "Passwörter",
     "Optional. This is a real limit, not a demo.": "Optional. Das ist ein echtes Limit, keine Demo.",
