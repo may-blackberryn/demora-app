@@ -54,6 +54,22 @@ def addition_lines(source, start, end):
     return first, last
 
 
+def without_when_where_insertions(old, restored):
+    """The owner-approved When & where engine (docs/conditional-sessions-
+    redesign.md, step 1) adds new ChangeAction cases and helpers to the
+    engine. Accept them only as pure line insertions that name When & where
+    symbols; any edited or deleted original line still fails the guard."""
+    matcher = difflib.SequenceMatcher(None, old.splitlines(keepends=True), restored, autojunk=False)
+    result = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        chunk = "".join(restored[j1:j2])
+        if tag == "insert":
+            assert re.search(r"[Cc]onditional|TimeZone", chunk), "unapproved engine insertion:\n" + chunk
+            continue
+        result.extend(restored[j1:j2])
+    return result
+
+
 def guard_originals():
     """All changed structural ranges must be approved insertions, never edits."""
     specs = {
@@ -86,6 +102,8 @@ def guard_originals():
         restored = new.splitlines(keepends=True)
         for a, b in sorted(allowed, reverse=True):
             del restored[a:b]
+        if name == "ChangeEngine.swift":
+            restored = without_when_where_insertions(old, restored)
         assert "".join(restored) == old, f"{path}: removal did not exactly restore baseline\n" + "".join(
             difflib.unified_diff(old.splitlines(True), restored))
         sources[name] = new

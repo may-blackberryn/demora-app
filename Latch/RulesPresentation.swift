@@ -123,6 +123,11 @@ enum RulePending {
              .setContactsOverride, .addContact, .removeContact, .setContactPermissions,
              .unlockPreventGuide, .unlockPasswordView:
             return nil
+        case .addConditionalRule, .updateConditionalRule, .removeConditionalRule,
+             .startConditionalSession:
+            // When & where step 1 is engine only; the Rules card and its
+            // `RuleRef` arrive with the editor (spec C15 step 2).
+            return nil
         }
     }
 

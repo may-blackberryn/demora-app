@@ -131,9 +131,14 @@ enum MonitoringBudget {
         var names = windowNames(state: state, at: now).union(splitNames(state: state))
         if !state.limits.isEmpty { names.insert(LatchConstants.dailyActivityName) }
         names.formUnion(state.sessions.filter { $0.endsAt > now }.map(\.activityName))
+        // A When & where rule's check-in session is a latent need: reserve it
+        // when the rule is added, so a later check-in never depends on luck.
+        // Its owned block windows are ordinary schedules (windowNames above).
+        names.formUnion(state.conditionalRules.map(\.sessionActivityName))
         let free = !state.exemptions.isEmpty
             || state.planned.contains { $0.kind == .free && $0.endsAt > now }
             || state.sessions.contains { $0.kind == .free && $0.endsAt > now }
+            || state.conditionalRules.contains(where: \.reservesFreeWindow)
         if free && state.limits.contains(where: {
             $0.minutesPerDay > 0 || $0.weekdayMinutes.values.contains { $0 > 0 }
         }) { names.insert("latch.freewin") }
@@ -210,6 +215,36 @@ enum MonitoringBudget {
             state.sessions.append(session)
         case .endSessionEarly(let id):
             if includeRemovals { state.sessions.removeAll { $0.id == id } }
+        case .addConditionalRule(let rule):
+            if !state.conditionalRules.contains(where: { $0.id == rule.id }) {
+                state.conditionalRules.append(rule)
+                state.schedules.append(contentsOf: rule.ownedSchedules())
+            }
+        case .updateConditionalRule(let rule):
+            if let index = state.conditionalRules.firstIndex(where: { $0.id == rule.id }) {
+                state.conditionalRules[index] = rule
+                state.schedules.removeAll { $0.ownerRuleID == rule.id }
+                state.schedules.append(contentsOf: rule.ownedSchedules())
+            }
+        case .removeConditionalRule(let id):
+            if includeRemovals {
+                state.conditionalRules.removeAll { $0.id == id }
+                state.schedules.removeAll { $0.ownerRuleID == id }
+            }
+        case .startConditionalSession(let request):
+            guard let rule = state.conditionalRules.first(where: { $0.id == request.ruleID }) else { break }
+            let end = now.addingTimeInterval(TimeInterval(max(1, request.minutes)) * 60)
+            var session: BlockSession
+            switch rule.outcome {
+            case .freeTime(let kind, let selection, _, _):
+                session = BlockSession(name: rule.name, kind: kind, selection: selection,
+                                       startedAt: now, endsAt: end)
+            case .block(_, let selection, _):
+                session = BlockSession(name: rule.name, kind: .block, selection: selection,
+                                       startedAt: now, endsAt: end)
+            }
+            session.conditionalRuleID = request.ruleID // same name as the latent reservation
+            state.sessions.append(session)
         case .updateLimitMinutes(let id, let minutes):
             if let index = state.limits.firstIndex(where: { $0.id == id }) { state.limits[index].minutesPerDay = minutes }
         case .updateLimit(let id, _, let minutes):
@@ -226,6 +261,7 @@ enum MonitoringBudget {
         var hasFree = result.contains("latch.freewin") || !state.exemptions.isEmpty
             || state.planned.contains { $0.kind == .free && $0.endsAt > now }
             || state.sessions.contains { $0.kind == .free && $0.endsAt > now }
+            || state.conditionalRules.contains(where: \.reservesFreeWindow)
         var hasAllowance = state.limits.contains { $0.minutesPerDay > 0 || $0.weekdayMinutes.values.contains { $0 > 0 } }
         for change in state.pending.sorted(by: { $0.appliesAt < $1.appliesAt }) {
             if change.appliesAt > guardedNow { result.insert(change.activityName) }
@@ -238,6 +274,7 @@ enum MonitoringBudget {
                 hasFree = hasFree || !snapshot.exemptions.isEmpty
                     || snapshot.planned.contains { $0.kind == .free && $0.endsAt > now }
                     || snapshot.sessions.contains { $0.kind == .free && $0.endsAt > now }
+                    || snapshot.conditionalRules.contains(where: \.reservesFreeWindow)
                 hasAllowance = hasAllowance || snapshot.limits.contains {
                     $0.minutesPerDay > 0 || $0.weekdayMinutes.values.contains { $0 > 0 }
                 }
@@ -278,6 +315,7 @@ enum MonitoringBudget {
         case .removePlanned(let id): return state.planned.contains { $0.id == id }
         case .removeDayNightGroup(let id): return state.dayNightGroups.contains { $0.id == id }
         case .endSessionEarly(let id): return state.sessions.contains { $0.id == id }
+        case .removeConditionalRule(let id): return state.conditionalRules.contains { $0.id == id }
         case .setGroupWakeDelay(let id, let minutes):
             return state.limits.contains { $0.id == id && $0.wakeDelayMinutes != nil }
                 && minutes == nil

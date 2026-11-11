@@ -221,6 +221,88 @@ enum ChangeEngine {
         }
     }
 
+    enum ConditionalStartResult: Equatable {
+        /// Free time (or a block under an instant stricter policy) is running.
+        case started(BlockSession)
+        /// A check-in block waits the stricter delay, like Block now.
+        case waiting(PendingChange)
+        case refused(ConditionalStartRefusal)
+    }
+
+    /// Start a When & where session from a met check-in. Overdue changes are
+    /// applied first; then the same pure plan validates the request again
+    /// inside the queue mutation and once more when it applies. A failed
+    /// check never falls back to a delayed free session (no override path).
+    static func startConditionalSessionOffMain(_ request: ConditionalStartRequest) async
+        -> ConditionalStartResult {
+        await withCheckedContinuation { continuation in
+            deviceActivityWorkQueue.async {
+                continuation.resume(returning: startConditionalSession(request))
+            }
+        }
+    }
+
+    private static func startConditionalSession(_ request: ConditionalStartRequest)
+        -> ConditionalStartResult {
+        applyDueChanges()
+        observeTimeZone()
+        let state = SharedStore.loadState()
+        guard !SharedStore.stateRecoveryNeeded, !SharedStore.simulating else {
+            return .refused(.unavailable)
+        }
+        guard !hasUnappliedDueChanges(state) else { return .refused(.dueChanges) }
+        if case .failure(let refusal) = ConditionalStart.plan(
+            request, state: state, clock: .current(for: state)) {
+            return .refused(refusal)
+        }
+        guard let change = queue(.startConditionalSession(request)) else {
+            return .refused(.unavailable)
+        }
+        let after = SharedStore.loadState()
+        if after.pending.contains(where: { $0.id == change.id }) { return .waiting(change) }
+        if let session = after.sessions.first(where: {
+            $0.conditionalRuleID == request.ruleID && $0.endsAt > Date()
+        }) { return .started(session) }
+        return .refused(.unavailable)
+    }
+
+    /// Record a time-zone change for the 12-hour "must hold in both zones"
+    /// check. Writes saved state only when the zone differs from the last one
+    /// recorded, and only while When & where rules exist.
+    static func observeTimeZone() {
+        // Cheap read first: housekeeping must not coordinate a write per call.
+        guard !SharedStore.simulating, !SharedStore.stateRecoveryNeeded else { return }
+        let snapshot = SharedStore.loadState()
+        guard !snapshot.conditionalRules.isEmpty,
+              TimeZoneEvidence.observing(snapshot.timeZoneEvidence,
+                                         zoneID: TimeZone.current.identifier,
+                                         at: TimeGuard.now()) != nil else { return }
+        _ = SharedStore.coordinateStateMutation { () -> Bool in
+            var state = SharedStore.loadState()
+            guard !SharedStore.stateRecoveryNeeded, !state.conditionalRules.isEmpty,
+                  let updated = TimeZoneEvidence.observing(
+                      state.timeZoneEvidence, zoneID: TimeZone.current.identifier,
+                      at: TimeGuard.now()) else { return false }
+            state.timeZoneEvidence = updated
+            return SharedStore.save(state)
+        }
+    }
+
+    /// Drop check-in use records old enough that no time zone can still call
+    /// their day "today". Never rewrites a current day's count.
+    static func pruneConditionalUses() {
+        guard !SharedStore.simulating, !SharedStore.stateRecoveryNeeded else { return }
+        let snapshot = SharedStore.loadState().conditionalUses
+        guard ConditionalUses.pruned(snapshot, at: TimeGuard.now()) != snapshot else { return }
+        _ = SharedStore.coordinateStateMutation { () -> Bool in
+            var state = SharedStore.loadState()
+            let kept = ConditionalUses.pruned(state.conditionalUses, at: TimeGuard.now())
+            guard !SharedStore.stateRecoveryNeeded, kept != state.conditionalUses else { return false }
+            state.conditionalUses = kept
+            return SharedStore.save(state)
+        }
+    }
+
     /// DeviceActivity talks to Screen Time through synchronous XPC. If its
     /// daemon is slow, making those calls on the main actor can trigger an iOS
     /// watchdog kill. App-driven maintenance and override application are
@@ -422,7 +504,10 @@ enum ChangeEngine {
              .addExemption, .removeExemption,
              .addPlanned, .removePlanned:
             return .scheduleChanges
+        case .addConditionalRule, .updateConditionalRule, .removeConditionalRule:
+            return .scheduleChanges
         case .startSession, .endSessionEarly: return .sessionChanges
+        case .startConditionalSession: return .sessionChanges
         case .setDelayPolicy, .setStrictDelay, .setLenientDelay: return .delayChanges
         case .setBlockAppRemoval, .setBlockAdultWebsites,
              .addBlockedDomain, .removeBlockedDomain,
@@ -639,6 +724,19 @@ enum ChangeEngine {
             return .lenient    // gaining access = looser
         case .unlockPasswordView:
             return .lenient    // gaining access = looser
+        case .addConditionalRule(let rule):
+            // C2: a free-time rule loosens; a block rule tightens.
+            return rule.isFreeTime ? .lenient : .stricter
+        case .updateConditionalRule:
+            return .lenient    // any edit, including a moved place, waits
+        case .removeConditionalRule(let id):
+            guard let rule = state.conditionalRules.first(where: { $0.id == id }) else { return .lenient }
+            return rule.isFreeTime ? .stricter : .lenient
+        case .startConditionalSession(let request):
+            // Free time is looser (queued with delay 0 only once validated);
+            // a check-in block is stricter, like Block now (C4).
+            let rule = state.conditionalRules.first { $0.id == request.ruleID }
+            return rule.map { $0.isFreeTime ? .lenient : .stricter } ?? .lenient
         }
     }
 
@@ -773,6 +871,27 @@ enum ChangeEngine {
             return tr("Unlock the “Prevent disabling” guide")
         case .unlockPasswordView:
             return tr("Unlock viewing the stored passcode")
+        case .addConditionalRule(let rule):
+            return String(format: tr("Add When & where rule: %@. %@"), rule.name,
+                          ConditionalSummary.sentence(rule))
+        case .updateConditionalRule(let rule):
+            return String(format: tr("Change When & where rule: %@. %@"), rule.name,
+                          ConditionalSummary.sentence(rule))
+        case .removeConditionalRule(let id):
+            let name = state.conditionalRules.first { $0.id == id }?.name ?? tr("When & where")
+            return String(format: tr("Remove When & where rule: %@"), name)
+        case .startConditionalSession(let request):
+            let rule = state.conditionalRules.first { $0.id == request.ruleID }
+            let name = rule?.name ?? tr("When & where")
+            switch rule?.outcome {
+            case .freeTime(.unblock, _, _, _)?:
+                return String(format: tr("%@ session: %@ (%d min)"),
+                              SessionKind.unblock.label, name, request.minutes)
+            case .block?:
+                return String(format: tr("Start block: %@"), name)
+            default:
+                return String(format: tr("Free period: %@ (%d min)"), name, request.minutes)
+            }
         }
     }
 
@@ -847,6 +966,12 @@ enum ChangeEngine {
             return "unlockPreventGuide"
         case .unlockPasswordView:
             return "unlockPasswordView"
+        case .addConditionalRule(let rule), .updateConditionalRule(let rule):
+            return "conditional-\(rule.id.uuidString)"
+        case .removeConditionalRule(let id):
+            return "conditional-\(id.uuidString)"
+        case .startConditionalSession(let request):
+            return "conditionalStart-\(request.ruleID.uuidString)"
         }
     }
 
@@ -970,6 +1095,55 @@ enum ChangeEngine {
         }
         if case .setDelayPolicy(let policy) = action {
             guard policy.isValid, policy.normalized != state.delayPolicy.normalized else { return nil }
+        }
+        // When & where rules own their block windows: those change only with
+        // their rule, never through the ordinary schedule actions.
+        if case .addSchedule(let schedule) = action {
+            guard schedule.ownerRuleID == nil else { return nil }
+        }
+        if case .removeSchedule(let id) = action {
+            guard state.schedules.first(where: { $0.id == id })?.ownerRuleID == nil else { return nil }
+        }
+        if case .updateScheduleSelection(let id, _) = action {
+            guard state.schedules.first(where: { $0.id == id })?.ownerRuleID == nil else { return nil }
+        }
+        if case .addConditionalRule(let rule) = action {
+            let pendingAdditions = state.pending.filter {
+                if case .addConditionalRule = $0.action { return true }
+                return false
+            }.count
+            let owned = Set(rule.ownedSchedules().map(\.id))
+            guard rule.isValid, !state.conditionalRules.contains(where: { $0.id == rule.id }),
+                  state.conditionalRules.count + pendingAdditions < ConditionalRule.maximumRules,
+                  !state.schedules.contains(where: { owned.contains($0.id) }) else { return nil }
+        }
+        if case .updateConditionalRule(let rule) = action {
+            guard rule.isValid,
+                  let current = state.conditionalRules.first(where: { $0.id == rule.id }),
+                  !rule.sameConfiguration(as: current) else { return nil }
+        }
+        if case .removeConditionalRule(let id) = action {
+            guard state.conditionalRules.contains(where: { $0.id == id }) else { return nil }
+        }
+        // A failed check-in returns nil: never a delayed or overridable start.
+        if case .startConditionalSession(let request) = action {
+            guard !hasUnappliedDueChanges(state),
+                  case .success = ConditionalStart.plan(request, state: state, clock: .current(for: state)),
+                  let rule = state.conditionalRules.first(where: { $0.id == request.ruleID })
+            else { return nil }
+            if rule.isFreeTime {
+                // The only zero-delay path: the permission was the rule, which
+                // waited. Same conflict, admission and save as below.
+                let key = conflictKey(action)
+                guard !state.pending.contains(where: { conflictKey($0.action) == key }) else { return nil }
+                let now = TimeGuard.now()
+                let change = PendingChange(createdAt: now, appliesAt: now, direction: .lenient,
+                                           summary: summary(for: action, state: state), action: action)
+                state.pending.append(change)
+                guard SharedStore.simulating || MonitorRegistration.admit(state: state, running: running),
+                      SharedStore.save(state) else { return nil }
+                return change
+            }
         }
         let key = conflictKey(action)
         guard !state.pending.contains(where: { conflictKey($0.action) == key })
@@ -1165,6 +1339,12 @@ enum ChangeEngine {
                 let projected = due.reduce(state) { MonitoringBudget.project($1.action, onto: $0) }
                 return MonitoringBudget.windowNames(state: projected)
                     != MonitoringBudget.windowNames(state: state)
+            case .addConditionalRule, .updateConditionalRule, .removeConditionalRule:
+                // When & where rules change windows only through owned block
+                // windows; free-time rules and selection edits restart nothing.
+                let projected = due.reduce(state) { MonitoringBudget.project($1.action, onto: $0) }
+                return MonitoringBudget.windowNames(state: projected)
+                    != MonitoringBudget.windowNames(state: state)
             case .addSchedule, .removeSchedule,
                  .addExemption, .removeExemption,
                  .addPlanned, .removePlanned,
@@ -1269,6 +1449,7 @@ enum ChangeEngine {
     /// re-derive shields. Called on app foreground/timer and from extensions.
     static func housekeeping() {
         rolloverIfNewDay()
+        observeTimeZone()
         applyDueChanges()
         pruneExpiredSessions()
         prunePastPlanned()
@@ -1293,6 +1474,7 @@ enum ChangeEngine {
         guard SharedStore.lastResetDay != today else { return }
         ShieldController.clearForNewDay()          // clears blocks + usage
         LimitFeatures.resetForNewDay()
+        pruneConditionalUses()
         SharedStore.lastResetDay = today
         reconfigureDailyMonitoring(state: SharedStore.loadState())
         LimitFeatures.reconfigureSplitMonitoring(state: SharedStore.loadState())
@@ -1467,6 +1649,42 @@ enum ChangeEngine {
         case .unlockPasswordView:
             // Grant one look at the stored passcode (passwordViewReady).
             state.passwordViewUnlockAt = .distantPast
+        case .addConditionalRule(let rule):
+            let owned = rule.ownedSchedules()
+            let ownedIDs = Set(owned.map(\.id))
+            guard rule.isValid, !state.conditionalRules.contains(where: { $0.id == rule.id }),
+                  state.conditionalRules.count < ConditionalRule.maximumRules,
+                  !state.schedules.contains(where: { ownedIDs.contains($0.id) }) else { break }
+            state.conditionalRules.append(rule)
+            state.schedules.append(contentsOf: owned)
+            // Start the time-zone record with the rule, in the same write.
+            if let evidence = TimeZoneEvidence.observing(state.timeZoneEvidence,
+                                                         zoneID: TimeZone.current.identifier,
+                                                         at: TimeGuard.now()) {
+                state.timeZoneEvidence = evidence
+            }
+        case .updateConditionalRule(var rule):
+            // Same ID: today's uses and a running session carry over. Owned
+            // windows are replaced in the same write as the rule.
+            guard rule.isValid,
+                  let index = state.conditionalRules.firstIndex(where: { $0.id == rule.id }) else { break }
+            rule.revision = state.conditionalRules[index].revision + 1
+            rule.addedAt = state.conditionalRules[index].addedAt
+            state.conditionalRules[index] = rule
+            state.schedules.removeAll { $0.ownerRuleID == rule.id }
+            state.schedules.append(contentsOf: rule.ownedSchedules())
+        case .removeConditionalRule(let id):
+            // C14: a running session keeps its end (at most 4 h); End early
+            // stays available. Owned windows go with the rule.
+            state.conditionalRules.removeAll { $0.id == id }
+            state.schedules.removeAll { $0.ownerRuleID == id }
+        case .startConditionalSession(let request):
+            // Revalidated against this exact state. Stale → nothing applied.
+            guard case .success(let plan) = ConditionalStart.plan(
+                request, state: state, clock: .current(for: state), phase: .apply) else { break }
+            state.sessions.removeAll { plan.replacedSessionIDs.contains($0.id) }
+            state.sessions.append(plan.session)
+            state.conditionalUses = plan.uses
         }
     }
 

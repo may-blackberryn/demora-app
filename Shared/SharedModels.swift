@@ -827,6 +827,10 @@ struct BlockSchedule: Codable, Identifiable, Equatable {
     /// When this was added — used to break ties between conflicting recurring
     /// windows (the most recently added wins). Old data decodes as distantPast.
     var addedAt: Date = .distantPast
+    /// Set only on the day/time branch of a When & where block rule. The rule
+    /// owns it: it is added, replaced and removed only with its rule. Nil in
+    /// old saved state and for every ordinary repeating block (never encoded).
+    var ownerRuleID: UUID? = nil
 
     /// An empty allowlist blocks everything; an empty blocklist blocks nothing.
     /// Categories and websites are valid selections, not just applications.
@@ -867,6 +871,7 @@ struct BlockSchedule: Codable, Identifiable, Equatable {
         endMinutes = try c.decode(Int.self, forKey: .endMinutes)
         recurrence = try c.decodeIfPresent(Recurrence.self, forKey: .recurrence) ?? .daily
         addedAt = try c.decodeIfPresent(Date.self, forKey: .addedAt) ?? .distantPast
+        ownerRuleID = try c.decodeIfPresent(UUID.self, forKey: .ownerRuleID)
     }
 }
 
@@ -970,12 +975,21 @@ struct BlockSession: Codable, Identifiable, Equatable {
     var selection: FamilyActivitySelection
     var startedAt: Date
     var endsAt: Date
+    /// The When & where rule whose check-in started this session. Nil for
+    /// every other session and in old saved state (never encoded when nil).
+    var conditionalRuleID: UUID? = nil
 
     // Wall clock (Date), not TimeGuard — endsAt and the DeviceActivity that
     // ends the session are both wall-clock, so a session's active state must
     // use the same clock or it won't expire when the clocks drift apart.
     var isActive: Bool { Date() < endsAt }
-    var activityName: String { "session-\(id.uuidString)" }
+    /// A rule runs one session at a time, so its activity is named after the
+    /// rule: the capacity reservation and the real registration are one name,
+    /// and the extension's `session-` prefix cleanup works unchanged.
+    var activityName: String {
+        conditionalRuleID.map(ConditionalRule.sessionActivityName(for:))
+            ?? "session-\(id.uuidString)"
+    }
 
     init(name: String, kind: SessionKind, selection: FamilyActivitySelection,
          startedAt: Date, endsAt: Date) {
@@ -995,6 +1009,7 @@ struct BlockSession: Codable, Identifiable, Equatable {
         selection = try c.decode(FamilyActivitySelection.self, forKey: .selection)
         startedAt = try c.decode(Date.self, forKey: .startedAt)
         endsAt = try c.decode(Date.self, forKey: .endsAt)
+        conditionalRuleID = try c.decodeIfPresent(UUID.self, forKey: .conditionalRuleID)
     }
 }
 
@@ -1107,6 +1122,23 @@ struct LatchState: Codable {
     /// it lives behind the prevent-disabling delay gate, so it can't be looked
     /// up on impulse to turn Demora off.
     var screenTimeCode: String = ""
+    /// When & where rules, their per-day check-in uses and the time zones
+    /// recently seen. Stored optionally so a state without them encodes
+    /// exactly as before (older builds simply ignore the keys).
+    private(set) var conditionalRuleStore: [ConditionalRule]? = nil
+    private(set) var conditionalUseStore: [ConditionalUseRecord]? = nil
+    var timeZoneEvidence: TimeZoneEvidence? = nil
+
+    var conditionalRules: [ConditionalRule] {
+        get { conditionalRuleStore ?? [] }
+        set { conditionalRuleStore = newValue.isEmpty ? nil : newValue }
+    }
+    /// Uses never decrease within a day; only records older than
+    /// `ConditionalUses.retention` are pruned (on rollover or at a new start).
+    var conditionalUses: [ConditionalUseRecord] {
+        get { conditionalUseStore ?? [] }
+        set { conditionalUseStore = newValue.isEmpty ? nil : newValue }
+    }
 
     init() {}
 
@@ -1143,6 +1175,9 @@ struct LatchState: Codable {
         preventUnlockAt = try c.decodeIfPresent(Date.self, forKey: .preventUnlockAt)
         passwordViewUnlockAt = try c.decodeIfPresent(Date.self, forKey: .passwordViewUnlockAt)
         screenTimeCode = try c.decodeIfPresent(String.self, forKey: .screenTimeCode) ?? ""
+        conditionalRuleStore = try c.decodeIfPresent([ConditionalRule].self, forKey: .conditionalRuleStore)
+        conditionalUseStore = try c.decodeIfPresent([ConditionalUseRecord].self, forKey: .conditionalUseStore)
+        timeZoneEvidence = try c.decodeIfPresent(TimeZoneEvidence.self, forKey: .timeZoneEvidence)
     }
 }
 
@@ -1202,6 +1237,15 @@ enum ChangeAction: Codable, Equatable {
     /// Unlock a single look at the stored Screen Time passcode. Its own gate,
     /// separate from the guide's — same lenient-delay + one-use mechanics.
     case unlockPasswordView
+    /// When & where rules. Free-time rules are looser to add and stricter to
+    /// remove; block rules the reverse. Every edit is looser and preserves the
+    /// rule's ID, today's uses and any running session.
+    case addConditionalRule(ConditionalRule)
+    case updateConditionalRule(ConditionalRule)
+    case removeConditionalRule(id: UUID)
+    /// Start from a met check-in. Free time: delay 0 only when validated, never
+    /// a delayed fallback. Block: the stricter wait, like Block now.
+    case startConditionalSession(ConditionalStartRequest)
 }
 
 struct PendingChange: Codable, Identifiable, Equatable {
@@ -1224,5 +1268,871 @@ extension TimeInterval {
         f.allowedUnits = [.day, .hour, .minute]
         f.unitsStyle = .abbreviated
         return f.string(from: self) ?? "\(Int(self))s"
+    }
+}
+
+// MARK: - When & where rules (docs/conditional-sessions-redesign.md)
+//
+// Pure model and decision code only: no CoreLocation, persistence, monitor,
+// notification or shield calls, so every harness that compiles this file
+// keeps working. Location arrives later as an injected, already-read fix
+// (host only); nothing here asks for it or keeps it. Unknown fails closed (C9).
+//
+// Clock domains: conditions and per-day uses use the guarded clock
+// (`TimeGuard.now()`, passed in) in the given calendar; sessions keep the
+// existing wall-clock `startedAt`/`endsAt`, because DeviceActivity ends them on
+// the wall clock. A start is refused while the two disagree.
+
+/// A saved place: the centre the user chose, never a record of where they
+/// were. Sizes are a fixed choice (C10).
+struct ConditionalPlace: Codable, Equatable {
+    static let radiusChoices = [100, 250, 500, 1000, 2000]
+    var name: String
+    var latitude: Double
+    var longitude: Double
+    var radiusMeters: Int
+
+    var isValid: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && name.count <= 80
+            && latitude.isFinite && longitude.isFinite
+            && (-90...90).contains(latitude) && (-180...180).contains(longitude)
+            && Self.radiusChoices.contains(radiusMeters)
+    }
+}
+
+/// A local calendar day in the Gregorian calendar, whatever the time zone.
+struct ConditionalDay: Codable, Equatable, Hashable, Comparable {
+    var year: Int
+    var month: Int
+    var day: Int
+
+    static func < (l: Self, r: Self) -> Bool {
+        (l.year, l.month, l.day) < (r.year, r.month, r.day)
+    }
+    private static var utcGregorian: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? calendar.timeZone
+        return calendar
+    }
+    var isValid: Bool {
+        let calendar = Self.utcGregorian
+        guard (1...9999).contains(year),
+              let date = calendar.date(from: DateComponents(year: year, month: month, day: day))
+        else { return false }
+        let c = calendar.dateComponents([.year, .month, .day], from: date)
+        return c.year == year && c.month == month && c.day == day
+    }
+    static func of(_ date: Date, in zone: TimeZone) -> ConditionalDay {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let c = calendar.dateComponents([.year, .month, .day], from: date)
+        return ConditionalDay(year: c.year ?? 0, month: c.month ?? 0, day: c.day ?? 0)
+    }
+}
+
+enum ConditionalCondition: Codable, Equatable {
+    case place(ConditionalPlace)
+    /// ISO 3166-1 alpha-2, uppercase ("MX").
+    case country(String)
+    /// Calendar weekdays, 1 = Sunday … 7 = Saturday (DayChips' type).
+    case days(Set<Int>)
+    /// Minutes after local midnight, [start, end); may wrap past midnight.
+    case time(start: Int, end: Int)
+    /// Inclusive local calendar days (C6).
+    case dates(first: ConditionalDay, last: ConditionalDay)
+
+    var usesLocation: Bool {
+        switch self {
+        case .place, .country: return true
+        case .days, .time, .dates: return false
+        }
+    }
+
+    var isValid: Bool {
+        switch self {
+        case .place(let place):
+            return place.isValid
+        case .country(let code):
+            return code.count == 2 && code.unicodeScalars.allSatisfy { (65...90).contains($0.value) }
+        case .days(let days):
+            return !days.isEmpty && days.isSubset(of: Set(1...7))
+        case .time(let start, let end):
+            return (0...1439).contains(start) && (0...1439).contains(end) && start != end
+        case .dates(let first, let last):
+            return first.isValid && last.isValid && first <= last
+        }
+    }
+}
+
+enum ConditionalMatch: String, Codable {
+    case all, any
+}
+
+enum ConditionalBlockEnd: Codable, Equatable {
+    /// Until this local clock time (minutes after midnight), the next time it comes.
+    case time(Int)
+    case duration(minutes: Int)
+}
+
+enum ConditionalOutcome: Codable, Equatable {
+    /// `.free` (everything, usage doesn't count) or `.unblock` (these apps).
+    case freeTime(kind: SessionKind, selection: FamilyActivitySelection,
+                  maxMinutes: Int, usesPerDay: Int)
+    case block(mode: ScheduleMode, selection: FamilyActivitySelection,
+               until: ConditionalBlockEnd)
+}
+
+struct ConditionalRule: Codable, Equatable, Identifiable {
+    static let maximumRules = 5
+    static let maximumConditions = 4
+    static let maximumNameLength = 80
+
+    var id = UUID()
+    var name: String
+    var match: ConditionalMatch
+    var conditions: [ConditionalCondition]
+    var outcome: ConditionalOutcome
+    /// Precedence tie-break for owned block windows (latest added wins).
+    var addedAt: Date = .distantPast
+    /// Bumped by the engine on every applied edit; a check-in names the
+    /// revision it checked, so a landed edit makes older check-ins stale.
+    var revision = 0
+
+    init(id: UUID = UUID(), name: String, match: ConditionalMatch,
+         conditions: [ConditionalCondition], outcome: ConditionalOutcome,
+         addedAt: Date = Date(), revision: Int = 0) {
+        self.id = id
+        self.name = name
+        self.match = match
+        self.conditions = conditions
+        self.outcome = outcome
+        self.addedAt = addedAt
+        self.revision = revision
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        match = try c.decode(ConditionalMatch.self, forKey: .match)
+        conditions = try c.decode([ConditionalCondition].self, forKey: .conditions)
+        outcome = try c.decode(ConditionalOutcome.self, forKey: .outcome)
+        addedAt = try c.decodeIfPresent(Date.self, forKey: .addedAt) ?? .distantPast
+        revision = try c.decodeIfPresent(Int.self, forKey: .revision) ?? 0
+    }
+
+    static func sessionActivityName(for ruleID: UUID) -> String {
+        "session-cond-\(ruleID.uuidString)"
+    }
+    var sessionActivityName: String { Self.sessionActivityName(for: id) }
+
+    var isFreeTime: Bool {
+        if case .freeTime = outcome { return true }
+        return false
+    }
+    /// Only an "Everything" free session pauses limit counting.
+    var reservesFreeWindow: Bool {
+        if case .freeTime(.free, _, _, _) = outcome { return true }
+        return false
+    }
+    var hasLocationCondition: Bool { conditions.contains(where: \.usesLocation) }
+
+    var isValid: Bool {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              name.count <= Self.maximumNameLength,
+              (1...Self.maximumConditions).contains(conditions.count),
+              conditions.allSatisfy(\.isValid) else { return false }
+        switch outcome {
+        case .freeTime(let kind, let selection, let maxMinutes, let uses):
+            guard (5...240).contains(maxMinutes), (1...5).contains(uses) else { return false }
+            switch kind {
+            case .free: return true
+            case .unblock: return Self.hasTargets(selection)
+            case .block: return false
+            }
+        case .block(let mode, let selection, let until):
+            // v1: a check-in block is a Block now session, which can only
+            // block chosen apps. A rule without a place or country should
+            // be a repeating block instead. Under "any of", only time windows
+            // run on their own (as owned repeating blocks).
+            guard mode == .blockSelected, Self.hasTargets(selection), hasLocationCondition
+            else { return false }
+            switch until {
+            case .time(let minute): guard (0...1439).contains(minute) else { return false }
+            case .duration(let minutes): guard (1...1440).contains(minutes) else { return false }
+            }
+            if match == .any {
+                return conditions.allSatisfy { condition in
+                    if condition.usesLocation { return true }
+                    if case .time = condition { return true }
+                    return false
+                }
+            }
+            return true
+        }
+    }
+
+    /// Same rule apart from the engine-managed revision and addedAt.
+    func sameConfiguration(as other: ConditionalRule) -> Bool {
+        id == other.id && name == other.name && match == other.match
+            && conditions == other.conditions && outcome == other.outcome
+    }
+
+    private static func hasTargets(_ selection: FamilyActivitySelection) -> Bool {
+        !selection.applicationTokens.isEmpty || !selection.categoryTokens.isEmpty
+            || !selection.webDomainTokens.isEmpty
+    }
+
+    /// Stable per rule and condition position, so an unchanged edit keeps the
+    /// same window activity names (no monitor restart).
+    static func ownedScheduleID(ruleID: UUID, index: Int) -> UUID {
+        var bytes = ruleID.uuid
+        bytes.14 ^= 0xC5
+        bytes.15 ^= UInt8(truncatingIfNeeded: index + 1)
+        return UUID(uuid: bytes)
+    }
+
+    /// C3: under "any of", a block rule's time window runs on its own as an
+    /// ordinary repeating block owned by the rule; place/country branches
+    /// start only on check-in. "All of" rules own nothing.
+    func ownedSchedules() -> [BlockSchedule] {
+        guard match == .any, case .block(let mode, let selection, _) = outcome else { return [] }
+        return conditions.enumerated().compactMap { index, condition in
+            guard case .time(let start, let end) = condition else { return nil }
+            var schedule = BlockSchedule(name: name, mode: mode, selection: selection,
+                                         startMinutes: start, endMinutes: end,
+                                         recurrence: .daily, addedAt: addedAt)
+            schedule.id = Self.ownedScheduleID(ruleID: id, index: index)
+            schedule.ownerRuleID = id
+            return schedule
+        }
+    }
+}
+
+/// One rule's check-in uses for one local day key. Uses never decrease
+/// within a day and are never refunded (ending early included).
+struct ConditionalUseRecord: Codable, Equatable {
+    var ruleID: UUID
+    var day: String
+    var count: Int
+    /// Guarded clock time of the latest use, for pruning only.
+    var lastUsedAt: Date
+    var checkInIDs: [UUID] = []
+}
+
+enum ConditionalUses {
+    /// A day key can stay "today" in some time zone for up to ~50 hours after
+    /// a use; keep records comfortably longer than that.
+    static let retention: TimeInterval = 72 * 60 * 60
+
+    /// Same "yyyy-M-d" shape as `SharedStore.dayKey`, in the given calendar.
+    static func dayKey(for date: Date, calendar: Calendar) -> String {
+        let c = calendar.dateComponents([.year, .month, .day], from: date)
+        return "\(c.year ?? 0)-\(c.month ?? 0)-\(c.day ?? 0)"
+    }
+
+    /// The highest count among the given day keys (one per recent zone).
+    static func used(ruleID: UUID, dayKeys: [String], in records: [ConditionalUseRecord]) -> Int {
+        records.filter { $0.ruleID == ruleID && dayKeys.contains($0.day) }
+            .map(\.count).max() ?? 0
+    }
+
+    static func checkInUsed(_ checkInID: UUID, ruleID: UUID,
+                            in records: [ConditionalUseRecord]) -> Bool {
+        records.contains { $0.ruleID == ruleID && $0.checkInIDs.contains(checkInID) }
+    }
+
+    /// Count one use under every given day key.
+    static func recording(ruleID: UUID, dayKeys: [String], checkInID: UUID, at now: Date,
+                          in records: [ConditionalUseRecord]) -> [ConditionalUseRecord] {
+        var result = records
+        for key in Set(dayKeys).sorted() {
+            if let index = result.firstIndex(where: { $0.ruleID == ruleID && $0.day == key }) {
+                result[index].count += 1
+                result[index].lastUsedAt = max(result[index].lastUsedAt, now)
+                result[index].checkInIDs.append(checkInID)
+            } else {
+                result.append(ConditionalUseRecord(ruleID: ruleID, day: key, count: 1,
+                                                   lastUsedAt: now, checkInIDs: [checkInID]))
+            }
+        }
+        return result
+    }
+
+    /// Drops only records whose last use is older than `retention`; a record
+    /// from the future (clock moved back) is kept.
+    static func pruned(_ records: [ConditionalUseRecord], at now: Date) -> [ConditionalUseRecord] {
+        records.filter { now.timeIntervalSince($0.lastUsedAt) < retention }
+    }
+}
+
+/// The time zones Demora has seen recently (C9). If the zone changed in the
+/// last 12 hours, a day/time condition must hold in every zone seen since.
+struct TimeZoneEvidence: Codable, Equatable {
+    static let window: TimeInterval = 12 * 60 * 60
+    static let maximumEntries = 8
+    var currentID: String
+    /// Earlier zones and when they were last current (guarded clock).
+    var lastSeen: [String: Date] = [:]
+
+    /// Nil when nothing changed, so callers write saved state only on a change.
+    static func observing(_ evidence: TimeZoneEvidence?, zoneID: String,
+                          at now: Date) -> TimeZoneEvidence? {
+        guard var result = evidence else { return TimeZoneEvidence(currentID: zoneID) }
+        guard result.currentID != zoneID else { return nil }
+        // The previous zone was current until some moment up to now; assume now.
+        result.lastSeen[result.currentID] = now
+        result.lastSeen[zoneID] = nil
+        result.currentID = zoneID
+        result.lastSeen = result.lastSeen.filter { now.timeIntervalSince($0.value) <= window }
+        if result.lastSeen.count > maximumEntries {
+            let kept = result.lastSeen.sorted { $0.value > $1.value }.prefix(maximumEntries)
+            result.lastSeen = Dictionary(uniqueKeysWithValues: kept.map { ($0.key, $0.value) })
+        }
+        return result
+    }
+
+    /// The current zone first, then every other zone seen in the window. An
+    /// unobserved change (saved zone differs) counts as having changed now.
+    static func recentZoneIDs(_ evidence: TimeZoneEvidence?, current: String,
+                              at now: Date) -> [String] {
+        guard let evidence else { return [current] }
+        var others = Set(evidence.lastSeen.filter {
+            now.timeIntervalSince($0.value) <= window
+        }.keys)
+        if evidence.currentID != current { others.insert(evidence.currentID) }
+        others.remove(current)
+        return [current] + others.sorted()
+    }
+}
+
+// MARK: When & where: evaluation inputs and results
+
+/// One location fix, already read in the foreground by the host. Never saved.
+struct ConditionalLocationFix: Equatable {
+    var latitude: Double
+    var longitude: Double
+    /// Metres; iOS reports a negative value for an invalid fix.
+    var horizontalAccuracy: Double
+    /// Seconds since the fix was taken.
+    var age: TimeInterval
+    var isPrecise = true
+    var isSimulated = false
+    var isFromAccessory = false
+}
+
+/// The offline country lookup's answer for the fix's point.
+struct ConditionalCountryLookup: Equatable {
+    /// Nil when the point is in no country (open sea).
+    var regionCode: String?
+    var borderDistanceMeters: Double
+}
+
+enum ConditionalUnknownReason: Equatable {
+    case notChecked, clockChanged, timeZoneChanged, timeZoneUnknown
+    case locationOff, noFix, staleFix, imprecise, needsPrecise
+    case simulated, accessory, nearBorder, countryUnavailable
+}
+
+enum ConditionalLocationInput: Equatable {
+    /// Location was not read (the plan decided it couldn't change the answer).
+    case notRead
+    case unavailable(ConditionalUnknownReason)
+    case fix(ConditionalLocationFix, country: ConditionalCountryLookup?)
+}
+
+enum ConditionStatus: Equatable {
+    case met, notMet, unknown, notNeeded
+}
+
+enum ConditionReason: Equatable {
+    case atPlace, notAtPlace, inCountry, notInCountry
+    case onDay(weekday: Int), notOnDay(weekday: Int)
+    case inWindow, outsideWindow(minute: Int)
+    case inDates, outsideDates
+    case notNeeded
+    case unknown(ConditionalUnknownReason)
+}
+
+struct ConditionResult: Equatable {
+    var status: ConditionStatus
+    var reason: ConditionReason
+    /// For a met day/time/date condition: when it stops holding (nil = not
+    /// within a week, e.g. every day). Never set for place/country.
+    var windowEnd: Date? = nil
+
+    static func unknown(_ reason: ConditionalUnknownReason) -> ConditionResult {
+        ConditionResult(status: .unknown, reason: .unknown(reason))
+    }
+}
+
+struct ConditionalEvaluation: Equatable {
+    var results: [ConditionResult]
+    var isMet: Bool
+    /// True only when location was not read and reading it could still make
+    /// the rule true (C8: read location only if it can change the answer).
+    var locationCouldChangeVerdict: Bool
+    /// The window end that caps a session started now; nil = only its length.
+    var windowEnd: Date?
+}
+
+struct ConditionalClockInput {
+    var guardedNow: Date
+    var wallNow: Date
+    /// The device calendar in the current time zone.
+    var calendar: Calendar
+    /// Current zone first, then other zones seen in the last 12 hours.
+    var recentTimeZoneIDs: [String]
+
+    static func current(for state: LatchState, guardedNow: Date = TimeGuard.now(),
+                        wallNow: Date = Date(), calendar: Calendar = .current) -> ConditionalClockInput {
+        ConditionalClockInput(
+            guardedNow: guardedNow, wallNow: wallNow, calendar: calendar,
+            recentTimeZoneIDs: TimeZoneEvidence.recentZoneIDs(
+                state.timeZoneEvidence, current: calendar.timeZone.identifier, at: guardedNow))
+    }
+
+    /// Zones to check, the current one first; nil if any can't be resolved.
+    var zones: [TimeZone]? {
+        var ids = [calendar.timeZone.identifier]
+        ids += recentTimeZoneIDs.filter { $0 != calendar.timeZone.identifier }
+        var result: [TimeZone] = []
+        for id in ids {
+            guard let zone = id == calendar.timeZone.identifier ? calendar.timeZone
+                    : TimeZone(identifier: id) else { return nil }
+            result.append(zone)
+        }
+        return result
+    }
+
+    /// Day keys for today in every recent zone (current first).
+    var dayKeys: [String]? {
+        zones.map { zones in
+            var keys: [String] = []
+            for zone in zones {
+                var zoned = calendar
+                zoned.timeZone = zone
+                let key = ConditionalUses.dayKey(for: guardedNow, calendar: zoned)
+                if !keys.contains(key) { keys.append(key) }
+            }
+            return keys
+        }
+    }
+
+    var clockAgrees: Bool {
+        abs(wallNow.timeIntervalSince(guardedNow)) <= ConditionEvaluator.clockTolerance
+    }
+}
+
+enum ConditionEvaluator {
+    /// TimeGuard's own tolerance between wall and guarded time.
+    static let clockTolerance: TimeInterval = 300
+    static let maximumFixAge: TimeInterval = 15
+    static let borderMargin: Double = 2000
+    static let earthRadius: Double = 6_371_000
+
+    static func evaluate(_ rule: ConditionalRule, clock: ConditionalClockInput,
+                         location: ConditionalLocationInput) -> ConditionalEvaluation {
+        let free = rule.isFreeTime
+        var results = rule.conditions.map { condition in
+            condition.usesLocation ? .unknown(.notChecked) : clockResult(condition, clock: clock)
+        }
+        let clockResults = zip(rule.conditions, results).filter { !$0.0.usesLocation }.map(\.1)
+        let settled: Bool
+        switch rule.match {
+        case .all: settled = clockResults.contains { $0.status != .met }
+        case .any: settled = clockResults.contains { $0.status == .met }
+        }
+        var notRead = false
+        if case .notRead = location { notRead = true }
+        for index in rule.conditions.indices where rule.conditions[index].usesLocation {
+            if notRead {
+                results[index] = settled ? ConditionResult(status: .notNeeded, reason: .notNeeded)
+                    : .unknown(.notChecked)
+            } else {
+                results[index] = locationResult(rule.conditions[index], input: location, free: free)
+            }
+        }
+        let decision = verdict(rule, statuses: results.map(\.status), windowEnds: results.map(\.windowEnd))
+        return ConditionalEvaluation(
+            results: results, isMet: decision.isMet,
+            locationCouldChangeVerdict: notRead && rule.hasLocationCondition && !settled,
+            windowEnd: decision.isMet ? decision.windowEnd : nil)
+    }
+
+    /// Unknown and not-needed never count as met. All of: every condition
+    /// met; the earliest day/time/date end caps a session. Any of: one met;
+    /// a met place/country branch caps only by length, otherwise the latest
+    /// end of the met day/time/date branches.
+    static func verdict(_ rule: ConditionalRule, statuses: [ConditionStatus],
+                        windowEnds: [Date?]) -> (isMet: Bool, windowEnd: Date?) {
+        guard statuses.count == rule.conditions.count, windowEnds.count == statuses.count,
+              !statuses.isEmpty else { return (false, nil) }
+        let indices = Array(rule.conditions.indices)
+        switch rule.match {
+        case .all:
+            guard statuses.allSatisfy({ $0 == .met }) else { return (false, nil) }
+            let ends = indices.filter { !rule.conditions[$0].usesLocation }.compactMap { windowEnds[$0] }
+            return (true, ends.min())
+        case .any:
+            let met = indices.filter { statuses[$0] == .met }
+            guard !met.isEmpty else { return (false, nil) }
+            if met.contains(where: { rule.conditions[$0].usesLocation || windowEnds[$0] == nil }) {
+                return (true, nil)
+            }
+            return (true, met.compactMap { windowEnds[$0] }.max())
+        }
+    }
+
+    /// Day, time and dates on the guarded clock, in every recent zone.
+    static func clockResult(_ condition: ConditionalCondition,
+                            clock: ConditionalClockInput) -> ConditionResult {
+        guard clock.clockAgrees else { return .unknown(.clockChanged) }
+        guard let zones = clock.zones, !zones.isEmpty else { return .unknown(.timeZoneUnknown) }
+        let perZone = zones.map { zone -> ConditionResult in
+            var calendar = clock.calendar
+            calendar.timeZone = zone
+            return singleZoneResult(condition, now: clock.guardedNow, calendar: calendar)
+        }
+        guard perZone[0].status == .met else { return perZone[0] }
+        guard perZone.allSatisfy({ $0.status == .met }) else { return .unknown(.timeZoneChanged) }
+        var result = perZone[0]
+        let ends = perZone.compactMap(\.windowEnd)
+        // A zone with no end (e.g. every day) doesn't loosen another zone's end.
+        result.windowEnd = ends.min()
+        return result
+    }
+
+    static func singleZoneResult(_ condition: ConditionalCondition, now: Date,
+                                 calendar: Calendar) -> ConditionResult {
+        switch condition {
+        case .days(let days):
+            let weekday = calendar.component(.weekday, from: now)
+            guard days.contains(weekday) else {
+                return ConditionResult(status: .notMet, reason: .notOnDay(weekday: weekday))
+            }
+            var day = calendar.startOfDay(for: now)
+            var end: Date? = nil
+            for _ in 0..<7 {
+                let next = nextDayStart(after: day, calendar: calendar)
+                day = next
+                if !days.contains(calendar.component(.weekday, from: next)) { end = next; break }
+            }
+            return ConditionResult(status: .met, reason: .onDay(weekday: weekday), windowEnd: end)
+        case .time(let start, let end):
+            let c = calendar.dateComponents([.hour, .minute], from: now)
+            let minute = (c.hour ?? 0) * 60 + (c.minute ?? 0)
+            let inside = start < end ? (minute >= start && minute < end)
+                : (minute >= start || minute < end)
+            guard inside, start != end else {
+                return ConditionResult(status: .notMet, reason: .outsideWindow(minute: minute))
+            }
+            let today = calendar.startOfDay(for: now)
+            let endDay = start > end && minute >= start ? nextDayStart(after: today, calendar: calendar) : today
+            guard let boundary = windowBoundary(end, on: endDay, after: now, calendar: calendar) else {
+                return ConditionResult(status: .notMet, reason: .outsideWindow(minute: minute))
+            }
+            return ConditionResult(status: .met, reason: .inWindow, windowEnd: boundary)
+        case .dates(let first, let last):
+            let today = ConditionalDay.of(now, in: calendar.timeZone)
+            guard first <= today, today <= last else {
+                return ConditionResult(status: .notMet, reason: .outsideDates)
+            }
+            var gregorian = Calendar(identifier: .gregorian)
+            gregorian.timeZone = calendar.timeZone
+            let lastStart = gregorian.date(from: DateComponents(year: last.year, month: last.month, day: last.day))
+                .map { gregorian.startOfDay(for: $0) }
+            let end = lastStart.map { nextDayStart(after: $0, calendar: gregorian) }
+            return ConditionResult(status: .met, reason: .inDates, windowEnd: end)
+        case .place, .country:
+            return .unknown(.notChecked)
+        }
+    }
+
+    /// The start of the following local day, safe across DST.
+    private static func nextDayStart(after dayStart: Date, calendar: Calendar) -> Date {
+        let added = calendar.date(byAdding: .day, value: 1, to: dayStart)
+            .map { calendar.startOfDay(for: $0) }
+        guard let added, added > dayStart else { return dayStart.addingTimeInterval(86_400) }
+        return added
+    }
+
+    /// A window's end on a given day. A skipped (spring) minute moves to the
+    /// next valid time; a repeated (fall) hour uses its first occurrence
+    /// unless that has already passed.
+    private static func windowBoundary(_ minute: Int, on day: Date, after now: Date,
+                                       calendar: Calendar) -> Date? {
+        for policy in [Calendar.RepeatedTimePolicy.first, .last] {
+            if let date = calendar.date(bySettingHour: minute / 60, minute: minute % 60, second: 0,
+                                        of: day, matchingPolicy: .nextTime,
+                                        repeatedTimePolicy: policy, direction: .forward),
+               date > now { return date }
+        }
+        return nil
+    }
+
+    static func locationResult(_ condition: ConditionalCondition, input: ConditionalLocationInput,
+                               free: Bool) -> ConditionResult {
+        let fix: ConditionalLocationFix, country: ConditionalCountryLookup?
+        switch input {
+        case .notRead: return .unknown(.notChecked)
+        case .unavailable(let reason): return .unknown(reason)
+        case .fix(let value, let lookup): fix = value; country = lookup
+        }
+        let accuracy = fix.horizontalAccuracy
+        guard accuracy.isFinite, accuracy > 0, fix.latitude.isFinite, fix.longitude.isFinite,
+              (-90...90).contains(fix.latitude), (-180...180).contains(fix.longitude)
+        else { return .unknown(.noFix) }
+        guard fix.age.isFinite, fix.age >= -5, fix.age <= maximumFixAge else { return .unknown(.staleFix) }
+        guard !fix.isSimulated else { return .unknown(.simulated) }
+        if free && fix.isFromAccessory { return .unknown(.accessory) }
+        switch condition {
+        case .place(let place):
+            guard fix.isPrecise else { return .unknown(.needsPrecise) }
+            let distance = distanceMeters(fix.latitude, fix.longitude, place.latitude, place.longitude)
+            let radius = Double(place.radiusMeters)
+            if free {
+                // The whole accuracy circle must be inside the place.
+                if distance + accuracy <= radius { return ConditionResult(status: .met, reason: .atPlace) }
+                if distance - accuracy > radius { return ConditionResult(status: .notMet, reason: .notAtPlace) }
+                return .unknown(.imprecise)
+            }
+            // A block starts if the circle touches the place.
+            return distance - accuracy <= radius
+                ? ConditionResult(status: .met, reason: .atPlace)
+                : ConditionResult(status: .notMet, reason: .notAtPlace)
+        case .country(let code):
+            guard let country, country.borderDistanceMeters.isFinite,
+                  country.borderDistanceMeters >= 0 else { return .unknown(.countryUnavailable) }
+            let inside = country.regionCode?.uppercased() == code.uppercased()
+            if !free {
+                return inside ? ConditionResult(status: .met, reason: .inCountry)
+                    : ConditionResult(status: .notMet, reason: .notInCountry)
+            }
+            let clear = country.borderDistanceMeters > accuracy + borderMargin
+            if inside && clear { return ConditionResult(status: .met, reason: .inCountry) }
+            if !inside && clear { return ConditionResult(status: .notMet, reason: .notInCountry) }
+            return .unknown(.nearBorder)
+        case .days, .time, .dates:
+            return .unknown(.notChecked)
+        }
+    }
+
+    /// Great-circle (haversine) distance in metres.
+    static func distanceMeters(_ lat1: Double, _ lon1: Double, _ lat2: Double, _ lon2: Double) -> Double {
+        let toRadians = Double.pi / 180
+        let dLat = (lat2 - lat1) * toRadians, dLon = (lon2 - lon1) * toRadians
+        let a = sin(dLat / 2) * sin(dLat / 2)
+            + cos(lat1 * toRadians) * cos(lat2 * toRadians) * sin(dLon / 2) * sin(dLon / 2)
+        return 2 * earthRadius * atan2(sqrt(a), sqrt(max(0, 1 - a)))
+    }
+}
+
+// MARK: When & where: check-in starts
+
+/// What a check-in proved, kept with the start request. One boolean per
+/// condition; never coordinates.
+struct ConditionalCheckInStamp: Codable, Equatable {
+    var checkInID: UUID
+    var guardedAt: Date
+    var dayKey: String
+    var timeZoneID: String
+    var results: [Bool]
+
+    static func make(_ evaluation: ConditionalEvaluation, clock: ConditionalClockInput,
+                     checkInID: UUID = UUID()) -> ConditionalCheckInStamp {
+        ConditionalCheckInStamp(
+            checkInID: checkInID, guardedAt: clock.guardedNow,
+            dayKey: ConditionalUses.dayKey(for: clock.guardedNow, calendar: clock.calendar),
+            timeZoneID: clock.calendar.timeZone.identifier,
+            results: evaluation.results.map { $0.status == .met })
+    }
+}
+
+struct ConditionalStartRequest: Codable, Equatable {
+    var ruleID: UUID
+    var revision: Int
+    /// Free time: the chosen length (1…rule max). Block: ignored (rule's end).
+    var minutes: Int
+    var stamp: ConditionalCheckInStamp
+}
+
+enum ConditionalStartRefusal: Error, Equatable {
+    case ruleMissing, ruleChanged, clockChanged, stampStale, wrongDay, timeZoneMoved
+    case conditionsNotMet, invalidLength, alreadyRunning, checkInUsed, noUsesLeft
+    case windowEnded, dueChanges, unavailable
+}
+
+struct ConditionalStartPlan: Equatable {
+    var session: BlockSession
+    var uses: [ConditionalUseRecord]
+    /// Finished sessions of the same rule, removed so their cleanup can't stop
+    /// the new session's activity (both carry the rule's activity name).
+    var replacedSessionIDs: [UUID]
+}
+
+enum ConditionalStart {
+    static let stampLifetime: TimeInterval = 120
+    static let minimumSession: TimeInterval = 60
+
+    enum Phase { case queue, apply }
+
+    /// Shared by queue and apply. Free time is fully revalidated in both;
+    /// a block that waited its stricter delay is not stale at apply, but
+    /// still needs its rule revision and (under all of) its window.
+    static func plan(_ request: ConditionalStartRequest, state: LatchState,
+                     clock: ConditionalClockInput, phase: Phase = .queue)
+        -> Result<ConditionalStartPlan, ConditionalStartRefusal> {
+        guard let rule = state.conditionalRules.first(where: { $0.id == request.ruleID })
+        else { return .failure(.ruleMissing) }
+        guard rule.revision == request.revision, rule.isValid else { return .failure(.ruleChanged) }
+        let stamp = request.stamp
+        let fresh = phase == .queue || rule.isFreeTime
+        if fresh {
+            guard clock.clockAgrees else { return .failure(.clockChanged) }
+            let age = clock.guardedNow.timeIntervalSince(stamp.guardedAt)
+            guard age >= -5, age <= stampLifetime else { return .failure(.stampStale) }
+            guard stamp.timeZoneID == clock.calendar.timeZone.identifier else { return .failure(.timeZoneMoved) }
+            guard stamp.dayKey == ConditionalUses.dayKey(for: clock.guardedNow, calendar: clock.calendar)
+            else { return .failure(.wrongDay) }
+        }
+        guard stamp.results.count == rule.conditions.count else { return .failure(.conditionsNotMet) }
+        // Location results come only from the check-in; day/time/dates are
+        // re-evaluated now and must agree with it.
+        var statuses: [ConditionStatus] = [], ends: [Date?] = []
+        for (index, condition) in rule.conditions.enumerated() {
+            if condition.usesLocation {
+                statuses.append(stamp.results[index] ? .met : .notMet); ends.append(nil)
+            } else {
+                let now = ConditionEvaluator.clockResult(condition, clock: clock)
+                statuses.append(now.status == .met && stamp.results[index] ? .met : .notMet)
+                ends.append(now.windowEnd)
+            }
+        }
+        let decision = ConditionEvaluator.verdict(rule, statuses: statuses, windowEnds: ends)
+        guard decision.isMet else { return .failure(.conditionsNotMet) }
+        guard !state.sessions.contains(where: {
+            $0.conditionalRuleID == rule.id && $0.endsAt > clock.wallNow
+        }) else { return .failure(.alreadyRunning) }
+        let replaced = state.sessions.filter { $0.conditionalRuleID == rule.id }.map(\.id)
+        let capLeft = decision.windowEnd.map { $0.timeIntervalSince(clock.guardedNow) }
+
+        switch rule.outcome {
+        case .freeTime(let kind, let selection, let maxMinutes, let usesPerDay):
+            guard (1...maxMinutes).contains(request.minutes) else { return .failure(.invalidLength) }
+            guard let keys = clock.dayKeys, !keys.isEmpty else { return .failure(.timeZoneMoved) }
+            let records = ConditionalUses.pruned(state.conditionalUses, at: clock.guardedNow)
+            guard !ConditionalUses.checkInUsed(stamp.checkInID, ruleID: rule.id, in: records)
+            else { return .failure(.checkInUsed) }
+            guard ConditionalUses.used(ruleID: rule.id, dayKeys: keys, in: records) < usesPerDay
+            else { return .failure(.noUsesLeft) }
+            let length = min(TimeInterval(request.minutes) * 60, capLeft ?? .infinity)
+            guard length >= minimumSession else { return .failure(.windowEnded) }
+            var session = BlockSession(name: rule.name, kind: kind,
+                                       selection: kind == .free ? FamilyActivitySelection() : selection,
+                                       startedAt: clock.wallNow,
+                                       endsAt: clock.wallNow.addingTimeInterval(length))
+            session.conditionalRuleID = rule.id
+            let uses = ConditionalUses.recording(ruleID: rule.id, dayKeys: keys,
+                                                 checkInID: stamp.checkInID,
+                                                 at: clock.guardedNow, in: records)
+            return .success(ConditionalStartPlan(session: session, uses: uses, replacedSessionIDs: replaced))
+        case .block(_, let selection, let until):
+            let untilLength: TimeInterval
+            switch until {
+            case .duration(let minutes):
+                untilLength = TimeInterval(minutes) * 60
+            case .time(let minute):
+                // Wall clock, like the session it ends.
+                let today = clock.calendar.startOfDay(for: clock.wallNow)
+                let tomorrow = clock.calendar.date(byAdding: .day, value: 1, to: today)
+                let candidates = ([today] + (tomorrow.map { [$0] } ?? [])).compactMap {
+                        clock.calendar.date(bySettingHour: minute / 60, minute: minute % 60, second: 0,
+                                            of: $0, matchingPolicy: .nextTime,
+                                            repeatedTimePolicy: .first, direction: .forward)
+                    }
+                guard let end = candidates.first(where: { $0 > clock.wallNow }) else {
+                    return .failure(.windowEnded)
+                }
+                untilLength = end.timeIntervalSince(clock.wallNow)
+            }
+            let length = min(untilLength, capLeft ?? .infinity)
+            guard length >= minimumSession else { return .failure(.windowEnded) }
+            var session = BlockSession(name: rule.name, kind: .block, selection: selection,
+                                       startedAt: clock.wallNow,
+                                       endsAt: clock.wallNow.addingTimeInterval(length))
+            session.conditionalRuleID = rule.id
+            return .success(ConditionalStartPlan(session: session, uses: state.conditionalUses,
+                                                 replacedSessionIDs: replaced))
+        }
+    }
+}
+
+// MARK: When & where: change summaries (receipt, ledger, contact requests)
+
+/// Names only: place and country names, never coordinates or sizes.
+enum ConditionalSummary {
+    static func conditionText(_ condition: ConditionalCondition, locale: Locale = .current,
+                              calendar: Calendar = .current) -> String {
+        switch condition {
+        case .place(let place):
+            return String(format: tr("at %@"), place.name)
+        case .country(let code):
+            return String(format: tr("in %@"), locale.localizedString(forRegionCode: code) ?? code)
+        case .days(let days):
+            if days == Set(1...7) { return tr("every day") }
+            if days == Set(2...6) { return tr("on weekdays") }
+            if days == [1, 7] { return tr("on weekends") }
+            let symbols = calendar.shortWeekdaySymbols
+            let names = days.sorted().compactMap { symbols.indices.contains($0 - 1) ? symbols[$0 - 1] : nil }
+            return String(format: tr("on %@"), names.joined(separator: " "))
+        case .time(let start, let end):
+            return "\(minutesLabel(start))–\(minutesLabel(end))"
+        case .dates(let first, let last):
+            var gregorian = Calendar(identifier: .gregorian)
+            gregorian.timeZone = calendar.timeZone
+            let formatter = DateFormatter()
+            formatter.calendar = calendar
+            formatter.locale = locale
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+            func text(_ day: ConditionalDay) -> String {
+                gregorian.date(from: DateComponents(year: day.year, month: day.month, day: day.day))
+                    .map(formatter.string(from:)) ?? "\(day.year)-\(day.month)-\(day.day)"
+            }
+            return String(format: tr("%@ to %@"), text(first), text(last))
+        }
+    }
+
+    static func conditionsText(_ rule: ConditionalRule, locale: Locale = .current,
+                               calendar: Calendar = .current) -> String {
+        let parts = rule.conditions.map { conditionText($0, locale: locale, calendar: calendar) }
+        guard var result = parts.first else { return "" }
+        let joiner = rule.match == .all ? tr("%@ and %@") : tr("%@ or %@")
+        for part in parts.dropFirst() { result = String(format: joiner, result, part) }
+        return result
+    }
+
+    static func outcomeText(_ outcome: ConditionalOutcome) -> String {
+        switch outcome {
+        case .freeTime(let kind, _, let minutes, let uses):
+            if kind == .unblock {
+                return uses == 1 ? String(format: tr("%d min unblocked, once a day"), minutes)
+                    : String(format: tr("%d min unblocked, %d times a day"), minutes, uses)
+            }
+            return uses == 1 ? String(format: tr("%d min free, once a day"), minutes)
+                : String(format: tr("%d min free, %d times a day"), minutes, uses)
+        case .block(_, _, .time(let minute)):
+            return String(format: tr("block until %@"), minutesLabel(minute))
+        case .block(_, _, .duration(let minutes)):
+            return String(format: tr("block for %d min"), minutes)
+        }
+    }
+
+    /// "If at Home or 22:00–06:00: block until 07:00."
+    static func sentence(_ rule: ConditionalRule, locale: Locale = .current,
+                         calendar: Calendar = .current) -> String {
+        String(format: tr("If %@: %@."), conditionsText(rule, locale: locale, calendar: calendar),
+               outcomeText(rule.outcome))
     }
 }
