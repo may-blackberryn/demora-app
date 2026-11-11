@@ -1,6 +1,11 @@
 # Demora iOS full redesign — review
 
 ## Start here
+- **When & where step 1 (2026-11-11):** engine only (model, evaluator,
+  check-in starts, per-day uses, capacity, `Tests/WhenWhereHarness.py`),
+  `9151393` + review fixes `da7fe64`. No UI or location yet. See "When &
+  where step 1" at the end for decisions worth the owner's eye and what
+  step 2 needs.
 - **State (2026-11-11):** every redesign build is now on `design/full-redesign`,
   ending with the **four-tab switch** (`748c488..afcf685`; see
   "Four-tab switch" below). Nothing pushed. Verify passes: all 34
@@ -835,3 +840,79 @@ bundle `may.latch.dev` named **dev demora**. Each earlier commit
 unsigned Debug build on its own. Install on **iphone de may** failed because
 devicectl reported the device **unavailable** (not connected), so nothing was
 installed or launched. Nothing pushed, merged or uploaded.
+
+## When & where step 1 (2026-11-11)
+Step 1 of the approved `docs/conditional-sessions-redesign.md` (C15: model +
+engine + capacity + harness). No UI, no CoreLocation, no Info.plist change.
+Evidence: `Tests/WhenWhereHarness.py` compiles the real models, evaluator,
+start plan, `MonitoringBudget`, `SchedulePrecedence` and the complete
+production `classify`/`summary`/`conflictKey`/`queue`/`queueCoordinated`/
+`apply`/`applyDueChanges` and the new entry point with stubbed storage, clock,
+monitors and tokens; a second binary compiles `SharedModels.swift` at
+`b188742` and decodes blobs written by the new code. Nothing device-level is
+proven (callbacks, real fixes, iOS capacity).
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| All pure When & where code (rule model, evaluator, per-day uses, time-zone record, start plan, summaries) lives at the end of `Shared/SharedModels.swift`; the engine glue is in `ChangeEngine.swift` | Eight existing harnesses compile `SharedModels.swift` alone and `ScheduleSelectionHarness` compiles the real queue/apply; a new file would have meant editing them ("keep passing unchanged") | Yes |
+| New saved fields are optional storage (`conditionalRuleStore`, `conditionalUseStore`, `timeZoneEvidence`, `BlockSchedule.ownerRuleID`, `BlockSession.conditionalRuleID`) behind non-optional accessors | A state without the feature encodes exactly the old keys; older builds ignore the new keys | Yes — harness checks the key set and decodes with `b188742` models |
+| An older build can't decode a state holding a **pending** When & where change (unknown action) and enters the existing recovery state (raw blob kept, nothing lost) | Same as every earlier added action (e.g. day/night groups). App Store can't downgrade; TestFlight can | Limit — owner's eye |
+| Free-time start: one pure `ConditionalStart.plan` validates at the entry point, inside `queueCoordinated` (the only zero-delay path) and again at apply. Any failure returns nil: no delayed fallback, nothing to override | Spec §5.8, C2, Q3 | Yes |
+| Place/country results reach the engine only as the check-in stamp's booleans (no coordinates); day/time/dates are re-evaluated at queue and apply and must agree with the stamp | C8: the engine never sees where the user was | Yes |
+| Stamp valid ≤ 2 min (5 s skew), same day key, zone and rule revision; each check-in ID can start once (kept with the day's uses) | §5.5 step 7, §5.6 "two checks racing" | Yes |
+| Every start (place-only included) is refused while wall and guarded clocks differ by > 300 s | Sessions end on the wall clock; a changed clock could stretch one | Yes |
+| Time zones: recorded with the rule, at check-in and in housekeeping (one write only on a change, only while rules exist). Every zone seen in the last 12 h must agree; a change not yet recorded counts as just now. **The daily cap uses the same rule**: a use counts under each recent zone's day key | §5.6; without the cap part, switching zone across midnight would reopen a spent day | Yes — the cap extension is worth the owner's eye |
+| Use records are kept 72 h, pruned on rollover; counts never decrease or refund | A day key can stay "today" in some zone for ~50 h | Yes |
+| Session end: all-of → earliest end of its day/time/date conditions; any-of → latest end of the met clock branches, length only when a place/country branch is met; "every day" adds no cap; spring gap → next valid time; repeated fall hour → first occurrence unless already past | §5.6 "window that allowed it", DST stress tests | Yes |
+| A start with < 60 s left is refused instead of spending a use | Otherwise "23:59:50" spends today's use on 10 seconds | Yes |
+| One session per rule, activity `session-cond-<ruleID>` (reservation = real name); finished sessions of the same rule are removed when the next starts | Their cleanup would otherwise stop the new session's activity | Yes |
+| Capacity: each rule reserves its latent session; "Everything" free rules (with an allowance) reserve `latch.freewin`; a block rule's owned windows count as schedules; removal is a repair; pending removals free nothing. Five rules worst case: 8 names | §5.9 | Yes |
+| Block outcome v1: only "block chosen apps"; needs a place or country; under any-of only **time windows** run on their own (owned daily `BlockSchedule`) | A check-in block is a Block now session, which can't express "all except"; standalone days/dates branches would need all-day or dated windows that today's schedule types can't represent. Examples 1–3 unaffected | Limit — owner's eye (spec allowed all-except) |
+| A check-in block applies after its stricter wait without a staleness check, but needs the same rule revision and, under all-of, must still be inside its window (else dropped) | "Ends at the earlier of until and the window end"; a landed edit waited its own delay | Yes |
+| Owned windows change only with their rule: `removeSchedule`/`updateScheduleSelection` on them and `addSchedule` claiming an owner are rejected | One rule, one decision | Yes |
+| Edits keep ID and `addedAt`, bump `revision` (today's uses and a running session carry over); a no-op edit is rejected; removing a free rule lets its session finish (C14) | §5.8 | Yes |
+| Five-rule cap counts pending additions; conflict keys `conditional-<id>` / `conditionalStart-<id>` | §5.3, §5.8 | Yes |
+| Receipt summaries: "Add When & where rule: %@. If … : …." with names only; weekday and country names come from the system locale, like `Recurrence.label` | `ChangeEngine.summary` must compile in harnesses that don't have `AppLanguage` | Limit |
+| `RulePending` maps the new actions to nil for now | `RuleRef.conditional` arrives with the Rules card (step 2) | Follow-up |
+| No change to existing rule kinds, delays, overrides, Block now, sessions or schedule behaviour; additions to `housekeeping`/`rolloverIfNewDay` are no-ops without rules/records | Brief | Preserved |
+| `Tests/WakeWidgetReadOnlyHarness.py` froze `ChangeEngine.swift` byte for byte against `da9b6d3`; its guard now also accepts **pure line insertions that name When & where symbols** (any edited or deleted original line still fails; checked by mutation). Every engine change was made an insertion; the free start's zero-delay path is inlined in `queueCoordinated` so `MigrationDelayPresentationHarness`'s delay pins and `ScheduleSelectionHarness`'s compile stay unchanged | The spec requires new `ChangeAction` cases in the engine's exhaustive switches, which that freeze can't allow | Yes — the one edit to an existing harness; worth the lead's eye |
+
+## When & where step 1 review fixes
+A fresh reviewer read the uncommitted diff and spec with no conclusions from
+the lead. It confirmed no start without a met check-in, no override path,
+correct directions, tolerant decoding and matching capacity names. Fixed,
+each with a regression check in `Tests/WhenWhereHarness.py` that fails
+without the fix:
+
+| Bug | Fix | Test |
+| --- | --- | --- |
+| **High:** day keys used the device calendar, so switching Settings → Calendar (Gregorian → Buddhist → Japanese …) gave a fresh key and reopened a spent day | Day keys, weekdays and times are always read in a Gregorian calendar in the zone (`ConditionalDay.gregorian`) | Five calendars give one key; a spent day stays spent under Buddhist/Japanese/Hebrew; day/time results unchanged |
+| Editing an owned block window's times kept its activity names, so it was never re-registered (block starts late, or stays on past its new end) and the name-based repair couldn't notice | `ownedScheduleID` includes the window's start and end | A time edit changes the ID, re-registers windows and leaves no stale names; a rename keeps the ID |
+| A writer holding an older snapshot (app vs extension) could save a lower use count, refunding a use | `SharedStore.saveCoordinated` merges uses with the saved state: highest count per rule and day, check-in IDs combined; records older than 72 h are not resurrected | Pure merge table + source guard that the real save merges before encoding |
+| A check-in block "until 02:30" started in the repeated fall hour (second 02:10) ran until the next day | The end uses the same first-then-second-occurrence rule as window ends | Madrid 2026-10-25, both 02:10s end at their own 02:30 |
+
+The same reviewer rechecked the fixes and found no new high or medium issue.
+Left as limits: the stale-save race can still drop a just-started session (the
+same race exists for every session; the use is no longer refunded, so the
+user can lose, never gain, free time); an older build never stops
+`session-cond-*` activities after a downgrade; a promotion of an owned window
+(no UI yet) is lost when its times change, because its ID changes.
+
+Verification on `da7fe64`: all 35 `Tests/*Harness.py` (When & where: 34
+scenarios, 272 assertions, plus the `b188742` decode check), both Swift
+harnesses, both localization checks, `git diff --check`, then sequential
+unsigned arm64 Debug and Release builds with stable Xcode 27.0 (27A266a), no
+warnings. `9151393` passed the same verify on its own. Not installed; nothing
+here is visible on a phone yet.
+
+**What step 2 needs (editor, Rules card, summary):** `RuleRef.conditional`
+and the `RulePending.ref` mapping (now nil); hide owned windows
+(`ownerRuleID != nil`) from Schedules, Calendar and Conflicts or show them
+under their rule; build drafts with `addedAt = Date()`, `revision = 0` and
+validate with `ConditionalRule.isValid` (it already encodes the block v1
+limits); queue `.addConditionalRule` / `.updateConditionalRule` /
+`.removeConditionalRule` through the receipt. Step 3 (check-in) calls
+`ConditionalClockInput.current(for:)`, `ConditionEvaluator.evaluate`
+(`locationCouldChangeVerdict` says whether to read location),
+`ConditionalCheckInStamp.make` and `ChangeEngine.startConditionalSessionOffMain`,
+and maps `ConditionalStartRefusal` / `ConditionReason` to copy (no strings yet).
