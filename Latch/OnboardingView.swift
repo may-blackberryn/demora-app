@@ -424,7 +424,7 @@ struct OnboardingView: View {
                 Text(tr("Review your day/night groups after changing your limits."))
                     .font(.footnote).foregroundStyle(Ink.danger)
             }
-            Text(tr("You can change this later in Schedules → Day & night. Later changes follow your delays."))
+            Text(tr("You can change this later in Rules → Day & night. Later changes follow your delays."))
                 .font(.footnote).foregroundStyle(Ink.faint)
         }
     }
@@ -561,7 +561,9 @@ struct DemoraWelcomeProgress: View {
 struct DemoraWelcomeEntry: View {
     @AppAccent private var accent
     let symbol: String
-    let title: String
+    /// nil when the detail already names the item ("Today — what's on…"),
+    /// so it isn't shown or read twice.
+    let title: String?
     let detail: String
 
     var body: some View {
@@ -569,8 +571,12 @@ struct DemoraWelcomeEntry: View {
             Image(systemName: symbol).font(.system(size: 24, weight: .light))
                 .foregroundStyle(accent).frame(width: 30).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 8) {
-                Text(title).demoraType(.cardTitle).foregroundStyle(Ink.ink)
-                Text(detail).demoraType(.meta).foregroundStyle(Ink.inkSoft)
+                if let title {
+                    Text(title).demoraType(.cardTitle).foregroundStyle(Ink.ink)
+                    Text(detail).demoraType(.meta).foregroundStyle(Ink.inkSoft)
+                } else {
+                    Text(detail).demoraType(.body).foregroundStyle(Ink.ink)
+                }
             }
             .fixedSize(horizontal: false, vertical: true)
         }

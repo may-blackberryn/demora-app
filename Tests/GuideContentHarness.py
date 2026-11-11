@@ -70,6 +70,17 @@ class GuideContentTests(unittest.TestCase):
             bodies = literals(r'body: tr\((' + LITERAL + r')\)', topic)
             self.assertTrue(all(len(body.split()) <= 100 for body in bodies))
 
+    def test_no_visible_copy_names_a_retired_tab(self):
+        # Four-tab switch: Today · Rules · Insights · You. Visible copy must
+        # not send anyone to the Home, Limits, Schedules, Delays or Settings tabs.
+        retired = ("Home tab", "on Home", "in Home", "Home →", "Schedules →", "in Schedules",
+                   "Limits & blocks", "Limits →", "Delays & overrides", "Delays tab",
+                   "Settings → Help", "Settings → Fine-tune", "Settings tab")
+        for path in (ROOT / "Latch").glob("*.swift"):
+            for literal in re.findall(r'tr\((' + LITERAL + r')', path.read_text()):
+                for phrase in retired:
+                    self.assertNotIn(phrase, literal, f"{path.name}: {literal}")
+
     def test_replay_is_not_exposed(self):
         for obsolete in ["replayTutorial", "replayFailed", "Replay walkthrough",
                          "Couldn't start the walkthrough", ".alert("]:

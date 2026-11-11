@@ -66,7 +66,7 @@ struct DayNightSetupDraftView: View {
         VStack(alignment: .leading, spacing: 20) {
             DayNightExplanation()
             if groups.isEmpty {
-                Text(tr("Optional — add day/night groups now, or set them up later in Schedules."))
+                Text(tr("Optional — add day/night groups now, or set them up later in Rules."))
                     .font(.subheadline).foregroundStyle(Ink.faint)
             }
             ForEach(groups) { group in
@@ -188,7 +188,7 @@ struct DayNightGroupEditor: View {
                        canReview: valid && canSave(normalizedDraft),
                        waiting: waiting,
                        help: [tr("Give each group its own wake-up wait and sleep time."),
-                              tr("One Wake up tap on Home starts every eligible group's wait together. Each group unlocks after its own wait; sleep blocking ends at its wake-up start time."),
+                              tr("One Wake up tap on Today starts every eligible group's wait together. Each group unlocks after its own wait; sleep blocking ends at its wake-up start time."),
                               tr("Overlapping rules use the strictest boundary. An exception here does not bypass another group or limit."),
                               tr("An all-other-apps fallback automatically excludes apps targeted by your named selected groups. Category-based groups cannot be combined with this fallback.")],
                        reviewTitle: onReview != nil ? tr("Review change") : (saveTitle ?? tr("Save")),
@@ -388,7 +388,7 @@ private struct DayNightExplanation: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(tr("Give each group its own wake-up wait and sleep time."))
                 .font(.subheadline)
-            Text(tr("One Wake up tap on Home starts every eligible group's wait together. Each group unlocks after its own wait; sleep blocking ends at its wake-up start time."))
+            Text(tr("One Wake up tap on Today starts every eligible group's wait together. Each group unlocks after its own wait; sleep blocking ends at its wake-up start time."))
                 .font(.footnote).foregroundStyle(Ink.faint)
             Text(tr("Overlapping rules use the strictest boundary. An exception here does not bypass another group or limit."))
                 .font(.footnote).foregroundStyle(Ink.faint)

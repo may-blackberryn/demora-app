@@ -160,13 +160,13 @@ struct RedesignWelcomeView: View {
             mathReplacementOffer
             VStack(alignment: .leading, spacing: 22) {
                 SectionHeader(tr("Four tabs now"))
-                DemoraWelcomeEntry(symbol: "sun.horizon", title: tr("Today"),
+                DemoraWelcomeEntry(symbol: "sun.horizon", title: nil,
                                    detail: tr("Today — what's on, what's left, what's changing."))
-                DemoraWelcomeEntry(symbol: "list.bullet.rectangle", title: tr("Rules"),
+                DemoraWelcomeEntry(symbol: "list.bullet.rectangle", title: nil,
                                    detail: tr("Rules — every limit and schedule, with your waits on top."))
-                DemoraWelcomeEntry(symbol: "chart.bar", title: tr("Insights"),
+                DemoraWelcomeEntry(symbol: "chart.bar", title: nil,
                                    detail: tr("Insights — your usage and trends."))
-                DemoraWelcomeEntry(symbol: "person.crop.circle", title: tr("You"),
+                DemoraWelcomeEntry(symbol: "person.crop.circle", title: nil,
                                    detail: tr("You — ways to skip a wait, appearance and help."))
             }
             .paperCard()
@@ -272,7 +272,7 @@ struct RedesignWelcomeView: View {
                     .disabled(savingDayNight)
             } else {
                 Text(dayNightSaved ? tr("Your day/night groups are ready.")
-                     : tr("You can change this later in Schedules → Day & night. Later changes follow your delays."))
+                     : tr("You can change this later in Rules → Day & night. Later changes follow your delays."))
                     .foregroundStyle(Ink.faint)
                 if !dayNightGroups.isEmpty {
                     Button(tr("Discard day/night drafts"), role: .destructive) { dayNightGroups = [] }
