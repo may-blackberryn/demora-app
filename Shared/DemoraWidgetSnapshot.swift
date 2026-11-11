@@ -52,9 +52,8 @@ struct DemoraWidgetSnapshot: Codable {
     var noNextLabel: String
     var noPendingLabel: String
     var copy: Copy? = nil
-    /// Reserved for a read-safe host projection. Publishing wake observations
-    /// is gated on owner approval for the required engine read boundary;
-    /// absent is unknown, not awake. The widget never reads runtime files.
+    /// Read-only host observation of this local day's untapped gates.
+    /// Absent is unknown, not awake. The widget never reads runtime files.
     var wakeDue: [WakeWindow]? = nil
 
     static let key = "latch.widgetSnapshot.v1"
@@ -104,8 +103,39 @@ struct DemoraWidgetSnapshot: Codable {
     }
 
     #if !WIDGET_EXTENSION
-    static func publish(state: LatchState) {
-        guard !SharedStore.simulating else { return }
+    static func publish(state _: LatchState) { refresh() }
+
+    /// Serialize projection writers separately from rule coordination. Every
+    /// writer reads the latest saved bytes *inside* this lock, never a cached
+    /// caller state. WidgetKit services run only after releasing the lock.
+    static func refresh() {
+        guard !SharedStore.simulating,
+              let root = FileManager.default.containerURL(
+                forSecurityApplicationGroupIdentifier: groupID) else { return }
+        var changed = false
+        var error: NSError?
+        NSFileCoordinator().coordinate(writingItemAt: root.appendingPathComponent("widgetProjection.lock"),
+                                       options: .forMerging, error: &error) { _ in
+            changed = publishLatest()
+        }
+        if error == nil, changed { WidgetCenter.shared.reloadAllTimelines() }
+    }
+
+    private static func publishLatest() -> Bool {
+        guard !SharedStore.simulating else { return false }
+        let defaults = SharedStore.defaults
+        guard !SharedStore.stateRecoveryNeeded,
+              let saved = defaults.data(forKey: LatchConstants.stateKey),
+              let state = try? JSONDecoder().decode(LatchState.self, from: saved),
+              state.isSetUp else {
+            // A recovery case cannot manufacture an empty rule set or reuse a
+            // positive wake claim. Only clear our own optional display field.
+            guard var old = load(), old.wakeDue != nil else { return false }
+            old.wakeDue = nil
+            guard let data = try? JSONEncoder().encode(old) else { return false }
+            defaults.set(data, forKey: key)
+            return defaults.data(forKey: key) == data
+        }
         let cal = Calendar.current
         let now = Date()
         let today = cal.startOfDay(for: now)
@@ -190,7 +220,13 @@ struct DemoraWidgetSnapshot: Codable {
                        wakeDue: tr("Good morning. Tap to wake up."),
                        looser: tr("Looser"), stricter: tr("Stricter"),
                        openDemora: tr("Open Demora")),
-            wakeDue: nil)
+            // A reminder says the configured gate needs a tap, not that every
+            // monitor is healthy. Unrelated degradation cannot imply awake.
+            wakeDue: WakeWidgetProjection.windows(state: state, at: now, calendar: cal))
+        // A rule save racing this projection will publish again after its
+        // transaction. Never land a known-stale projection in the meantime.
+        guard defaults.data(forKey: LatchConstants.stateKey) == saved,
+              !SharedStore.stateRecoveryNeeded else { return false }
         if let old = load(), old.windows == snapshot.windows,
            old.pending == snapshot.pending,
            old.nowLabel == snapshot.nowLabel,
@@ -200,14 +236,80 @@ struct DemoraWidgetSnapshot: Codable {
            old.noNextLabel == snapshot.noNextLabel,
            old.noPendingLabel == snapshot.noPendingLabel,
            old.copy == snapshot.copy, old.wakeDue == snapshot.wakeDue {
-            return
+            return false
         }
-        guard let data = try? JSONEncoder().encode(snapshot) else { return }
-        UserDefaults(suiteName: groupID)?.set(data, forKey: key)
-        WidgetCenter.shared.reloadAllTimelines()
+        guard let data = try? JSONEncoder().encode(snapshot) else { return false }
+        defaults.set(data, forKey: key)
+        return defaults.data(forKey: key) == data
     }
     #endif
 }
+
+#if !WIDGET_EXTENSION
+/// Project only this day's gates from owning read-only APIs. No future-day tap
+/// assumptions, private runtime formats, repairs, rule changes or monitor work.
+enum WakeWidgetProjection {
+    static func windows(state: LatchState, at now: Date,
+                        calendar: Calendar) -> [DemoraWidgetSnapshot.WakeWindow]? {
+        guard let day = calendar.dateInterval(of: .day, for: now) else { return nil }
+        let guarded = TimeGuard.nowForDisplay(at: now)
+        var windows: [DemoraWidgetSnapshot.WakeWindow] = []
+        var unknown = false
+        func append(startMinutes: Int, latestMinutes: Int?,
+                    status: (Date) -> GlobalWakeStatus?) {
+            guard (0..<1440).contains(startMinutes),
+                  let start = calendar.date(bySettingHour: startMinutes / 60,
+                    minute: startMinutes % 60, second: 0, of: day.start,
+                    matchingPolicy: .nextTime, repeatedTimePolicy: .first, direction: .forward),
+                  let lastStart = calendar.date(bySettingHour: startMinutes / 60,
+                    minute: startMinutes % 60, second: 0, of: day.start,
+                    matchingPolicy: .nextTime, repeatedTimePolicy: .last, direction: .forward),
+                  start == lastStart,
+                  let end = WidgetPresentation.wakeExpiry(at: now,
+                    latestMinutes: latestMinutes, calendar: calendar),
+                  end > max(now, start) else { return }
+            // Omit an ambiguous repeated-hour start: the existing engine's
+            // minute predicate can become inactive during the rollback.
+            // A same-day future start is safe to show only when the owning
+            // reader confirms no tap/deadline for this cycle already exists.
+            guard let value = status(max(now, start)) else { unknown = true; return }
+            if value == .needsTap { windows.append(.init(startsAt: start, endsAt: end)) }
+        }
+        let global = state.wakeRule
+        if global.enabled {
+            append(startMinutes: global.startHour * 60, latestMinutes: global.latest(on: now)) {
+                GlobalWake.statusForDisplay(state: state, at: $0, guardedNow: guarded)
+            }
+        }
+        for group in state.dayNightGroups where group.wakeEnabled {
+            let timing = group.wakeTiming(on: now)
+            append(startMinutes: timing.startMinutes, latestMinutes: timing.latestMinutes) {
+                DayNightWake.statusForDisplay(group: group, at: $0, guardedNow: guarded)
+            }
+        }
+        for limit in state.limits where limit.wakeDelayMinutes != nil {
+            let timing = (limit.wakeSchedule ?? LimitWakeSchedule())
+                .timing(on: now, defaultWait: limit.wakeDelayMinutes ?? 0)
+            append(startMinutes: timing.startMinutes, latestMinutes: timing.latestMinutes) { candidate in
+                guard let value = LimitFeatures.wakeStateForDisplay(
+                    for: limit, at: candidate, guardedNow: guarded) else { return nil }
+                switch value {
+                case .needsTap: return .needsTap
+                case .waiting(let release): return .waiting(release)
+                case .awake: return .awake
+                case .notConfigured: return .inactive
+                }
+            }
+        }
+        guard !unknown else { return nil }
+        // Identical groups need only one timeline interval.
+        let unique = windows.reduce(into: [DemoraWidgetSnapshot.WakeWindow]()) { result, item in
+            if !result.contains(item) { result.append(item) }
+        }.sorted { $0.startsAt == $1.startsAt ? $0.endsAt < $1.endsAt : $0.startsAt < $1.startsAt }
+        return unique.isEmpty ? nil : unique
+    }
+}
+#endif
 
 /// Pure display decisions shared with tests. No preference/state reads or
 /// enforcement callbacks; wake observations never override a free period.

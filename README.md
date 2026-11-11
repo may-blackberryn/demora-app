@@ -192,9 +192,12 @@ Features:
   inline/rectangular Lock Screen families. They consume a small App Group
   projection, never FamilyControls tokens or raw usage, with paper/ink styling,
   optional direction chips and localized gallery metadata. Taps only navigate
-  to Today or Changes; dev/release schemes are separate. Live wake reminders
-  remain deferred pending a read-safe engine boundary; no interactive wake or
-  time grant runs in the widget.
+  to Today or Changes; dev/release schemes are separate. The approved follow-up
+  projects this local day's untapped wake gates through read-only APIs, ending
+  at their ceiling or midnight. An ambiguous repeated-hour start is omitted;
+  unknown is never assumed awake. A reminder describes a configured gate,
+  not proof of monitor health. No interactive wake or time grant runs in the
+  widget; after a real Wake up the app requests a fresh widget timeline.
 - The generic block screen uses Demora's paper/ink palette, original mark and
   Close action. It never guesses which rule blocked the app or promises an
   instant unblock. Naming a rule remains gated on a signed-device token test.

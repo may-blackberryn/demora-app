@@ -177,6 +177,37 @@ enum LimitFeatures {
         return .needsTap
     }
 
+    /// Display-only; a missing file is empty, but unreadable runtime is unknown,
+    /// not a guessed tap state. Never repair flags, split readiness or clock anchors.
+    static func wakeStateForDisplay(for limit: AppLimit, at date: Date,
+                                    guardedNow: Date) -> WakeState? {
+        guard limit.wakeDelayMinutes != nil else { return .notConfigured }
+        if (limit.wakeSchedule ?? LimitWakeSchedule())
+            .timing(on: date, defaultWait: limit.wakeDelayMinutes ?? 0).ceilingReached(on: date) {
+            return .awake
+        }
+        guard let url = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: LatchConstants.appGroupID)?
+            .appendingPathComponent(runtimeName) else { return nil }
+        let values: [UUID: LimitFeatureEntry]
+        do {
+            let data = try Data(contentsOf: url)
+            values = try JSONDecoder().decode([UUID: LimitFeatureEntry].self, from: data)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            values = [:]
+        } catch {
+            return nil
+        }
+        let stored = values[limit.id] ?? LimitFeatureEntry()
+        let day = SharedStore.dayKey(for: date)
+        let value = stored.day == day ? stored : LimitFeatureEntry(day: day)
+        if let release = value.wakeReleaseAt {
+            return guardedNow < release ? .waiting(release) : .awake
+        }
+        guard (limit.wakeSchedule ?? LimitWakeSchedule()).eligible(on: date) else { return .notConfigured }
+        return .needsTap
+    }
+
     /// Enabling a previously disabled group gate must not reuse an old tap.
     /// Leave usage, free credits, split blocks and extra-time grants alone.
     static func prepareNewWakeGates(_ ids: Set<UUID>) -> Bool {

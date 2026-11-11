@@ -37,6 +37,33 @@ enum DayNightWake {
         return .needsTap
     }
 
+    /// Display-only; unreadable runtime is unknown rather than a guessed tap
+    /// state. Disabled/finished gates do not need runtime reads or repairs.
+    static func statusForDisplay(group: DayNightGroup, at date: Date,
+                                 guardedNow: Date) -> GlobalWakeStatus? {
+        guard group.wakeEnabled else { return .inactive }
+        if group.wakeTiming(on: date).ceilingReached(on: date) { return .awake }
+        let entries: [String: Entry]
+        if let stored = SharedStore.defaults.object(forKey: key) {
+            guard let data = stored as? Data,
+                  let decoded = try? JSONDecoder().decode([String: Entry].self, from: data)
+            else { return nil }
+            entries = decoded
+        } else {
+            entries = [:]
+        }
+        if let entry = entries[group.id.uuidString],
+           entry.day == cycle(group: group, at: date), entry.epoch == group.wakeEpoch {
+            if guardedNow < entry.release { return .waiting(entry.release) }
+            return .awake
+        }
+        let clock = Calendar.current.dateComponents([.hour, .minute], from: date)
+        guard group.weekdays.contains(Calendar.current.component(.weekday, from: date)),
+              (clock.hour ?? 0) * 60 + (clock.minute ?? 0) >= group.wakeTiming(on: date).startMinutes
+        else { return .inactive }
+        return .needsTap
+    }
+
     static func cycle(group: DayNightGroup, at date: Date) -> String {
         // Editing a boundary hour must not discard today's existing wait.
         // Re-enabling a gate uses a fresh epoch instead of changing its cycle.

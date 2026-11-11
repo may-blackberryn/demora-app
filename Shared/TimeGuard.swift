@@ -46,6 +46,19 @@ enum TimeGuard {
         return abs(wall.timeIntervalSince(derived)) > tolerance ? derived : wall
     }
 
+    /// Display-only estimate: read the existing anchor without creating or
+    /// refreshing it. A missing/rebooted anchor falls back to the supplied wall clock.
+    static func nowForDisplay(at wall: Date = Date(),
+                              uptime: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Date {
+        let defaults = SharedStore.defaults
+        let anchorWall = defaults.double(forKey: anchorWallKey)
+        let anchorUptime = defaults.double(forKey: anchorUptimeKey)
+        guard anchorWall > 0, uptime >= anchorUptime else { return wall }
+        let derived = Date(timeIntervalSince1970:
+            anchorWall + (uptime - anchorUptime))
+        return abs(wall.timeIntervalSince(derived)) > tolerance ? derived : wall
+    }
+
     private static func anchor(wall: Date, uptime: TimeInterval) {
         SharedStore.defaults.set(wall.timeIntervalSince1970, forKey: anchorWallKey)
         SharedStore.defaults.set(uptime, forKey: anchorUptimeKey)

@@ -74,6 +74,7 @@ final class LocalDefaults {
         if hideNextRead { hideNextRead = false; return nil }
         return storage.data(forKey: key)
     }
+    func object(forKey key: String) -> Any? { storage.object(forKey: key) }
     func set(_ value: Any?, forKey key: String) {
         writes += 1
         if !rejectWrites && !rejectKeys.contains(key) { storage.set(value, forKey: key) }

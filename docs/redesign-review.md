@@ -662,3 +662,59 @@ is open. It must land on Today/Changes with no stale modal and without acting
 on a rule. Confirm the co-installed App Store app does not open. Then check
 the generic shield/Close and Setup demos described above. No reset of saved
 rules, markers, authorization or real device data is required for these checks.
+
+## Read-only wake reminder follow-up — 2026-11-11
+
+Owner approval: 2026-11-10, narrowly scoped read-only wake-status APIs and a
+post-wake widget refresh, with no change to waits, blocking or wake behavior.
+This is separate from the verified `da9b6d3` pushed to origin/main at the
+owner's one-off request for Xcode Cloud. No later push is authorized.
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| Add display readers in TimeGuard, GlobalWake, DayNightWake and LimitFeatures, beside their owning keys/types | Reuse runtime formats without calling repair-capable readers or copying schemas into the widget. Unreadable relevant runtime is unknown; valid absent first-cycle state remains untapped. Reads never anchor clocks or change warnings, readiness, usage or deadlines | Yes |
+| Keep existing enforcement bodies byte-for-byte; add only the approved refresh after the shared Wake up finishes shield work | Reminder refresh is not a second wake implementation. The exact baseline-restoration guard protects all four engine files | Yes |
+| Serialize widget publications on a separate display lock, decode current saved bytes inside it, recheck bytes before writing, and reload WidgetKit after releasing it | Never republish an old UI model; reject a known interleaving save. This does not prove cross-process UserDefaults visibility or OS delivery | Yes |
+| Only this local day's untapped intervals, including starts later today, bounded by ceiling/midnight | No forecast of tomorrow's tap. Waiting or completed gates never request another tap; separate intervals preserve gaps | Yes |
+| Omit a gate on a day when its configured start has different first/last occurrences | Fresh review found the existing minute predicate can go inactive in a repeated hour. Conservative display omission preserves enforcement rather than inventing a continuous interval | Yes |
+| A reminder describes a configured untapped gate, not enforcement health | A failed unrelated monitor does not mean awake. The broad degraded-flag filter was removed after review distinguished that policy from a false needsTap; no general engine callbacks were added | Yes |
+| Recovering/unreadable saved state only clears the optional wake observation | Never manufacture an empty setup or overwrite saved rules. Widget taps remain navigation-only, and free periods retain display precedence | Yes |
+
+Fresh independent review found and rechecked the repeated-hour issue; after
+the conservative fix and clarified health contract, no actionable production
+finding remained. The same reviewer inspected the new publication harness's
+fixture boundaries and coverage without writing or executing it.
+
+Final checks: all **33 Python harnesses**, both existing standalone Swift
+harnesses, both generated-localization checks and diff checks passed. The
+actual read-only readers/status/tap bodies pass **903 assertions per build
+environment**; the actual publisher/projection passes **742 per environment**.
+The latter uses thin model/reader fixtures and deterministic coordination, not
+actual enforcement or cross-process locking. Reader tests preserve preferences,
+runtime bytes/mtime, flags and effect counts and include positive controls for
+the original repair behavior. Three unfinished fixture errors were corrected:
+an injected self-referential clock, an optional dictionary initialization and
+calling the valid empty UUID-map encoding corrupt. Floating-point epoch
+round-trip expectations use a 10-microsecond tolerance; the comparison with
+the actual original clock remains exact. Existing day/night assertions remain
+unchanged; its fake defaults gained the read-only object lookup needed to
+compile the added API.
+
+Stable Xcode 27.0: sequential unsigned Debug/Release and signed Debug passed.
+Final unsigned builds had no warnings; signed Debug had only skipped AppIntents
+metadata extraction. Deep/strict signature verification passed. Logs live in
+`/Users/matiasmoran/Library/Logs/DemoraRedesign/`, prefixed `wake-`, including
+`wake-verify-final-2026-11-11.log`. No version, signing, entitlement, target,
+CloudKit, email, approval-policy or saved-rule-schema changes.
+
+Device checks still required: actual WidgetKit delivery after a tap, foreground
+and midnight; current/future-today groups with different ceilings; after-tap
+waits surviving relaunch; overlapping free periods; protected-file reads and
+cross-process preference visibility. Static widget snapshots cannot guarantee
+instant update, and the reminder is not evidence that blocking is healthy.
+There is no simulator runtime installed; no iOS UI verification is claimed.
+
+Installed this combined dev build successfully on **iphone de may** as
+`may.latch.dev`. iOS denied launch because the phone was **Locked**; this was
+not an observed crash. Unlock and open dev demora to perform the device checks.
+No production contacts/emails were sent. Nothing pushed or uploaded in this step.

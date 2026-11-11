@@ -229,8 +229,7 @@ private struct NowNextView: View {
             case .unpublished:
                 Text(copy.openDemora).widgetType(.cardTitle).lineLimit(2)
             case .wake:
-                // Future-ready schema only: live wake publication is deferred
-                // pending approval of the engine read-boundary design.
+                // Tapping only opens Today; the app owns the real Wake up.
                 Text(copy.wakeDue).widgetType(.cardTitle).lineLimit(accessory ? 3 : 4)
             case .empty:
                 Text(copy.nothingBlocked).widgetType(.cardTitle).lineLimit(2)

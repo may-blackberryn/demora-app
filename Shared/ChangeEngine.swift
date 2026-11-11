@@ -50,6 +50,31 @@ enum GlobalWake {
         return .needsTap
     }
 
+    /// Display-only; malformed relevant tap metadata is unknown, not a guessed
+    /// wake state. Never repair runtime keys or anchor the clock from a display read.
+    static func statusForDisplay(state: LatchState, at date: Date,
+                                 guardedNow: Date) -> GlobalWakeStatus? {
+        let rule = state.wakeRule
+        guard rule.enabled else { return .inactive }
+        if WakeDayTiming(startMinutes: rule.startHour * 60, waitMinutes: rule.waitMinutes,
+                         latestMinutes: rule.latest(on: date)).ceilingReached(on: date) { return .awake }
+        let defaults = SharedStore.defaults
+        if let storedDay = defaults.object(forKey: dayKey) {
+            guard let day = storedDay as? String else { return nil }
+            if day == SharedStore.dayKey(for: date) {
+                guard let release = defaults.object(forKey: releaseKey) as? Date else { return nil }
+                return guardedNow < release ? .waiting(release) : .awake
+            }
+        } else if defaults.object(forKey: releaseKey) != nil {
+            return nil
+        }
+        let clock = Calendar.current.dateComponents([.hour, .minute], from: date)
+        let minute = (clock.hour ?? 0) * 60 + (clock.minute ?? 0)
+        guard rule.weekdays.contains(Calendar.current.component(.weekday, from: date)),
+              minute >= rule.startHour * 60 else { return .inactive }
+        return .needsTap
+    }
+
     @discardableResult
     static func tap() -> Bool {
         guard !SharedStore.simulating else { return false }
@@ -153,6 +178,9 @@ enum ChangeEngine {
                     }
                 }
                 ShieldController.refresh()
+                // Display-only refresh after all tap writes/shield work finish.
+                // Reads current saved state/runtime; never reuses the UI model.
+                DemoraWidgetSnapshot.refresh()
                 continuation.resume(returning: changed)
             }
         }

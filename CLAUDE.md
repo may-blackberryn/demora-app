@@ -1,6 +1,6 @@
 # Demora iOS — primary development handoff
 
-Updated 2026-11-09 (setup, shield and widget display). This is the iPhone/iPad handoff, not
+Updated 2026-11-11 (wake-widget follow-up). This is the iPhone/iPad handoff, not
 the Mac app (the Mac app has its own handoff in the workspace root `CLAUDE.md`).
 Codex reads `AGENTS.md`, which points here. Keep durable decisions current here;
 put build decisions in `docs/redesign-review.md` and older implementation
@@ -48,9 +48,13 @@ Do not use reset/checkout to clean the tree or discard unfamiliar files.
 
 All redesign work is on branch **`design/full-redesign`** (You build through
 `7be509d`, handoff `5c5c502`, followed by the independent verification fixes).
-`main` is untouched at `160d285`. Nothing is pushed, merged,
-uploaded or submitted. The earlier uncommitted 2.0 report work is committed
-there as `862cc9c`.
+At the owner's explicit request on 2026-11-10, **origin/main** was fast-forwarded
+from `160d285` to the verified **`da9b6d3`** for their Xcode Cloud/TestFlight
+workflow. Remote SHA was checked afterward. No claim was made that Cloud
+processing completed. Local main may still point at `160d285`; the working
+checkout remains the redesign branch. The unfinished wake-widget changes were
+excluded from that push. This one-off authorization is not standing permission
+to publish later changes. The earlier 2.0 report work is committed as `862cc9c`.
 
 The owner asked for a full redesign that keeps the intention (calm, warm paper,
 serif, blue or brick ink) and moves to four tabs: **Today · Rules · Insights ·
@@ -74,7 +78,7 @@ You**. Read before any redesign work:
 | You (behind the Settings tab), commits `4492d82..7be509d` plus verification fixes | Independently reviewed and corrected; see `docs/redesign-review.md` → Independent You verification for evidence and remaining device checks |
 | Onboarding, intro and migration welcome | Built, freshly reviewed and verified; now included in the installed combined dev build. Phone locked, so interactive setup checks remain; see the dated setup build in the review log |
 | Generic shield | Built, independently reviewed, verified and installed in the combined dev build. Rule naming remains behind the device spike |
-| Widgets | Display/navigation built, independently reviewed and verified: 31 Python harnesses, existing Swift harnesses, 40 actual-model checks per environment, both localization generators, unsigned Debug/Release and signed Debug. Installed; launch denied Locked. Live wake reminder deferred pending the owner's read-boundary approval |
+| Widgets | Display/navigation and approved read-only wake reminder built, independently reviewed and verified: 33 Python harnesses, existing Swift harnesses, both localization generators and unsigned Debug/Release/signed Debug. Reader/publisher fixtures pass 903/742 assertions per environment. Device timing remains unverified; see dated follow-up |
 | Four-tab switch (drop Delays/Schedules tabs, move badges, retire the legacy tutorial and its dormant code, restyle Calendar) | Not built |
 | Device test pass | Partial (owner tried Today) |
 
@@ -96,12 +100,15 @@ You**. Read before any redesign work:
   the signed-device token spike. Follow `docs/onboarding-shield-widgets-redesign.md`
   and the owner answers. Do not change engine/model/service behavior without
   first asking the owner. No new feature was started during the You checkpoint.
-- **Wake widget reminder approval pending:** current wake readers can repair
-  clock/runtime metadata; publishing cached Home state can overwrite newer
-  monitor projections. Ask before adding a narrowly scoped read-safe API and
-  post-wake refresh hook. The optional schema/renderer is tested, but every live
-  widget publication writes nil wakeDue until this is authorized and verified.
-  No engine, runtime-file format or enforcement change was made for widgets.
+- **Wake widget reminder approved 2026-11-10:** the owner authorized the
+  narrowly scoped read-only wake APIs and post-wake refresh hook. The follow-up
+  is verified separately, not included in `da9b6d3`. Original enforcement
+  bodies stay byte-for-byte unchanged except the one display refresh after the
+  shared Wake up action. Readers never repair clock anchors, flags, usage,
+  monitor readiness or rules. The publisher serializes its own display writes,
+  re-reads saved state rather than trusting a cached UI model, and treats
+  unreadable owning runtime as unknown. This remains a snapshot, not proof
+  that enforcement is healthy or a guarantee of WidgetKit delivery.
 - **Owner decision pending (don't implement without asking):** should adding,
   removing or pausing contacts stop being skippable via the "Trusted contacts"
   capability, and should new contacts stop getting it by default? Both are

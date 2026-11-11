@@ -72,12 +72,22 @@ with tempfile.TemporaryDirectory(prefix='demora-widget-check-') as directory:
         subprocess.run([executable], check=True)
 
 snapshot = (ROOT / 'Shared/DemoraWidgetSnapshot.swift').read_text()
-publisher = snapshot.split('static func publish(state:', 1)[1].split('/// Pure display', 1)[0]
-for forbidden in ('TimeGuard', 'DayNightWake', 'GlobalWake.', 'LimitFeatures.',
+publisher = snapshot.split('static func publish(state ', 1)[1].split('/// Pure display', 1)[0]
+for forbidden in ('TimeGuard.now(', 'DayNightWake.status(', 'GlobalWake.status(', 'LimitFeatures.wakeState(',
                   'loadState()', 'housekeeping', 'reconcile(', 'applyNow', 'wakeUp('):
     assert forbidden not in publisher, ('widget publication must not repair/apply enforcement', forbidden)
-assert 'wakeDue: nil' in publisher, 'live wake projection awaits read-boundary approval'
-assert 'guard !SharedStore.simulating else { return }' in publisher
+assert 'WakeWidgetProjection.windows(state: state, at: now, calendar: cal)' in publisher
+assert 'static func publish(state _: LatchState) { refresh() }' in snapshot, 'never publish a stale UI state'
+assert 'guard !SharedStore.simulating' in publisher
+assert 'widgetProjection.lock' in publisher and 'private static func publishLatest() -> Bool' in publisher
+assert 'defaults.data(forKey: LatchConstants.stateKey) == saved' in publisher
+assert 'old.wakeDue = nil' in publisher, 'unreadable setup suppresses an old wake claim, never fabricates rules'
+for required in ('TimeGuard.nowForDisplay(at: now)', 'GlobalWake.statusForDisplay(',
+                 'DayNightWake.statusForDisplay(', 'LimitFeatures.wakeStateForDisplay('):
+    assert required in publisher, ('only owning read-safe APIs feed wake projection', required)
+engine = (ROOT / 'Shared/ChangeEngine.swift').read_text()
+wake_all = engine.split('static func wakeUpAllOffMain()', 1)[1].split('static func setUpInitialDayNightOffMain', 1)[0]
+assert wake_all.index('ShieldController.refresh()') < wake_all.index('DemoraWidgetSnapshot.refresh()') < wake_all.index('continuation.resume(returning: changed)')
 
 host = (ROOT / 'Latch/LatchApp.swift').read_text()
 home = (ROOT / 'Latch/HomeView.swift').read_text()
