@@ -40,7 +40,14 @@ assert 'case .session(let id)' in summary and 'state.sessions' in summary
 assert '.endSessionEarly(id: id)' in summary and '.changeReceipt($receipt)' in summary
 assert 'case .exemption: return .freePeriod' in presentation
 assert 'case .session, .queuedSession: return .session' in presentation
-assert 'WakeScheduleView()' in day_night and 'SleepBlockEditor()' in day_night
+# The Day & night and Group wake-up list pages are retired at the four-tab
+# switch (rules spec R1/R7); their rules stay reachable from the summary sheet.
+assert 'struct DayNightSchedulesView' not in day_night and 'WakeScheduleView' not in day_night
+assert 'struct WakeScheduleView' not in (ROOT / "Latch/WakeScheduleView.swift").read_text()
+assert 'case .legacyWake: WakeBlockEditor(presentation: .sheet)' in summary
+assert 'case .legacySleep: SleepBlockEditor(presentation: .sheet)' in summary
+assert 'GroupWakeDelayEditor(limitID: id)' in summary
+assert 'receipt = ChangeReceiptRequest(action: .removeDayNightGroup(id: id))' in summary
 
 calendar = source.split('struct CalendarView: View {', 1)[1]
 for forbidden in ('model.queue', 'SharedStore.save', 'ChangeEngine.', 'ShieldController.'):

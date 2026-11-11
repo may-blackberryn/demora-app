@@ -18,8 +18,12 @@ assert "latestMinutes: latestMinutes" in editor
 assert ".setGroupWakeSchedule(" in limits
 assert 'tr("Give each group its own daily wake-up tap and wait. These group gates begin at midnight;' not in limits
 assert "timingsAreValid" in groups
-assert 'if !model.state.limits.isEmpty {\n                    NavigationLink { WakeScheduleView() }' in groups
-assert "NavigationLink { WakeBlockEditor() }" in groups
+# The Group wake-up list and the Day & night page are retired (rules R1/R7):
+# the per-limit and legacy editors open from the rule summary sheet.
+summary = (ROOT / "Latch/RuleSummarySheet.swift").read_text()
+assert "struct WakeScheduleView" not in limits and "WakeScheduleView()" not in groups
+assert "GroupWakeDelayEditor(limitID: id)" in summary
+assert "case .legacyWake: WakeBlockEditor(presentation: .sheet)" in summary
 keys = [
     "Change wake-up schedule for %@",
     "Customize wake-up by day",

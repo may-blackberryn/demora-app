@@ -682,9 +682,11 @@ assert 'receipt = ChangeReceiptRequest(action: .endSessionEarly(id: id))' in she
 assert '.changeReceipt($receipt)' in sheet, 'session ending still uses the normal receipt'
 assert 'Button { summary = RuleSummaryRequest(ref: e.ref) }' in schedules
 assert '.ruleSummary($summary)' in schedules, 'Calendar opens the same live rule actions'
-day_night_page = section(day_night, 'struct DayNightSchedulesView: View {', '\nprivate struct DayNightLiveWakeStatus')
-assert 'receipt = ChangeReceiptRequest(action: .removeDayNightGroup(id: group.id))' in day_night_page
-assert 'model.queue(' not in day_night_page and 'takes effect in' not in day_night_page
+# The Day & night list page is retired (R1); group removal lives on the
+# summary sheet, through the receipt.
+assert 'struct DayNightSchedulesView' not in day_night
+assert 'receipt = ChangeReceiptRequest(action: .removeDayNightGroup(id: id))' in sheet
+assert 'model.queue(' not in day_night and 'takes effect in' not in day_night
 # --- Review fixes (see docs/redesign-review.md "Rules review fixes") --------
 # 1. An unlabelled trailing closure after `actionTitle:` lands on the new
 #    `secondaryAction` and the button disappears: label every action.

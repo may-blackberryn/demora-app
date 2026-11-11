@@ -149,46 +149,6 @@ struct DemoraSectionTitle: View {
     }
 }
 
-/// The position within a calendar day, not a usage estimate. The little ink
-/// mark moves with the actual clock; Screen Time progress stays in its report.
-struct DemoraDayLine: View {
-    @AppAccent private var accent
-    let date: Date
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Canvas { context, size in
-                let hour = Calendar.current.component(.hour, from: date)
-                let minute = Calendar.current.component(.minute, from: date)
-                let position = CGFloat(hour * 60 + minute) / 1440
-                var ticks = Path()
-                for tick in 0...24 {
-                    let x = CGFloat(tick) / 24 * size.width
-                    ticks.move(to: CGPoint(x: x, y: 0))
-                    ticks.addLine(to: CGPoint(x: x, y: tick % 6 == 0 ? 16 : 7))
-                }
-                context.stroke(ticks, with: .color(Ink.rule), lineWidth: 1)
-                let marker = CGRect(x: position * size.width - 2, y: 0,
-                                    width: 4, height: 23)
-                context.fill(Path(roundedRect: marker, cornerRadius: 2),
-                             with: .color(accent))
-            }
-            .frame(height: 24)
-            HStack {
-                Text("00")
-                Spacer()
-                Text(date, style: .time).foregroundStyle(accent)
-                Spacer()
-                Text("24")
-            }
-            .font(.system(.caption2, design: .monospaced))
-            .foregroundStyle(Ink.faint)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(date, style: .time))
-    }
-}
-
 /// Waits are the defining action in Demora, so they get the largest type,
 /// rather than a small subtitle in the same tile as every other preference.
 struct DemoraDelayRow: View {
@@ -242,21 +202,6 @@ struct DemoraToggleStyle: ToggleStyle {
         }
         .buttonStyle(.plain)
         .accessibilityValue(configuration.isOn ? tr("On") : tr("Off"))
-    }
-}
-
-/// A thread connects related events without enclosing each in a box.
-struct DemoraTimelineMark: View {
-    @AppAccent private var accent
-    var color: Color? = nil
-    var body: some View {
-        VStack(spacing: 7) {
-            Circle().stroke(color ?? accent, lineWidth: 1.5).frame(width: 9, height: 9)
-            Rectangle().fill(Ink.rule).frame(width: 1)
-        }
-        .frame(width: 16)
-        .padding(.top, 6)
-        .accessibilityHidden(true)
     }
 }
 
