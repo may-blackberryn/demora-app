@@ -206,8 +206,10 @@ struct IncomingRequest: Identifiable {
 }
 
 enum ContactsRelay {
+    private static let containerID = "iCloud.may.latch"
+
     static var database: CKDatabase {
-        CKContainer(identifier: BetaThanks.containerID).publicCloudDatabase
+        CKContainer(identifier: containerID).publicCloudDatabase
     }
 
     private static let codeKey = "latch.buddyCode"
