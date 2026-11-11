@@ -109,14 +109,13 @@ Features:
   apply to the next tap. Enabling clears only its old tap, failing closed on
   runtime-write failure. Healthy daily fingerprints are rebased rather than
   restarting monitors; stale/missing monitors still self-heal normally.
-- Limit editing keeps apps and daily allowance up front, with collapsed
-  weekday, split-budget and extra-time settings. Schedules has one page with
-  links to Sessions, Day & night and Calendar, not an inner tab selector.
-  Sessions contains Now, Planned and Recurring. Free periods are a kind of
-  immediate/planned/recurring session, not a separate menu. Existing recurring
-  free periods remain visible in Recurring. Now & Next and
-  New session remain available on the main Schedules page. The practice
-  walkthrough keeps its direct highlighted Recurring and Calendar links.
+- Four tabs (2026-11-11 switch): **Today · Rules · Insights · You**. Rules
+  lists every limit, schedule, day & night group, planned block and always-on
+  rule, with Calendar and Conflicts in its header and New rule pinned at the
+  bottom. Free periods are a kind of block-now/planned/repeating rule, not a
+  separate menu. The Delays, Limits and Schedules tabs, the Day & night and
+  Group wake-up list pages and the legacy interactive walkthrough are retired;
+  a replay interrupted in an older build is still restored at launch.
 - Home has a prominent shared Wake up action and a day-clock drawing with
   block, unblock/free, and wake-wait lines. Untapped wake gates are shown as
   awaiting a tap, not as a predicted unlock deadline. Today's usage uses a
@@ -124,7 +123,7 @@ Features:
   the filter without destroying the report identity; an empty report is never
   treated as evidence of zero use. Normal tab switches retain Home's navigation
   hierarchy rather than removing its remote report. Hidden Home is non-interactive
-  and excluded from accessibility; the legacy tutorial keeps its original routing.
+  and excluded from accessibility. Insights is retained the same way once opened.
   The Home query requests the union of configured app/category/site selections.
   Display refreshes are coalesced, spaced by at least two seconds, and followed
   by one soft retry three seconds later. They cancel when the report is hidden
@@ -201,10 +200,10 @@ Features:
 - The generic block screen uses Demora's paper/ink palette, original mark and
   Close action. It never guesses which rule blocked the app or promises an
   instant unblock. Naming a rule remains gated on a signed-device token test.
-- Limits & blocks has a full-width New limit action; Home's Select action lives
-  in Pending changes rather than the page header. The Guide covers real 2.0
+- Rules has a full-width New rule action; Select lives in Changes rather than
+  on Today. The Guide covers real 2.0
   workflows, permissions, delays, overrides, overlaps and troubleshooting.
-- Insights (reached from Today until the four-tab switch; redesigned
+- Insights (its own tab since the four-tab switch; redesigned
   2026-11-04, `docs/insights-redesign.md`) renders 28 completed calendar days
   plus today through a separate DeviceActivityReport scene. The host draws only
   a fixed header (title, one Refresh, About this data), a "Loading your

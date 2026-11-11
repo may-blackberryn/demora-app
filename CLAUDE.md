@@ -1,6 +1,6 @@
 # Demora iOS — primary development handoff
 
-Updated 2026-11-11 (wake-widget follow-up). This is the iPhone/iPad handoff, not
+Updated 2026-11-11 (four-tab switch). This is the iPhone/iPad handoff, not
 the Mac app (the Mac app has its own handoff in the workspace root `CLAUDE.md`).
 Codex reads `AGENTS.md`, which points here. Keep durable decisions current here;
 put build decisions in `docs/redesign-review.md` and older implementation
@@ -44,7 +44,7 @@ Run `git status --short` and inspect the relevant diff. All current tracked and
 untracked work must be preserved unless the user explicitly says otherwise.
 Do not use reset/checkout to clean the tree or discard unfamiliar files.
 
-## Current state: full redesign in progress (2026-11-09)
+## Current state: full redesign built (2026-11-11)
 
 All redesign work is on branch **`design/full-redesign`** (You build through
 `7be509d`, handoff `5c5c502`, followed by the independent verification fixes).
@@ -73,13 +73,13 @@ You**. Read before any redesign work:
 | Plan + six specs | Approved by the owner, committed |
 | Foundations (tokens `InkPalette`/`Ink`, `DemoraType`, `DemoraComponents.swift`, text-case default, tab bar restyle) | Built, reviewed, re-verified, on the owner's iPhone |
 | Today (replaces Home; `TodayView`, `TodayPresentation`, `ChangesLedgerView`, `ChangeReceiptSheet`, `LatchReport/ReportTheme.swift`) | Built, reviewed, re-verified, on the iPhone; owner said it looks good |
-| Rules (behind tab 1, still labelled "Limits") | Built, reviewed, re-verified, on the iPhone |
-| Insights (opened from Today until the tab switch) | Built, reviewed, re-verified, on the iPhone |
-| You (behind the Settings tab), commits `4492d82..7be509d` plus verification fixes | Independently reviewed and corrected; see `docs/redesign-review.md` → Independent You verification for evidence and remaining device checks |
+| Rules (tab 1) | Built, reviewed, re-verified, on the iPhone |
+| Insights (tab 2, retained like Today) | Built, reviewed, re-verified, on the iPhone |
+| You (tab 3), commits `4492d82..7be509d` plus verification fixes | Independently reviewed and corrected; see `docs/redesign-review.md` → Independent You verification for evidence and remaining device checks |
 | Onboarding, intro and migration welcome | Built, freshly reviewed and verified; now included in the installed combined dev build. Phone locked, so interactive setup checks remain; see the dated setup build in the review log |
 | Generic shield | Built, independently reviewed, verified and installed in the combined dev build. Rule naming remains behind the device spike |
 | Widgets | Display/navigation and approved read-only wake reminder built, independently reviewed and verified: 33 Python harnesses, existing Swift harnesses, both localization generators and unsigned Debug/Release/signed Debug. Reader/publisher fixtures pass 903/742 assertions per environment. Device timing remains unverified; see dated follow-up |
-| Four-tab switch (drop Delays/Schedules tabs, move badges, retire the legacy tutorial and its dormant code, restyle Calendar) | Not built |
+| Four-tab switch (drop Delays/Schedules tabs, move badges, retire the legacy tutorial and its dormant code, restyle Calendar) | Built (Codex start, Claude finish), freshly reviewed and fixed, verified; signed Debug built but not installed (phone unavailable on 2026-11-11): `748c488..afcf685` + docs; see `docs/redesign-review.md` → Four-tab switch. Nothing seen on a screen yet |
 | Device test pass | Partial (owner tried Today) |
 
 ### Open items to do first
@@ -95,9 +95,11 @@ You**. Read before any redesign work:
   localization and diff checks pass. Unsigned Debug/Release and signed Debug
   pass; installed as dev demora on the owner's iPhone, but launch was denied
   because it was locked. Interactive checks remain. Details live in the log.
-- **Next: four-tab switch**, one
-  approved step at a time. Shield phase 1 stays generic; phase 2 naming needs
-  the signed-device token spike. Follow `docs/onboarding-shield-widgets-redesign.md`
+- **Next: the device test pass** of the whole redesign, in the order in
+  `docs/redesign-review.md` → Start here. Shield phase 1 stays generic; phase 2
+  naming needs the signed-device token spike. Possible follow-up: prune catalog
+  keys orphaned by deleted screens (needs care: some keys are used through
+  variables). Follow `docs/onboarding-shield-widgets-redesign.md`
   and the owner answers. Do not change engine/model/service behavior without
   first asking the owner. No new feature was started during the You checkpoint.
 - **Wake widget reminder approved 2026-11-10:** the owner authorized the
@@ -138,10 +140,10 @@ submitting are not.
 | Delayed mutations and enforcement reconciliation | `Shared/ChangeEngine.swift`, `ShieldController.swift`, `TimeGuard.swift` |
 | Activity planning/registration | `Shared/MonitoringBudget.swift`, `MonitorRegistration.swift` |
 | Background callbacks | `LatchMonitor/DeviceActivityMonitorExtension.swift` |
-| Today (replaces Home), change receipt, Changes ledger | `Latch/TodayView.swift`, `TodayPresentation.swift` (pure), `ChangeReceiptSheet.swift`, `ChangesLedgerView.swift`; legacy tutorial Home in `HomeView.swift`; report host `LimitsUsageReportView.swift`, `HomeReportRefreshPolicy.swift` |
-| Rules tab, rule summary, editors | `Latch/RulesView.swift`, `RulesPresentation.swift` (pure), `RuleSummarySheet.swift`, `RuleEditors.swift`; older editors still in `LimitsView.swift` |
-| Sessions, schedules, conflicts | `Latch/SchedulesView.swift`, `ScheduleConflictsView.swift` |
-| Day/night and wake runtime | `Shared/DayNightPolicy.swift`, `DayNightWake.swift`; `Latch/DayNightViews.swift`, `WakeScheduleView.swift`, `WakeTimingEditor.swift` |
+| Today (replaces Home), change receipt, Changes ledger | `Latch/TodayView.swift`, `TodayPresentation.swift` (pure), `ChangeReceiptSheet.swift`, `ChangesLedgerView.swift`; Today's host/state in `HomeView.swift`; report host `LimitsUsageReportView.swift`, `HomeReportRefreshPolicy.swift` |
+| Rules tab, rule summary, editors | `Latch/RulesView.swift`, `RulesPresentation.swift` (pure), `RuleSummarySheet.swift`, `RuleEditors.swift`; legacy wake/sleep editors and shared pickers in `LimitsView.swift` |
+| Calendar, recurrence helpers, conflicts | `Latch/SchedulesView.swift` (Calendar only), `ScheduleConflictsView.swift` |
+| Day/night and wake runtime | `Shared/DayNightPolicy.swift`, `DayNightWake.swift`; `Latch/DayNightViews.swift` (editor + setup draft), `WakeScheduleView.swift` (per-limit wake editor), `WakeTimingEditor.swift` |
 | Redesign foundations | `Latch/Theme.swift` (`InkPalette`, `Ink`, `DemoraType`), `DemoraComponents.swift`; report copy in `LatchReport/ReportTheme.swift` |
 | Delay policy | `Latch/DelayPolicyViews.swift` (shown as Rules → Your waits) |
 | You tab, appearance, help | `Latch/YouView.swift`, `YouPages.swift`, `YouPresentation.swift` (pure), `HowDemoraWorksView.swift`; remaining `SettingsView.swift` |

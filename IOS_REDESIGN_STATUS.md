@@ -811,8 +811,8 @@ App Store copy until those paths are enforced and tested.
   `UsageInsightsSelection` in `UsageDashboardPresentation.swift`; tested by the
   Usage* and ApplicationUsage harnesses. `ReportTheme.swift` copies the
   foundations palette, tint and type scale, checked by UsageDashboardHarness.
-- Still pushed from Today: at the four-tab switch, move it into the Insights tab
-  and replace `canRefresh`'s `model.selectedTab == 0` with the Insights tab.
+- Moved into the Insights tab at the four-tab switch (2026-11-11); `canRefresh`
+  now uses the Insights tab (`model.selectedTab == 2`).
 - Verified: every harness, Swift harnesses, localization check, `git diff
   --check`, unsigned arm64 Debug and Release builds, and synthetic macOS
   renders of the report. Not verified: anything on an iPhone (no simulator

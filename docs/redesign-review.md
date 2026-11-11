@@ -1,6 +1,58 @@
 # Demora iOS full redesign — review
 
 ## Start here
+- **State (2026-11-11):** every redesign build is now on `design/full-redesign`,
+  ending with the **four-tab switch** (`748c488..afcf685`; see
+  "Four-tab switch" below). Nothing pushed. Verify passes: all 34
+  `Tests/*Harness.py`, both Swift harnesses, both localization checks,
+  `git diff --check`, unsigned arm64 Debug and Release, then signed Debug.
+- **Install:** signed Debug (**dev demora**, `may.latch.dev`) built and passed
+  `codesign --verify --deep --strict`, but **it is not installed**: devicectl
+  reported "iphone de may" as *unavailable* (error 4016), not locked. Connect
+  or unlock the phone on the same network, then run the install command in
+  `CLAUDE.md`. No simulator runtime is installed, so **nothing in the switch
+  was seen on a screen**.
+- **What to try on the phone, in order (four tabs):**
+  1. Open dev demora. The bar shows **Today · Rules · Insights · You** (sun,
+     list, chart, person). No Delays/Limits/Schedules/Settings tabs. Make
+     text very large in iOS Settings once: labels wrap, they don't shrink.
+  2. **Today**: no Insights/Help links at the bottom any more. Tap **Full
+     day** next to "Today": the Calendar opens as a sheet with **Done**. Tap
+     a day, then an item → its summary sheet. If it has a waiting change, **See
+     in Changes** must close the Calendar and land on that change.
+  3. Still in Calendar from Today: open a limit with extra time ready → **Get
+     extra time on Today**. Both sheets must close and leave Today showing.
+  4. **Rules**: Calendar and Conflicts in the header; New rule at the bottom.
+     Open the Calendar there and repeat step 2 (it pushes inside Rules).
+  5. **Insights**: opens the report directly as a tab. Switch to another tab
+     and back: it must not reload from scratch. Open ⓘ About this data, then
+     tap a widget: it lands on Today with the About sheet gone.
+  6. **You**: as before (Ways to skip a wait, Approving for others,
+     Notifications, App). Change **Language** in You → Appearance: every tab
+     must switch language and You must stay on the Appearance page.
+  7. **Dots**: ask someone to send you an approval request — Today's tab shows
+     a dot (also while you are on Rules/You, within ~30 s). Approve or deny on
+     Today: the dot goes. An invite to be someone's contact puts the dot on
+     You instead. With VoiceOver the tab reads "…, Approval request waiting".
+     Turn on Airplane mode: existing dots and rows stay, they don't flicker off.
+  8. With a contact request already sent for a change, cold-launch the app
+     offline: Changing soon must still show "Waiting for …" right away.
+  9. Widgets: tap Now & next and Changing soon from Rules, Insights and You;
+     each lands on Today / Changes with no stale sheet.
+  10. Upgrade welcome (only if you reset the welcome marker or use **You →
+      Developer → Setup demos (debug)** → migration): the card is "Four tabs
+      now" with one line per tab, and day/night says "Rules → Day & night".
+- **Decisions most worth your eye:** a language change still rebuilds the
+  tabs (and so re-queries the private reports) — I kept this from before the
+  switch so every string follows the language; the welcome's four tab lines
+  show once instead of name + "Name — …"; the Day & night and Group wake-up
+  list pages are gone (their rules are on Rules and the summary sheet);
+  "Developer → Reset app (debug)" stays, DEBUG only.
+- **Known limits:** nothing seen on a phone; no live contact/invite round
+  trip; ~380 catalog keys are no longer used literally in source (some are
+  used through variables), not pruned here.
+
+### You: what to try on the phone (2026-11-08)
 - **State:** foundations, Today, Rules, Insights and now the You build
   (`docs/you-redesign.md`) are on `design/full-redesign`; the You build is
   the commits after `d7dd92e` (see Sessions). Nothing is pushed. Verify
@@ -142,6 +194,7 @@
 | Rules build | Pure logic, Rules tab, summary sheet, editors, receipts and Changes copy, dead editor removed | `90e5f42`, `660ec07`, `b4345ae`, `f5d7e54`, `ea16ed1`, `c79d334`; review fixes `61681ee` | Done, reviewed and fixed; awaiting the main session's review |
 | Insights build | Pure logic, host header/loading line/About sheet, Day · Week · Trends report, copy elsewhere, README/status | `46eb366`, `680d09e`, `619a77d`, `a20433e`, `d065979`; review fixes `ec80259` | Done, reviewed and fixed; awaiting the main session's review |
 | You build | Pure logic, You page, Skip the wait sheet, add/edit/remove with receipts, Help and Guide copy, duplicate screens removed | `4492d82`, `562bc69`, `f8994c9`, `41e7d00`, `b62f699`, `e86f704`; review fixes `17ec17f` | Done, reviewed and fixed; awaiting the main session's review |
+| Four-tab switch | Dead beta/language screens, four tabs + tutorial retirement + Calendar restyle, dead list pages, copy; started by Codex, finished by Claude | `748c488`, `9a7d236`, `f061030`, `5cc01b1`; review fixes `afcf685` | Done, reviewed and fixed; signed build not yet installed (phone unavailable) |
 
 ## Foundations build (2026-11-02)
 | Decision | Why | Done? |
@@ -718,3 +771,67 @@ Installed this combined dev build successfully on **iphone de may** as
 `may.latch.dev`. iOS denied launch because the phone was **Locked**; this was
 not an observed crash. Unlock and open dev demora to perform the device checks.
 No production contacts/emails were sent. Nothing pushed or uploaded in this step.
+
+## Four-tab switch (2026-11-11)
+Codex started this step and left it uncommitted (36 files); Claude audited it
+against foundations §7, rules §5.8/§8/R10, insights §8, you §8/Y7/Y10 and
+onboarding §8/O4/O5, finished it and split it into commits that each pass
+verify and an unsigned Debug build (intermediate states were built in a
+detached scratch worktree; this checkout was never reset or stashed).
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| Tabs Today · Rules · Insights · You (tags 0–3), spec icons, never locked, labels wrap at large text | foundations §7; the lock only served the tutorial | Yes |
+| Today dot = approval requests waiting; You dot = invites (Y7) | spec; the old Today dot counted pending changes | Yes |
+| Off Today, the root polls the same read-only `pendingRequestsForMe` every 30 s while active; Today polls only while visible | the dot must appear on other tabs; one poll at a time | Yes |
+| Insights is a retained tab built on first visit (like Today), hidden copies take no taps/VoiceOver; About closes on any tab switch | keep the private report alive across tabs; a widget must not land under a stale sheet | Yes |
+| Insights/Help links left Today; Full day opens the Calendar as a sheet from Today | tab 2 now means Insights; Help lives in You | Yes |
+| Legacy tutorial deleted (step machine, frozen countdowns, highlight/blocker/callout/banner/finish, tutorial editors, contact tutorial mode, intro-gate flag) | R10/Y10/owner answer 4: nothing could start or resume it | Yes |
+| `restoreFromReplay` kept byte-for-byte minus two UI assignments; still runs at launch and on retry. `LegacyReplayRecoveryHarness` compiles the real body (10 scenarios, 90 assertions) and pins every other AppModel method to `2732883` | a replay interrupted in an older build must still get its real setup back | Yes |
+| **Restored** `debugFullReset` (DEBUG only; only the two tutorial assignments removed) | Codex deleted it while You → Developer still called it: Debug did not compile | Yes |
+| **Restored** the language-change rebuild (`.id(model.language)` on the tabs, not on tab switches) | Codex dropped it; child views that call `tr()` in their own body would keep the old language. Paths that must survive (You) live in AppModel; reports re-query on language change anyway | Yes — owner may check |
+| Calendar restyled with tokens, 44 pt day cells/arrows, horizontal scroll instead of shrinking at large text; a new harness guard covers it | rules §5.8 known limit | Yes |
+| Calendar restyle committed with the tutorial retirement | same struct and file as the retired Schedules page; splitting would need a hybrid never-shipped version | Limit |
+| Removed dead screens: SchedulesView page, LimitsView/LimitRow, Delays tab, Day & night list (`DayNightSchedulesView`), Group wake-up list (`WakeScheduleView`, `GroupWakeAction`), `RecurrencePicker`, `DemoraDayLine`, `DemoraTimelineMark`, beta-thanks and language-update screens (O5) | only after checking nothing routes to them; their rules stay reachable from Rules and the summary sheet | Yes |
+| CloudKit container constant moved into `ContactsRelay` (same `iCloud.may.latch`); `latch.languageExpansionUpdate.shown` writes untouched | O5 | Yes |
+| Welcome: "Four tabs now" with one self-labelled line per tab (title no longer repeated); "Rules → Day & night", "later in Rules", "Wake up tap on Today" in all eight languages; replaced keys removed | O4 / onboarding §8; spec copy already names the tab | Yes |
+| New Guide-harness guard: no visible `tr()` string may name a retired tab | stops the old routes coming back | Yes |
+| Orphaned catalog keys from deleted screens not pruned | ~380 keys aren't found literally in source, but some are used through variables; pruning needs its own careful pass | Limit — follow-up |
+| No engine, enforcement, monitoring, persisted schema, contacts/email/App Attest service or signing change | brief | Preserved |
+
+## Four-tab switch review fixes
+A fresh reviewer read the whole uncommitted diff with no conclusions from the
+lead. It found no engine/schema/Release-separation change, no lost route to a
+pending change, and no migration regression (nothing at `2732883` ever set
+`tutorial`, so every `tutorial == nil` branch was already the live one).
+Fixed in `afcf685`, each with a regression check:
+
+| Bug | Fix | Test |
+| --- | --- | --- |
+| "Waiting for …" rows (Changing soon, Changes) appeared only after a CloudKit fetch returned; offline, they were missing for a long time | Today reads outgoing requests locally on appear and before each fetch | `HomePresentationHarness`: local read precedes `loadInbox`, and runs on appear |
+| Today → Full day → a limit → **Get extra time on Today** left the Calendar sheet covering Today | `AppModel.openToday()` (navigation only) bumps `todayRequest`; Today closes its Calendar on it | `RulesPresentationHarness` guard |
+| The Today dot could disagree with Today's rows (rows lost on a language rebuild, dot kept) | one in-memory list `AppModel.approvalInbox` feeds both; a failed fetch keeps it | `HomePresentationHarness` runs the real loader against it; `HomeReportReliabilityHarness` root guard |
+| An offline invite fetch cleared the You dot | keep the last count on failure (AppModel and You) | `LegacyReplayRecoveryHarness` allows exactly this one-line change |
+| Tab dots were colour only for VoiceOver | `accessibilityValue` "Approval request waiting" / "Invite waiting", all eight languages | `FoundationsComponentsHarness` guard |
+| (Recheck) The DEBUG reset left old approval rows/dot in memory | `debugFullReset` also clears `approvalInbox` | `LegacyReplayRecoveryHarness` allows exactly that line |
+
+The same reviewer rechecked the fixes and found no new high or medium issue
+(it also caught a trailing space that would have failed `git diff --check`).
+Left as limits: while offline for over an hour, kept rows can outlive the
+relay's one-hour request lifetime until the next successful fetch (pruning
+needs the TTL exposed from `ContactsService`, which this step doesn't touch);
+Calendar → summary → **Get extra time on Today** closes two stacked sheets in
+one update, so it is a device check (Start here step 3). If the Calendar stays
+up, close it from the summary's `onDismiss` instead.
+
+Final verification on `afcf685`: all 34 Python harnesses, both Swift
+harnesses, report (67 keys × 7) and widget (4 keys × 8) localization checks,
+full-catalog duplicate/placeholder check and `git diff --check` passed.
+Sequential unsigned arm64 Debug and Release with stable Xcode 27.0 (27A266a)
+succeeded with no warnings; signed Debug succeeded (only the usual skipped
+AppIntents metadata note) and passed deep/strict signature verification, with
+bundle `may.latch.dev` named **dev demora**. Each earlier commit
+(`748c488`, `9a7d236`, `f061030`, `5cc01b1`) also passed the full verify and an
+unsigned Debug build on its own. Install on **iphone de may** failed because
+devicectl reported the device **unavailable** (not connected), so nothing was
+installed or launched. Nothing pushed, merged or uploaded.
