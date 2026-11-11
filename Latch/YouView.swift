@@ -244,11 +244,12 @@ struct YouView: View {
     }
 
     /// Invites and the people you approve for, from the relay. A failed fetch
-    /// leaves the card absent (offline is silent, as before).
+    /// keeps what was last shown (offline is silent, and is not "no invites").
     private func reload() async {
-        let fetched = (try? await ContactsRelay.incomingInvites()) ?? []
-        invites = fetched
-        model.incomingInviteCount = fetched.count
+        if let fetched = try? await ContactsRelay.incomingInvites() {
+            invites = fetched
+            model.incomingInviteCount = fetched.count
+        }
         if let grants = try? await ContactsRelay.grantsToMe() { grantsCount = grants.count }
         readLocal()
     }

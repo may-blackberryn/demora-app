@@ -94,7 +94,7 @@ home = (ROOT / 'Latch/HomeView.swift').read_text()
 handler = host.split('.onOpenURL { url in', 1)[1].split('private func requestUpdateReviewIfNeeded', 1)[0]
 assert 'model.state.isSetUp' in handler and '!model.setupStorageUnavailable' in handler
 assert 'WidgetDestination.parse(url)' in handler and 'model.selectedTab = 0' in handler
-assert 'HomeView(widgetDestination: $widgetDestination,' in host
+assert 'HomeView(widgetDestination: $widgetDestination)' in host
 consume = home.split('private func consumeWidgetDestination()', 1)[1].split('private var today:', 1)[0]
 assert 'todayPath = destination == .changes ? [.changes] : []' in consume and 'widgetDestination = nil' in consume
 assert 'NavigationStack(path: $todayPath)' in home and '.navigationDestination(for: TodayRoute.self)' in home

@@ -102,6 +102,7 @@ import SwiftUI
     @Published var selectedTab = 0
     let state = StateStub()
     let incomingInviteCount = 0
+    var approvalInbox: [Int] = []
 }
 struct StateStub { let pending: [Int] = [] }
 enum Ink { static let paper = Color.white }
@@ -119,11 +120,8 @@ struct DemoraTabBar: View {
 enum WidgetDestination { case today, changes }
 struct HomeView: View {
     @Binding var widgetDestination: WidgetDestination?
-    let onInboxCountChanged: (Int) -> Void
-    init(widgetDestination: Binding<WidgetDestination?> = .constant(nil),
-         onInboxCountChanged: @escaping (Int) -> Void = { _ in }) {
+    init(widgetDestination: Binding<WidgetDestination?> = .constant(nil)) {
         _widgetDestination = widgetDestination
-        self.onInboxCountChanged = onInboxCountChanged
     }
     @StateObject var lifetime = HomeLifetime()
     var body: some View { Text("home \(lifetime.number)") }
@@ -146,7 +144,6 @@ struct RetainedRoot: View {
     @State private var widgetDestination: WidgetDestination?
     @State private var scenePhase = ScenePhase.active
     @State private var insightsHasOpened = false
-    @State private var approvalRequestCount = 0
     var body: some View { mainTabView }
     private var mainTabView: some View {
 '''+main_view+r'''
@@ -190,7 +187,8 @@ assert 'model.selectedTab == 0 && scenePhase == .active' in home
 assert 'guard !Task.isCancelled, inboxVisible else { return }' in home
 assert 'while !Task.isCancelled' in home and '30_000_000_000' in home
 assert '.task(id: model.selectedTab != 0 && scenePhase == .active)' in root
-assert 'approvalRequestCount = requests.count' in root
+assert 'model.approvalInbox = requests' in root and 'approvalRequestCount' not in root, \
+    'the Today dot reads the same list as Today\'s inbox rows'
 assert 'if let requests = try? await ContactsRelay.pendingRequestsForMe()' in root
 assert '.id(model.language)' not in main_view, 'tab switches never remount private reports'
 assert 'mainTabView\n                // tr() reads the language' in root and '                .id(model.language)\n' in root, \

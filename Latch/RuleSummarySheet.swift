@@ -299,7 +299,7 @@ struct RuleSummarySheet: View {
                 if case .ready = extraState {
                     Button {
                         dismiss()
-                        model.selectedTab = 0
+                        model.openToday()
                     } label: {
                         linkLabel(tr("Get extra time on Today"))
                     }

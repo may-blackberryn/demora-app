@@ -1192,6 +1192,8 @@ let germanStrings: [String: String] = [
     "Block now": "Jetzt sperren",
     "All rules": "Alle Regeln",
     "Today": "Heute",
+    "Approval request waiting": "Freigabeanfrage wartet",
+    "Invite waiting": "Einladung wartet",
     "On now": "Jetzt aktiv",
     "Full day": "Ganzer Tag",
     "and %d more": "und %d weitere",

@@ -65,7 +65,8 @@ def source_checks(app, baseline):
     # Every surviving method besides these four is byte-for-byte identical.
     # This covers setup/reset, migration, retry recovery, authorization, timing,
     # accounting access, and the actual asynchronous delayed-apply path.
-    exceptions = {"queue", "refreshAfterExternalApply", "restoreFromReplay", "debugFullReset"}
+    exceptions = {"queue", "refreshAfterExternalApply", "restoreFromReplay", "debugFullReset",
+                  "refreshIncomingInviteCount"}
     unchanged = 0
     for match in re.finditer(r"^    (?:(?:private|nonisolated|static) )*func (\w+)\(",
                              baseline, re.MULTILINE):
@@ -84,9 +85,23 @@ def source_checks(app, baseline):
     for assignment in ("        tutorial = nil\n", "        isReplay = false\n"):
         assert expected_reset.count(assignment) == 1, "Baseline reset assignment changed"
         expected_reset = expected_reset.replace(assignment, "", 1)
+    # Review fix: the in-memory approval list (Today rows + dot) is cleared too.
+    expected_reset = expected_reset.replace("        youPath = []\n",
+                                            "        youPath = []\n        approvalInbox = []\n", 1)
     equal_source(block(app, "func debugFullReset()"), expected_reset, "debugFullReset (retired references only)")
     reset_at = app.index("func debugFullReset()")
     assert app.rfind("#if DEBUG", 0, reset_at) > app.rfind("#endif", 0, reset_at), "reset stays DEBUG-only"
+
+    # Four-tab review fix: an offline invite fetch keeps the last You dot
+    # instead of clearing it. Nothing else in the method may change.
+    original_invites = block(baseline, "func refreshIncomingInviteCount()")
+    expected_invites = original_invites.replace(
+        "            let count = (try? await ContactsRelay.incomingInvites().count) ?? 0\n",
+        "            // Offline is not \"no invites\": keep the last known dot.\n"
+        "            guard let count = try? await ContactsRelay.incomingInvites().count else { return }\n", 1)
+    assert expected_invites != original_invites, "baseline invite fetch changed"
+    equal_source(block(app, "func refreshIncomingInviteCount()"), expected_invites,
+                 "refreshIncomingInviteCount (keep last count on failure only)")
 
     original_init = block(baseline, "    init()")
     expected_init = original_init.replace("        isReplay = SharedStore.isReplaying\n", "", 1)

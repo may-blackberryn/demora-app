@@ -198,19 +198,25 @@ assert "model.selectedTab == 0 && scenePhase == .active" in visible
 poll = block(home, ".task(id: inboxVisible)")
 assert "guard inboxVisible else { return }" in poll
 assert "while !Task.isCancelled" in poll
-assert poll.index("await loadInbox()") < poll.index("guard !Task.isCancelled, inboxVisible") \
-    < poll.index("loadOutgoing()") < poll.index("try await Task.sleep(nanoseconds: 30_000_000_000)")
+# Review fix: the local "Waiting for…" read never waits on the network.
+assert poll.index("loadOutgoing()") < poll.index("await loadInbox()") \
+    < poll.index("guard !Task.isCancelled, inboxVisible") \
+    < poll.rindex("loadOutgoing()") < poll.index("try await Task.sleep(nanoseconds: 30_000_000_000)")
+appear = block(home, ".onAppear {")
+assert "loadOutgoing()" in appear, "Waiting for… rows load on appear, before any CloudKit query"
 assert "catch {\n                        return" in poll, "cancellation exits without retrying"
 assert home.count(".task(id: inboxVisible)") == 1
 loader = block(home, "private func loadInbox() async")
 assert loader.count("guard !Task.isCancelled, inboxVisible else { return }") == 2
-assert loader.index("inbox = incoming") < loader.index("onInboxCountChanged(inbox.count)")
+# Review fix: one list (AppModel.approvalInbox) feeds both the rows and the
+# Today dot, so they can't disagree after a rebuild or a failed fetch.
+assert "model.approvalInbox = incoming" in loader
+assert "@State private var inbox" not in home and "onInboxCountChanged" not in home
 failed_load = loader.split("} catch {", 1)[1]
-assert "inbox =" not in failed_load and "onInboxCountChanged(" not in failed_load
+assert "approvalInbox" not in failed_load, "a failed fetch keeps the last rows and dot"
 respond = block(home, "private func respond(to request:")
-assert respond.index("try await ContactsRelay.respond") < respond.index("inbox.removeAll") \
-    < respond.index("onInboxCountChanged(inbox.count)")
-assert "inbox.removeAll" not in respond.split("} catch {", 1)[1], "failed response keeps the request"
+assert respond.index("try await ContactsRelay.respond") < respond.index("model.approvalInbox.removeAll")
+assert "removeAll" not in respond.split("} catch {", 1)[1], "failed response keeps the request"
 
 # Execute the real visibility predicate and inbox loader with a controllable
 # in-memory relay. Suspended responses are resumed explicitly: no live network,
@@ -219,7 +225,11 @@ inbox_driver = r'''
 import Foundation
 struct IncomingRequest: Equatable { let id: Int }
 enum ScenePhase { case active, inactive, background }
-final class Model { var selectedTab = 0 }
+final class Model {
+    var selectedTab = 0
+    var publishes: [Int] = []
+    var approvalInbox: [IncomingRequest] = [] { didSet { publishes.append(approvalInbox.count) } }
+}
 enum FixtureError: Error { case offline }
 @MainActor enum ContactsRelay {
     enum Mode { case success, failure, suspended }
@@ -246,9 +256,8 @@ enum FixtureError: Error { case offline }
 @MainActor final class InboxSnapshot {
     let model = Model()
     var scenePhase = ScenePhase.active
-    var inbox: [IncomingRequest] = []
-    var callbacks: [Int] = []
-    func onInboxCountChanged(_ count: Int) { callbacks.append(count) }
+    var inbox: [IncomingRequest] { model.approvalInbox }
+    var callbacks: [Int] { model.publishes }
     func loadForTest() async { await loadInbox() }
 ''' + visible + "\n" + loader + r'''
 }

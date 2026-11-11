@@ -97,7 +97,6 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var widgetDestination: WidgetDestination?
     @State private var insightsHasOpened = false
-    @State private var approvalRequestCount = 0
     @AppStorage(SharedStore.redesignIntroKey, store: SharedStore.defaults)
     private var redesignIntroSeen = false
     @AppStorage(SharedStore.redesignWelcomeKey,
@@ -111,8 +110,7 @@ struct RootView: View {
             ZStack {
                 // Keep the private report hierarchies alive across tab changes.
                 // Hidden hosts cancel refresh work and expose no hit/a11y targets.
-                HomeView(widgetDestination: $widgetDestination,
-                         onInboxCountChanged: { approvalRequestCount = $0 })
+                HomeView(widgetDestination: $widgetDestination)
                     .opacity(homeSelected ? 1 : 0)
                     .allowsHitTesting(homeSelected)
                     .accessibilityHidden(!homeSelected)
@@ -128,7 +126,7 @@ struct RootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             DemoraTabBar(selection: $model.selectedTab,
-                         approvalCount: approvalRequestCount,
+                         approvalCount: model.approvalInbox.count,
                          inviteCount: model.incomingInviteCount)
         }
         .background(Ink.paper.ignoresSafeArea())
@@ -145,7 +143,7 @@ struct RootView: View {
                 if let requests = try? await ContactsRelay.pendingRequestsForMe() {
                     guard !Task.isCancelled, model.selectedTab != 0,
                           scenePhase == .active else { return }
-                    approvalRequestCount = requests.count
+                    model.approvalInbox = requests
                 }
                 do { try await Task.sleep(nanoseconds: 30_000_000_000) }
                 catch { return }
@@ -282,6 +280,7 @@ private struct DemoraTabBar: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(tr(item.1))
+                .accessibilityValue(dotDescription(for: item.0))
                 .accessibilityAddTraits(selection == item.0 ? [.isSelected] : [])
             }
         }
@@ -294,5 +293,12 @@ private struct DemoraTabBar: View {
         .frame(maxWidth: 700)
         .frame(maxWidth: .infinity)
         .background(Ink.paper.ignoresSafeArea(edges: .bottom))
+    }
+
+    /// The dot is colour only; VoiceOver hears what it means.
+    private func dotDescription(for tab: Int) -> String {
+        if tab == 0 && approvalCount > 0 { return tr("Approval request waiting") }
+        if tab == 3 && inviteCount > 0 { return tr("Invite waiting") }
+        return ""
     }
 }

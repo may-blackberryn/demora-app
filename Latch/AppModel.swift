@@ -32,6 +32,16 @@ final class AppModel: ObservableObject {
     /// drives the invite dot on the You tab.
     @Published var incomingInviteCount = 0
 
+    /// Contact approval requests waiting for you, last fetched from the relay.
+    /// In memory only: Today's inbox and the Today tab dot both read this one
+    /// list, so the dot never disagrees with the rows (also after a language
+    /// rebuild). A failed fetch keeps the last list rather than clearing it.
+    @Published var approvalInbox: [IncomingRequest] = []
+
+    /// Bumped by `openToday()`: Today closes its own sheets (e.g. Calendar)
+    /// when another screen sends you there. Navigation only.
+    @Published var todayRequest = UUID()
+
     /// Mirror of SharedStore.enforcementDegraded — drives the warning banner
     /// when iOS couldn't schedule all the background monitors (too many
     /// limits/schedules).
@@ -155,7 +165,8 @@ final class AppModel: ObservableObject {
     /// You tab can show a dot when someone is waiting on your answer (Y7).
     func refreshIncomingInviteCount() {
         Task { [weak self] in
-            let count = (try? await ContactsRelay.incomingInvites().count) ?? 0
+            // Offline is not "no invites": keep the last known dot.
+            guard let count = try? await ContactsRelay.incomingInvites().count else { return }
             await MainActor.run { self?.incomingInviteCount = count }
         }
     }
@@ -464,6 +475,12 @@ final class AppModel: ObservableObject {
         state = SharedStore.loadState()
     }
 
+    /// Navigation only: show Today and let it close its own sheets.
+    func openToday() {
+        selectedTab = 0
+        todayRequest = UUID()
+    }
+
     #if DEBUG
     /// Debug only: wipe all limits, schedules, sessions, contacts, and settings
     /// and drop back to first-run onboarding — no delay. Saves deleting and
@@ -476,6 +493,7 @@ final class AppModel: ObservableObject {
         state = s
         selectedTab = 0
         youPath = []
+        approvalInbox = []
         ChangeEngine.reconfigureDailyMonitoring(state: s)
         LimitFeatures.resetForNewDay()
         LimitFeatures.reconfigureSplitMonitoring(state: s)

@@ -1165,6 +1165,8 @@ let frenchStrings: [String: String] = [
     "Block now": "Bloquer maintenant",
     "All rules": "Toutes les règles",
     "Today": "Aujourd’hui",
+    "Approval request waiting": "Demande d’approbation en attente",
+    "Invite waiting": "Invitation en attente",
     "On now": "Actif maintenant",
     "Full day": "Toute la journée",
     "and %d more": "et %d de plus",

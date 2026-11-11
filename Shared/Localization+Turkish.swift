@@ -1166,6 +1166,8 @@ let turkishStrings: [String: String] = [
     "Block now": "Şimdi engelle",
     "All rules": "Tüm kurallar",
     "Today": "Bugün",
+    "Approval request waiting": "Onay isteği bekliyor",
+    "Invite waiting": "Davet bekliyor",
     "On now": "Şu an açık",
     "Full day": "Tüm gün",
     "and %d more": "ve %d tane daha",

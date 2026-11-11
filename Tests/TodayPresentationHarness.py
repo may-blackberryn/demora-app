@@ -403,7 +403,7 @@ assert 'UsageInsightsView()' not in body and 'HelpGuideView()' not in body, \
 assert body.count('.task(id: inboxVisible)') == 1, 'one visible/active cancellable inbox task'
 assert 'model.selectedTab == 0 && scenePhase == .active' in body
 assert 'while !Task.isCancelled' in body and 'try await Task.sleep(nanoseconds: 30_000_000_000)' in body
-assert 'onInboxCountChanged(inbox.count)' in body, 'successful response publishes the new badge count'
+assert 'model.approvalInbox.removeAll { $0.id == request.id }' in body, 'successful response clears its row and the dot together'
 assert '.refreshable {\n                usageRefreshRequest = UUID()' in body, 'pull to refresh stays'
 for forbidden in ('GlobalWake.status(', 'DayNightWake.status(', 'LimitFeatures.wakeState(',
                   'LimitFeatures.extraTimeState(', 'SharedStore.loadBlockedLimitIDs(', 'TimeGuard.now()'):

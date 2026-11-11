@@ -1267,6 +1267,8 @@ let spanishStrings: [String: String] = [
     "Block now": "Bloquear ahora",
     "All rules": "Todas las reglas",
     "Today": "Hoy",
+    "Approval request waiting": "Solicitud de aprobación pendiente",
+    "Invite waiting": "Invitación pendiente",
     "On now": "Activo ahora",
     "Full day": "Todo el día",
     "and %d more": "y %d más",

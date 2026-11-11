@@ -1166,6 +1166,8 @@ let hindiStrings: [String: String] = [
     "Block now": "अभी ब्लॉक करें",
     "All rules": "सभी नियम",
     "Today": "आज",
+    "Approval request waiting": "स्वीकृति अनुरोध प्रतीक्षा में है",
+    "Invite waiting": "आमंत्रण प्रतीक्षा में है",
     "On now": "अभी चालू",
     "Full day": "पूरा दिन",
     "and %d more": "और %d",

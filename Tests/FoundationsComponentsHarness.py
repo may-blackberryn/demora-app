@@ -214,7 +214,10 @@ for guard in ('@Binding var selection: Int', 'let approvalCount: Int',
               '.accessibilityAddTraits(selection == item.0 ? [.isSelected] : [])',
               '.frame(maxWidth: .infinity, minHeight: 56)'):
     assert guard in bar, ('tab bar behaviour changed', guard)
-assert 'DemoraTabBar(selection: $model.selectedTab,\n                         approvalCount: approvalRequestCount,' in app
+assert 'DemoraTabBar(selection: $model.selectedTab,\n                         approvalCount: model.approvalInbox.count,' in app
+# Review fix: the dots are colour only, so VoiceOver gets their meaning.
+assert '.accessibilityValue(dotDescription(for: item.0))' in bar
+assert 'tr("Approval request waiting")' in bar and 'tr("Invite waiting")' in bar
 assert 'locked' not in bar and 'withAnimation' not in bar, 'ordinary navigation is immediate and never locked'
 assert '.system(.caption2, design: .default)' in bar and '.lineLimit(2)' in bar
 assert '.minimumScaleFactor' not in bar, 'large labels may wrap rather than shrink below readable size'

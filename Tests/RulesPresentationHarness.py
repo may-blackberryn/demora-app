@@ -629,7 +629,15 @@ assert 'RulePending.blocksEdit(of: ref, pending: model.state.pending)' in sheet
 sheet_reads = section(sheet, '    private func refresh(_ state: LatchState) {', '\n    }\n')
 assert 'RuleLiveReads.read(state: state)' in sheet_reads and 'LimitFeatures.extraTimeState' in sheet_reads
 assert sheet.replace(sheet_reads, '').count('LimitFeatures.') == 0, 'extra time is read in events only'
-assert 'model.selectedTab = 0' in sheet and 'requestExtraTime' not in sheet, 'extra time starts on Today only (T5)'
+assert 'model.openToday()' in sheet and 'requestExtraTime' not in sheet, 'extra time starts on Today only (T5)'
+# Review fix: from Today → Full day (Calendar sheet) → a limit, "Get extra
+# time on Today" must close the Calendar too, not leave it covering Today.
+app_model = (ROOT / 'Latch/AppModel.swift').read_text()
+open_today = section(app_model, '    func openToday() {', '\n    }\n')
+assert 'selectedTab = 0' in open_today and 'todayRequest = UUID()' in open_today
+assert 'model.selectedTab = 0' not in sheet
+today_src = (ROOT / 'Latch/HomeView.swift').read_text()
+assert '.onChange(of: model.todayRequest) { _ in' in today_src and 'showCalendar = false\n            }' in today_src
 home_src = (ROOT / 'Latch/HomeView.swift').read_text()
 assert 'if let ref = RuleRef(todayItemID: item.id) { ruleSheet = RuleSummaryRequest(ref: ref) }' in home_src
 assert 'onOpen: destination(for: summary, now: context.date)' in home_src

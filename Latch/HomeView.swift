@@ -45,18 +45,14 @@ struct ScreenTimeReauthBanner: View {
 
 struct HomeView: View {
     @Binding var widgetDestination: WidgetDestination?
-    let onInboxCountChanged: (Int) -> Void
 
-    init(widgetDestination: Binding<WidgetDestination?> = .constant(nil),
-         onInboxCountChanged: @escaping (Int) -> Void = { _ in }) {
+    init(widgetDestination: Binding<WidgetDestination?> = .constant(nil)) {
         _widgetDestination = widgetDestination
-        self.onInboxCountChanged = onInboxCountChanged
     }
 
     @EnvironmentObject var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var inbox: [IncomingRequest] = []
     @State private var outgoing: [ContactsRelay.OutgoingRequest] = []
     /// Apply now, "Waiting for…" and extra time open Skip the wait.
     @State private var skipTarget: SkipWaitTarget?
@@ -97,6 +93,9 @@ struct HomeView: View {
             .task(id: inboxVisible) {
                 guard inboxVisible else { return }
                 while !Task.isCancelled {
+                    // Local read first: "Waiting for…" rows never wait on
+                    // the network.
+                    loadOutgoing()
                     await loadInbox()
                     guard !Task.isCancelled, inboxVisible else { return }
                     loadOutgoing()
@@ -118,7 +117,13 @@ struct HomeView: View {
             }
             .onAppear {
                 refreshSnapshot(state: model.state)
+                loadOutgoing()
                 consumeWidgetDestination()
+            }
+            .onChange(of: model.todayRequest) { _ in
+                // Sent here from a sheet on top of Today (e.g. Calendar →
+                // a limit → Get extra time): show Today itself.
+                showCalendar = false
             }
             .onChange(of: widgetDestination) { _ in consumeWidgetDestination() }
             .refreshable {
@@ -165,7 +170,7 @@ struct HomeView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: DemoraSpace.sectionGap) {
-                    TodayHeader(date: Date.now, hasRequests: !inbox.isEmpty) {
+                    TodayHeader(date: Date.now, hasRequests: !model.approvalInbox.isEmpty) {
                         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
                             proxy.scrollTo(Self.inboxAnchor, anchor: .top)
                         }
@@ -184,9 +189,9 @@ struct HomeView: View {
                                 startingWake: startingWake, wakeSaveFailed: wakeSaveFailed,
                                 onWakeUp: wakeUp, onOpen: destination(for: summary, now: context.date))
                     }
-                    if !inbox.isEmpty {
+                    if !model.approvalInbox.isEmpty {
                         VStack(alignment: .leading, spacing: DemoraSpace.cardGap) {
-                            ForEach(inbox) { request in
+                            ForEach(model.approvalInbox) { request in
                                 InboxCard(request: request) { respond(to: request, approve: $0) }
                             }
                         }
@@ -365,8 +370,7 @@ struct HomeView: View {
         Task {
             do {
                 try await ContactsRelay.respond(to: request, approve: approve)
-                inbox.removeAll { $0.id == request.id }
-                onInboxCountChanged(inbox.count)
+                model.approvalInbox.removeAll { $0.id == request.id }
             } catch {
                 // Keep the row — the response didn't go through.
                 homeNotice = tr("Couldn't send your response — check your connection and try again.")
@@ -504,8 +508,7 @@ struct HomeView: View {
         do {
             let incoming = try await ContactsRelay.pendingRequestsForMe()
             guard !Task.isCancelled, inboxVisible else { return }
-            inbox = incoming
-            onInboxCountChanged(inbox.count)
+            model.approvalInbox = incoming
         } catch {
             // A failed refresh is not an empty inbox. Keep the last rows/count.
         }

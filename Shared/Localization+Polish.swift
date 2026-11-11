@@ -1166,6 +1166,8 @@ let polishStrings: [String: String] = [
     "Block now": "Zablokuj teraz",
     "All rules": "Wszystkie reguły",
     "Today": "Dziś",
+    "Approval request waiting": "Prośba o zatwierdzenie czeka",
+    "Invite waiting": "Zaproszenie czeka",
     "On now": "Trwa teraz",
     "Full day": "Cały dzień",
     "and %d more": "i jeszcze %d",
