@@ -45,8 +45,9 @@ assert "existingContacts: overrides.contacts, isDemo: isDemo" in draft
 assert "accepted: false, inviteId: inviteId, allowed: allowed" in contacts
 assert "let contacts = onAdd == nil ? model.state.overrides.contacts : existingContacts" in contacts
 assert "guard isDemo || code != ContactsRelay.myCode" in contacts
-assert "if !tutorialMode && !isDemo" in contacts
-assert "if !isDemo && !tutorialMode && EmailCodeService.isConfigured" in contacts
+assert "tutorialMode" not in contacts, "retired tutorial mode cannot bypass contact consent"
+assert "if !isDemo {" in contacts
+assert "if !isDemo && EmailCodeService.isConfigured" in contacts
 for editor in [password, phrase]:
     assert "if let onStage {" in editor and "onStage(policy)" in editor
     assert "if let existing, onStage == nil" in editor

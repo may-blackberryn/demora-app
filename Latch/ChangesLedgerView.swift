@@ -33,19 +33,13 @@ struct ChangeWaiting: Equatable {
     }
 }
 
-/// One pending change. Takes the same inputs as the legacy PendingChangeRow,
-/// plus the contact request it may be waiting on.
+/// One pending change, including the contact request it may be waiting on.
 struct ChangeRow: View {
     @AppAccent private var accent
     @AppLoosen private var loosen
     @Environment(\.locale) private var locale
     let change: PendingChange
     let canOverride: Bool
-    /// When set (tutorial), the countdown ticks toward a floor and can't be
-    /// waited out; the actions are hidden.
-    var frozenRemaining: (() -> TimeInterval)? = nil
-    /// Reports the row's frame to the tutorial blocker so it stays tappable.
-    var reportHole: Bool = false
     var waiting: ChangeWaiting? = nil
     let onCancel: () -> Void
     let onOverride: () -> Void
@@ -58,10 +52,7 @@ struct ChangeRow: View {
                 StateChip(kind: change.direction == .stricter ? .active : .loosening,
                           text: tr(change.direction == .stricter ? "Stricter" : "Looser"))
                 Spacer(minLength: DemoraSpace.xs)
-                if let frozenRemaining {
-                    TutorialCountdownText(remaining: frozenRemaining)
-                        .demoraType(.time)
-                } else if change.isDue {
+                if change.isDue {
                     Text(tr("Applying…")).demoraType(.meta).foregroundStyle(Ink.inkSoft)
                 } else {
                     // CountdownText projects the TimeGuard deadline onto the
@@ -112,7 +103,6 @@ struct ChangeRow: View {
             }
         }
         .paperCard()
-        .tutorialHighlight(reportHole, ring: false)
     }
 
     /// The stored landing time, "Tue 14:32" (the countdown above is the
@@ -126,30 +116,26 @@ struct ChangeRow: View {
             .foregroundStyle(Ink.inkSoft)
     }
 
-    // During the tutorial the row has no buttons — applying is done by
-    // Select → Apply, which is what the tour teaches.
     @ViewBuilder private var actions: some View {
-        if frozenRemaining == nil {
-            Button(tr("Cancel"), action: onCancel)
+        Button(tr("Cancel"), action: onCancel)
+            .buttonStyle(.plain)
+            .demoraType(.meta)
+            .foregroundStyle(loosen)
+            .frame(minHeight: 44)
+        if canOverride && !change.isDue {
+            Button(tr("Apply now…"), action: onOverride)
                 .buttonStyle(.plain)
                 .demoraType(.meta)
-                .foregroundStyle(loosen)
+                .foregroundStyle(accent)
                 .frame(minHeight: 44)
-            if canOverride && !change.isDue {
-                Button(tr("Apply now…"), action: onOverride)
-                    .buttonStyle(.plain)
-                    .demoraType(.meta)
-                    .foregroundStyle(accent)
-                    .frame(minHeight: 44)
-            }
-#if DEBUG
-            if !change.isDue {
-                Button("Skip delay (dev)", action: onDebugApply)
-                    .buttonStyle(.bordered).controlSize(.small)
-                    .tint(.purple)
-            }
-#endif
         }
+#if DEBUG
+        if !change.isDue {
+            Button("Skip delay (dev)", action: onDebugApply)
+                .buttonStyle(.bordered).controlSize(.small)
+                .tint(.purple)
+        }
+#endif
     }
 }
 

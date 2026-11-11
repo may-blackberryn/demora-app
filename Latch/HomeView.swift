@@ -1,7 +1,6 @@
 //
 //  HomeView.swift
-//  The Today tab (docs/today-redesign.md), and the legacy Home the guided
-//  tutorial still runs on.
+//  The Today tab (docs/today-redesign.md).
 //
 
 import SwiftUI
@@ -46,21 +45,20 @@ struct ScreenTimeReauthBanner: View {
 
 struct HomeView: View {
     @Binding var widgetDestination: WidgetDestination?
+    let onInboxCountChanged: (Int) -> Void
 
-    init(widgetDestination: Binding<WidgetDestination?> = .constant(nil)) {
+    init(widgetDestination: Binding<WidgetDestination?> = .constant(nil),
+         onInboxCountChanged: @escaping (Int) -> Void = { _ in }) {
         _widgetDestination = widgetDestination
+        self.onInboxCountChanged = onInboxCountChanged
     }
 
-    @AppAccent private var accent
     @EnvironmentObject var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ScaledMetric(relativeTo: .largeTitle) private var dateSize: CGFloat = 43
     @State private var inbox: [IncomingRequest] = []
-    @State private var selecting = false
-    @State private var selection: Set<UUID> = []
     @State private var outgoing: [ContactsRelay.OutgoingRequest] = []
-    /// Apply now, the bulk bar, "Waiting for…" and extra time open Skip the wait.
+    /// Apply now, "Waiting for…" and extra time open Skip the wait.
     @State private var skipTarget: SkipWaitTarget?
     @State private var homeNotice: String?
     @State private var startingWake = false
@@ -72,15 +70,20 @@ struct HomeView: View {
     @State private var portionLimitIDs: Set<UUID> = []
     @State private var extraRequestPending: Set<UUID> = []
     @State private var extraTimes: [UUID: ExtraTimeState] = [:]
-    private enum TodayRoute: Hashable { case changes, insights, help }
+    private enum TodayRoute: Hashable { case changes }
     @State private var todayPath: [TodayRoute] = []
     @State private var ledgerTarget: PendingChange.ID?
     @State private var ledgerNavigationReset: UUID?
     @State private var ruleSheet: RuleSummaryRequest?
     @State private var showAddLimit = false
     @State private var showSession = false
+    @State private var showCalendar = false
 
     private static let inboxAnchor = "today-inbox"
+
+    private var inboxVisible: Bool {
+        model.selectedTab == 0 && scenePhase == .active
+    }
 
     private var needsWakeTap: Bool {
         wakePresentation.contains { $0.wallRelease == nil }
@@ -88,30 +91,24 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack(path: $todayPath) {
-            Group {
-                // An interrupted legacy tutorial resumes on the Home it was
-                // written for; everyone else gets Today.
-                if model.inTutorial {
-                    legacyHome
-                } else {
-                    today
-                }
-            }
+            today
             .background(Ink.paper.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
-            .task(id: model.selectedTab == 0) {
-                guard model.selectedTab == 0 else { return }
-                await loadInbox()
-                guard !Task.isCancelled else { return }
-                loadOutgoing()
+            .task(id: inboxVisible) {
+                guard inboxVisible else { return }
+                while !Task.isCancelled {
+                    await loadInbox()
+                    guard !Task.isCancelled, inboxVisible else { return }
+                    loadOutgoing()
+                    do {
+                        try await Task.sleep(nanoseconds: 30_000_000_000)
+                    } catch {
+                        return
+                    }
+                }
             }
             .onReceive(model.$state) { state in
                 refreshSnapshot(state: state)
-                // Due changes can disappear while this section is selected.
-                // Never leave a stale bulk-action count or stranded Select mode.
-                let pendingIDs = Set(state.pending.map(\.id))
-                selection.formIntersection(pendingIDs)
-                if pendingIDs.isEmpty { selecting = false }
             }
             .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
                 refreshSnapshot(state: model.state)
@@ -121,20 +118,9 @@ struct HomeView: View {
             }
             .onAppear {
                 refreshSnapshot(state: model.state)
-                loadOutgoing()
                 consumeWidgetDestination()
-                if model.inTutorial && model.selectedTab == 0 { model.tutorialScreen = "home" }
             }
             .onChange(of: widgetDestination) { _ in consumeWidgetDestination() }
-            .onChange(of: selecting) { _ in syncApplyBar() }
-            .onChange(of: selection) { _ in syncApplyBar() }
-            .onDisappear { model.applyBarVisible = false }
-            .onChange(of: model.selectedTab) { tab in
-                // Retained Home no longer disappears on a normal tab switch.
-                // Never leave its bulk-action bar active behind another page.
-                if tab == 0 { syncApplyBar() }
-                else { model.applyBarVisible = false }
-            }
             .refreshable {
                 usageRefreshRequest = UUID()
                 model.tick()
@@ -159,7 +145,7 @@ struct HomeView: View {
     // MARK: Today (docs/today-redesign.md §5)
 
     private func consumeWidgetDestination() {
-        guard model.state.isSetUp, !model.inTutorial, !model.setupStorageUnavailable,
+        guard model.state.isSetUp, !model.setupStorageUnavailable,
               let destination = widgetDestination else { return }
         // Navigate out of transient UI without changing/cancelling saved rules
         // or requests, and never remount the retained private usage report.
@@ -168,8 +154,7 @@ struct HomeView: View {
         homeNotice = nil
         showAddLimit = false
         showSession = false
-        selecting = false
-        selection = []
+        showCalendar = false
         ledgerTarget = nil
         ledgerNavigationReset = UUID()
         todayPath = destination == .changes ? [.changes] : []
@@ -212,7 +197,6 @@ struct HomeView: View {
                         dayThread(at: context.date)
                     }
                     changingSoon
-                    moreLinks
                 }
                 .padding(.horizontal, DemoraSpace.pageGutter)
                 .padding(.top, DemoraSpace.xs)
@@ -240,10 +224,6 @@ struct HomeView: View {
             case .changes:
                 ChangesLedgerView(outgoing: activeOutgoing, onRequestsChanged: loadOutgoing,
                                   scrollTo: ledgerTarget, navigationReset: ledgerNavigationReset)
-            case .insights:
-                UsageInsightsView().toolbar(.visible, for: .navigationBar)
-            case .help:
-                HelpGuideView().toolbar(.visible, for: .navigationBar)
             }
         }
         .ruleSummary($ruleSheet) { id in
@@ -252,6 +232,21 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showAddLimit) { LimitEditorView(existing: nil) }
         .sheet(isPresented: $showSession) { SessionStartView() }
+        .sheet(isPresented: $showCalendar) {
+            NavigationStack {
+                CalendarView(onSeeChange: { id in
+                    showCalendar = false
+                    ledgerTarget = id
+                    todayPath = [.changes]
+                })
+                .toolbar(.visible, for: .navigationBar)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(tr("Done")) { showCalendar = false }
+                    }
+                }
+            }
+        }
     }
 
     private var limitsSection: some View {
@@ -289,8 +284,7 @@ struct HomeView: View {
         if !result.entries.isEmpty {
             VStack(alignment: .leading, spacing: DemoraSpace.cardGap) {
                 SectionHeader(tr("Today")) {
-                    // The full calendar lives on Schedules until Rules exists.
-                    SectionHeaderLink(title: tr("Full day")) { model.selectedTab = 2 }
+                    SectionHeaderLink(title: tr("Full day")) { showCalendar = true }
                 }
                 DayThreadView(result: result, now: now) { item in
                     if let ref = RuleRef(todayItemID: item.id) { ruleSheet = RuleSummaryRequest(ref: ref) }
@@ -327,40 +321,6 @@ struct HomeView: View {
             }
             .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: pending.map(\.id))
         }
-    }
-
-    /// Insights and help stay here until their tabs exist (§8).
-    private var moreLinks: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            NavigationLink(value: TodayRoute.insights) {
-                moreRow(tr("Insights"), symbol: "chart.bar")
-            }
-            Rectangle().fill(Ink.hairline).frame(height: 1)
-                .padding(.leading, DemoraSpace.cardPadding)
-            NavigationLink(value: TodayRoute.help) {
-                moreRow(tr("Help"), symbol: "questionmark.circle")
-            }
-        }
-        .buttonStyle(.plain)
-        .paperCard(padding: 0)
-    }
-
-    private func moreRow(_ title: String, symbol: String) -> some View {
-        HStack(spacing: DemoraSpace.s) {
-            Image(systemName: symbol)
-                .foregroundStyle(accent)
-                .frame(width: 24)
-                .accessibilityHidden(true)
-            Text(title).demoraType(.body).foregroundStyle(Ink.ink)
-            Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Ink.inkSoft)
-                .accessibilityHidden(true)
-        }
-        .padding(.horizontal, DemoraSpace.cardPadding)
-        .frame(minHeight: 52)
-        .contentShape(Rectangle())
     }
 
     /// Tapping the Now card opens the rule behind its sentence; several
@@ -406,6 +366,7 @@ struct HomeView: View {
             do {
                 try await ContactsRelay.respond(to: request, approve: approve)
                 inbox.removeAll { $0.id == request.id }
+                onInboxCountChanged(inbox.count)
             } catch {
                 // Keep the row — the response didn't go through.
                 homeNotice = tr("Couldn't send your response — check your connection and try again.")
@@ -413,185 +374,9 @@ struct HomeView: View {
         }
     }
 
-    // MARK: Legacy Home (tutorial only)
-
-    /// The Home the legacy tutorial was written for. It renders exactly as
-    /// before while the tutorial runs; the parts it only showed outside the
-    /// tutorial now live on Today.
-    private var legacyHome: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 26) {
-                HStack {
-                    Wordmark(size: 22)
-                        .foregroundStyle(Ink.ink)
-                    Spacer()
-                }
-                .foregroundStyle(accent)
-                VStack(alignment: .leading, spacing: 24) {
-                    Text(Date.now, format: .dateTime.weekday(.wide).month(.abbreviated).day())
-                        .font(.system(size: dateSize, weight: .regular, design: .serif))
-                        .tracking(-1.5)
-                        .foregroundStyle(Ink.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                    TimelineView(.periodic(from: .now, by: 60)) { context in
-                        DemoraDayLine(date: context.date)
-                    }
-                }
-            }
-            .padding(.top, 8)
-            .padding(.bottom, 18)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            if model.state.isSetUp && !model.authorized {
-                ScreenTimeReauthBanner().demoraSurface()
-            }
-            if model.enforcementDegraded {
-                EnforcementBanner().demoraSurface()
-            }
-            if !inbox.isEmpty {
-                ApprovalInboxSection(requests: inbox) { request, approve in
-                    respond(to: request, approve: approve)
-                }
-                .demoraSurface()
-            }
-
-            if !activeOutgoing.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(tr("Awaiting approval")).font(.headline)
-                    ForEach(activeOutgoing) { req in
-                        let reqChanges = pendingChanges(for: req)
-                        Button {
-                            #if DEBUG
-                            print("📂 resume req=\(req.requestId.prefix(8)) changeIds=\(req.changeIds.count) reqChanges=\(reqChanges.count)")
-                            #endif
-                            skipTarget = .request(reqChanges)
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(reqChanges.count == 1
-                                         ? (reqChanges.first?.summary ?? "")
-                                         : String(format: tr("%d changes"),
-                                                  reqChanges.count))
-                                        .font(.subheadline)
-                                    Text(req.email
-                                         ? tr("Tap to enter the email code")
-                                         : tr("Waiting for approval…"))
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: req.email
-                                      ? "envelope.badge" : "hourglass")
-                                    .foregroundStyle(.tint)
-                            }
-                        }
-                        .tint(.primary)
-                    }
-                }
-                .demoraSurface()
-            }
-
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    DemoraSectionTitle(title: tr("Pending changes"), symbol: "hourglass")
-                    Spacer(minLength: 8)
-                    if !model.state.pending.isEmpty {
-                        Button(selecting ? tr("Done") : tr("Select")) {
-                            selecting.toggle()
-                            if !selecting { selection.removeAll() }
-                        }
-                        .frame(minWidth: 44, minHeight: 44)
-                        .foregroundStyle(accent)
-                        .tutorialHighlight(!selecting
-                            && (model.tutorial == .applyBoth || model.tutorial == .applyViaContact)
-                            && model.tutorialScreen == "home")
-                    }
-                }
-                if model.state.pending.isEmpty {
-                    EmptyStateView(
-                        title: tr("No pending changes"),
-                        systemImage: "checkmark.circle",
-                        description: tr("Changes you make will appear here with a countdown.")
-                    )
-                } else {
-                    ForEach(model.state.pending
-                        .sorted { $0.appliesAt < $1.appliesAt }) { change in
-                        if selecting {
-                            Button {
-                                if selection.contains(change.id) {
-                                    selection.remove(change.id)
-                                } else {
-                                    selection.insert(change.id)
-                                }
-                            } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: selection.contains(change.id)
-                                          ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(.tint)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(change.direction.label)
-                                            .font(.caption.bold())
-                                            .foregroundStyle(change.direction == .stricter
-                                                             ? .green : .orange)
-                                        Text(change.summary).font(.subheadline)
-                                    }
-                                    Spacer()
-                                }
-                            }
-                            .tint(.primary)
-                            .tutorialHighlight((model.tutorial == .applyBoth
-                                || model.tutorial == .applyViaContact)
-                                && model.tutorialScreen == "home", ring: false)
-                        } else {
-                            PendingChangeRow(
-                                change: change,
-                                canOverride: ChangeEngine.hasOverride(
-                                    for: [change], state: model.state),
-                                frozenRemaining: model.inTutorial
-                                    ? { model.tutorialRemaining(for: change) ?? 0 } : nil,
-                                reportHole: (model.tutorial == .applyBoth
-                                    || model.tutorial == .applyViaContact)
-                                    && model.tutorialScreen == "home",
-                                onCancel: { model.cancel(change) },
-                                onOverride: { skipTarget = .changes([change]) },
-                                onDebugApply: { model.applyNow(change) }
-                            )
-                        }
-                    }
-                }
-            }
-            .demoraSurface()
-            }
-            .padding(.horizontal, 26)
-            .padding(.vertical, 24)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
-        }
-        .safeAreaInset(edge: .bottom) {
-            if selecting && !selection.isEmpty {
-                HStack {
-                    if !model.inTutorial {
-                        Button(role: .destructive) { bulkCancel() } label: {
-                            Label(String(format: tr("Cancel %d"), selection.count),
-                                  systemImage: "xmark.circle")
-                        }
-                    }
-                    Spacer()
-                    Button { bulkApply() } label: {
-                        Label(String(format: tr("Apply %d now"), selection.count),
-                              systemImage: "bolt")
-                    }
-                    .tutorialHighlight(model.inTutorial && model.tutorialScreen == "home")
-                }
-                .padding()
-                .background(.bar)
-            }
-        }
-    }
-
     /// Status helpers may repair clock anchors or mark unreadable runtime state.
     /// Call them only from events, never while SwiftUI evaluates the body.
     private func refreshWakePresentation(state: LatchState) {
-        guard !model.inTutorial else { wakePresentation = []; return }
         let wall = Date(), guarded = TimeGuard.now()
         var entries: [HomeWakePresentation] = []
         func append(id: String, name: String, start: Int, wait: Int?, latest: Int?,
@@ -662,10 +447,6 @@ struct HomeView: View {
     /// never while SwiftUI evaluates the body.
     private func refreshSnapshot(state: LatchState) {
         refreshWakePresentation(state: state)
-        guard !model.inTutorial else {
-            spentLimitIDs = []; portionLimitIDs = []; extraTimes = [:]; extraRequestPending = []
-            return
-        }
         // The same sets the shield's baseline uses: spent for the day unless
         // extra time is running, plus split portions blocked for now.
         let now = Date()
@@ -718,42 +499,16 @@ struct HomeView: View {
         skipTarget = .request(pendingChanges(for: request))
     }
 
-    private var selectedChanges: [PendingChange] {
-        model.state.pending.filter { selection.contains($0.id) }
-    }
-
-    private func bulkCancel() {
-        for c in selectedChanges { model.cancel(c) }
-        selection.removeAll()
-        selecting = false
-    }
-
-    private func bulkApply() {
-        let chosen = selectedChanges
-        model.applyNow(chosen.filter(\.isDue))
-        let needGate = chosen.filter { !$0.isDue }
-        if !needGate.isEmpty {
-            if ChangeEngine.hasOverride(for: needGate, state: model.state) {
-                skipTarget = .changes(needGate)
-            } else {
-                // No override to skip the wait — say so instead of doing nothing.
-                homeNotice = tr("Those changes are still counting down. Wait them out or use an available override.")
-            }
-        }
-        selection.removeAll()
-        selecting = false
-    }
-
     private func loadInbox() async {
-        let incoming = (try? await ContactsRelay.pendingRequestsForMe()) ?? []
-        guard !Task.isCancelled, model.selectedTab == 0 else { return }
-        inbox = incoming
-    }
-
-    /// Mirror the multi-select Apply bar's visibility to the model so the
-    /// tutorial callout can lift above it (and otherwise sit at the bottom).
-    private func syncApplyBar() {
-        model.applyBarVisible = model.selectedTab == 0 && selecting && !selection.isEmpty
+        guard !Task.isCancelled, inboxVisible else { return }
+        do {
+            let incoming = try await ContactsRelay.pendingRequestsForMe()
+            guard !Task.isCancelled, inboxVisible else { return }
+            inbox = incoming
+            onInboxCountChanged(inbox.count)
+        } catch {
+            // A failed refresh is not an empty inbox. Keep the last rows/count.
+        }
     }
 }
 
@@ -904,71 +659,5 @@ extension NowSummary {
              wakes: wakes.map { Wake(name: $0.name, waitMinutes: $0.waitMinutes,
                                      release: $0.wallRelease) },
              now: now)
-    }
-}
-
-struct PendingChangeRow: View {
-    @AppAccent private var accent
-    let change: PendingChange
-    let canOverride: Bool
-    /// When set (tutorial), the countdown ticks toward a floor and can't be
-    /// waited out; Cancel is hidden.
-    var frozenRemaining: (() -> TimeInterval)? = nil
-    /// Reports the row's frame to the tutorial blocker so it stays tappable.
-    var reportHole: Bool = false
-    let onCancel: () -> Void
-    let onOverride: () -> Void
-    let onDebugApply: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(change.direction.label)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(change.direction == .stricter ? accent : Ink.danger)
-                Spacer()
-                if let frozenRemaining {
-                    TutorialCountdownText(remaining: frozenRemaining)
-                        .font(.system(.title2, design: .serif))
-                } else if change.isDue {
-                    Text(tr("Applying…")).font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    // CountdownText projects the TimeGuard deadline onto the
-                    // system clock (see CountdownProjection).
-                    CountdownText(to: change.appliesAt, style: nil)
-                        .font(.system(.title2, design: .serif).monospacedDigit())
-                }
-            }
-            Text(change.summary).font(.subheadline)
-            // During the tutorial the row has no buttons — applying is done by
-            // Select → Apply, which is what the tour teaches.
-            if frozenRemaining == nil {
-                HStack {
-                    Button(tr("Cancel"), role: .destructive, action: onCancel)
-                        .buttonStyle(.plain).font(.subheadline)
-                        .frame(minHeight: 44)
-                    if canOverride && !change.isDue {
-                        Button(tr("Apply now…"), action: onOverride)
-                            .buttonStyle(.plain).font(.subheadline)
-                            .foregroundStyle(accent)
-                            .frame(minHeight: 44)
-                    }
-#if DEBUG
-                    if !change.isDue {
-                        Button("Skip delay (dev)", action: onDebugApply)
-                            .buttonStyle(.bordered).controlSize(.small)
-                            .tint(.purple)
-                    }
-#endif
-                }
-            }
-        }
-        .padding(.vertical, 16)
-        .padding(.leading, 28)
-        .overlay(alignment: .leading) {
-            DemoraTimelineMark(color: change.direction == .stricter ? accent : Ink.danger)
-        }
-        .tutorialHighlight(reportHole, ring: false)
     }
 }

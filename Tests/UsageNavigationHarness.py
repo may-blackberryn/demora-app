@@ -20,17 +20,28 @@ def block(source, signature):
 usage = (ROOT / "Latch/UsageInsightsView.swift").read_text()
 home = (ROOT / "Latch/HomeView.swift").read_text()
 limits = (ROOT / "Latch/LimitsView.swift").read_text()
+rules = (ROOT / "Latch/RulesView.swift").read_text()
+root = block((ROOT / "Latch/LatchApp.swift").read_text(), "struct RootView:")
 onboarding = (ROOT / "Latch/OnboardingView.swift").read_text()
 welcome = (ROOT / "Latch/RedesignWelcomeView.swift").read_text()
 settings = (ROOT / "Latch/SettingsView.swift").read_text()
-header = home.split('title: tr("Pending changes")', 1)[0]
-assert 'Button(selecting ? tr("Done") : tr("Select"))' not in header
-assert 'Button(selecting ? tr("Done") : tr("Select"))' in home.split('title: tr("Pending changes")', 1)[1]
-assert 'selection.formIntersection(pendingIDs)' in home
-assert 'if pendingIDs.isEmpty { selecting = false }' in home
-assert 'Label(tr("New limit"), systemImage: "plus")' in limits
-assert '.frame(maxWidth: .infinity, minHeight: 48)' in limits
-assert 'UsageInsightsView()' in home and 'if !model.inTutorial' in home
+ledger = block((ROOT / "Latch/ChangesLedgerView.swift").read_text(), "struct ChangesLedgerView:")
+assert 'Button(selecting ? tr("Done") : tr("Select"))' in ledger
+assert 'selection.formIntersection(pendingIDs)' in ledger
+assert 'if pendingIDs.isEmpty { selecting = false }' in ledger
+assert 'selecting' not in home, 'bulk selection belongs to Changes, not Today'
+assert 'Label(tr("New rule"), systemImage: "plus")' in rules
+assert 'Button { showChooser = true } label:' in rules and 'inTutorial' not in rules
+assert 'LimitEditorView(existing: nil)' in rules and 'LimitEditorView(existing: nil)' in home
+assert 'struct LimitsView:' not in limits, 'the obsolete tab is not an alternate add path'
+assert 'UsageInsightsView()' not in home and 'HelpGuideView()' not in home and 'moreLinks' not in home
+assert 'private enum TodayRoute: Hashable { case changes }' in home
+assert 'UsageInsightsView()' in root and 'model.selectedTab == 2' in root
+assert 'case 1: RulesView()' in root and 'case 3: YouView()' in root
+assert 'model.inTutorial' not in root
+can_refresh = block(usage, 'private var canRefresh: Bool')
+assert 'onScreen && scenePhase == .active && model.selectedTab == 2' in can_refresh
+assert '&& model.authorized' in can_refresh
 assert 'value: -28' in usage and 'devices: devices' in usage
 assert 'app.demora.dev.usage-insights' in usage and 'app.demora.production.usage-insights' in usage
 assert '.id(' not in usage and 'SharedStore.loadState' not in usage
@@ -48,6 +59,15 @@ assert 'HomeReportRefreshPolicy' in insights and 'refreshPolicy.didQuery' in ins
 # no Settings redirect (Apple 5.1.1(iv)); Today owns the banner.
 assert 'tr("Go to Today")' in insights and 'requestAuthorization' not in usage
 assert 'openSettingsURLString' not in usage and 'ScreenTimeReauthBanner' not in usage
+go_to_today = block(usage, 'private func goToToday()')
+assert go_to_today.split('{', 1)[1].rsplit('}', 1)[0].strip() == 'model.selectedTab = 0', \
+    'Go to Today only switches the tab; it must not dismiss the retained Root hierarchy'
+tab_change = block(insights, '.onChange(of: model.selectedTab)')
+modal_reset = block(tab_change, 'if tab != 2')
+for reset in ('showingAbout = false', 'aboutPath = []', 'saveFailed = false'):
+    assert reset in modal_reset, ('tab switch closes stale Insights modal/navigation/error state', reset)
+assert 'dismiss(' not in tab_change and 'refreshedAt =' not in tab_change, \
+    'a widget tab switch clears transient UI, not the report identity or query'
 refresh = block(usage, 'private func refresh()')
 assert 'refreshedAt = Date()' in refresh and 'max(' not in refresh
 assert 'SetupEstimateDisclosure(enabled: $wantsUsageEstimate, minutes: $usageEstimateMinutes)' in onboarding
@@ -123,4 +143,4 @@ with tempfile.TemporaryDirectory(prefix="demora-usage-navigation-") as directory
     source.write_text(driver)
     subprocess.run(["xcrun", "swiftc", str(source), "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
-print("Usage navigation/source guards passed: visible add, scoped Select, no replay entry, report isolation, optional staging/demo guards")
+print("Usage navigation/source guards passed: four-tab destinations, visible New rule, Changes-only Select, active Insights refresh, tab-switch modal reset, Go to Today preserves Root, no replay entry, report isolation, optional staging/demo guards")

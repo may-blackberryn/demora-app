@@ -2,7 +2,7 @@
 """Checks for the foundations components (docs/foundations-redesign.md §6).
 
 Compiles the pure `CountdownProjection` from Latch/DemoraComponents.swift with
-a native test driver, then runs source guards for PendingChangeRow's
+a native test driver, then runs source guards for ChangeRow's
 countdown, HoldButton's accessible fallback and component translations.
 No iOS build, simulator, defaults mutation or saved state is involved; the
 guards read source text and don't prove how the views render.
@@ -24,7 +24,7 @@ def section(source, start, end):
 
 
 components = (ROOT / 'Latch/DemoraComponents.swift').read_text()
-home = (ROOT / 'Latch/HomeView.swift').read_text()
+ledger = (ROOT / 'Latch/ChangesLedgerView.swift').read_text()
 
 # 1. The countdown projection, compiled and run natively.
 projection = 'enum CountdownProjection {' + section(components, 'enum CountdownProjection {', '\n}\n') + '\n}\n'
@@ -63,14 +63,13 @@ with tempfile.TemporaryDirectory(prefix='demora-foundations-') as directory:
     subprocess.run(['swiftc', str(source), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
 
-# 2. PendingChangeRow uses CountdownText with identical branches.
-row = section(home, 'struct PendingChangeRow: View {', '\n}\n')
-assert 'CountdownText(to: change.appliesAt, style: nil)' in row
+# 2. The real ledger row uses the same countdown, with due taking precedence.
+row = section(ledger, 'struct ChangeRow: View {', '\n}\n')
+assert 'CountdownText(to: change.appliesAt)' in row
 assert 'Text(timerInterval:' not in row and 'TimeGuard.now()' not in row, \
     'projection must live only in CountdownProjection'
-assert row.index('if let frozenRemaining') < row.index('} else if change.isDue') \
-    < row.index('CountdownText(to: change.appliesAt'), 'tutorial → due → countdown order kept'
-assert 'TutorialCountdownText(remaining: frozenRemaining)' in row
+assert row.index('if change.isDue') < row.index('CountdownText(to: change.appliesAt'), 'due → countdown order kept'
+assert 'frozenRemaining' not in row and 'TutorialCountdownText' not in row
 assert 'Text(tr("Applying…"))' in row
 countdown = section(components, 'struct CountdownText: View {', '\n}\n')
 assert 'guardedNow: Date = TimeGuard.now(), systemNow: Date = Date.now' in countdown
@@ -195,7 +194,7 @@ for suffix in ('', '+German', '+French', '+Portuguese', '+Polish', '+Turkish', '
     missing = sorted(keys - table)
     assert not missing, (suffix or 'Spanish', 'missing', missing)
 
-print(f'Foundations components passed: PendingChangeRow countdown source guards, '
+print(f'Foundations components passed: ChangeRow countdown source guards, '
       f'HoldButton fallback guards, {len(keys)} component strings × 7 tables')
 
 # 5. Tab bar restyle (§7) is visual only: the five current tabs keep their
@@ -203,21 +202,22 @@ print(f'Foundations components passed: PendingChangeRow countdown source guards,
 app = (ROOT / 'Latch/LatchApp.swift').read_text()
 bar = section(app, 'private struct DemoraTabBar: View {', '\n}\n')
 assert '''    private let items: [(Int, String, String)] = [
-        (4, "Delays", "hourglass"),
-        (1, "Limits", "square.stack.3d.up"),
-        (0, "Home", "house.fill"),
-        (2, "Schedules", "calendar"),
-        (3, "Settings", "slider.horizontal.3")
-    ]''' in bar, 'five tabs, same order and icons'
-for guard in ('@Binding var selection: Int', 'let locked: Bool', 'let pendingCount: Int',
-              'let inviteCount: Int', 'guard !locked else { return }',
-              'withAnimation(.easeInOut(duration: 0.18)) { selection = item.0 }',
-              'let count = item.0 == 0 ? pendingCount\n                                : (item.0 == 3 ? inviteCount : 0)',
+        (0, "Today", "sun.horizon"),
+        (1, "Rules", "list.bullet.rectangle"),
+        (2, "Insights", "chart.bar"),
+        (3, "You", "person.crop.circle")
+    ]''' in bar, 'four approved sections in frequency order'
+for guard in ('@Binding var selection: Int', 'let approvalCount: Int',
+              'let inviteCount: Int', 'selection = item.0',
+              'let count = item.0 == 0 ? approvalCount\n                                : (item.0 == 3 ? inviteCount : 0)',
               '.accessibilityLabel(tr(item.1))',
               '.accessibilityAddTraits(selection == item.0 ? [.isSelected] : [])',
               '.frame(maxWidth: .infinity, minHeight: 56)'):
     assert guard in bar, ('tab bar behaviour changed', guard)
-assert 'DemoraTabBar(selection: $model.selectedTab,\n                         locked: model.inTutorial,' in app
+assert 'DemoraTabBar(selection: $model.selectedTab,\n                         approvalCount: approvalRequestCount,' in app
+assert 'locked' not in bar and 'withAnimation' not in bar, 'ordinary navigation is immediate and never locked'
+assert '.system(.caption2, design: .default)' in bar and '.lineLimit(2)' in bar
+assert '.minimumScaleFactor' not in bar, 'large labels may wrap rather than shrink below readable size'
 assert 'design: .monospaced' not in bar, 'monospaced labels retired'
 assert '? accent : Ink.inkSoft' in bar and 'Ink.hairline' in bar, 'selected = accent, others = inkSoft'
-print('Tab bar passed: five tabs, order, lock, badges and accessibility unchanged; restyled colours')
+print('Tab bar passed: four approved sections, approval/invite dots, Dynamic Type, direct selection and accessibility')

@@ -94,8 +94,10 @@ struct LatchApp: App {
 struct RootView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.requestReview) private var requestReview
-    @State private var tutorialHoles: [CGRect] = []
+    @Environment(\.scenePhase) private var scenePhase
     @State private var widgetDestination: WidgetDestination?
+    @State private var insightsHasOpened = false
+    @State private var approvalRequestCount = 0
     @AppStorage(SharedStore.redesignIntroKey, store: SharedStore.defaults)
     private var redesignIntroSeen = false
     @AppStorage(SharedStore.redesignWelcomeKey,
@@ -106,56 +108,58 @@ struct RootView: View {
 
     private var mainTabView: some View {
         VStack(spacing: 0) {
-            Group {
-                if model.inTutorial {
-                    // Preserve the legacy tutorial's appearance/disappearance
-                    // routing; its highlighted screens are not persistent tabs.
-                    currentTab
-                } else {
-                    ZStack {
-                        // Keep the Home navigation/report hierarchy alive. A
-                        // tab switch must not discard Apple's remote report.
-                        HomeView(widgetDestination: $widgetDestination)
-                            .opacity(homeSelected ? 1 : 0)
-                            .allowsHitTesting(homeSelected)
-                            .accessibilityHidden(!homeSelected)
-                        if !homeSelected { currentTab }
+            ZStack {
+                // Keep the private report hierarchies alive across tab changes.
+                // Hidden hosts cancel refresh work and expose no hit/a11y targets.
+                HomeView(widgetDestination: $widgetDestination,
+                         onInboxCountChanged: { approvalRequestCount = $0 })
+                    .opacity(homeSelected ? 1 : 0)
+                    .allowsHitTesting(homeSelected)
+                    .accessibilityHidden(!homeSelected)
+                if insightsHasOpened || model.selectedTab == 2 {
+                    NavigationStack {
+                        UsageInsightsView().toolbar(.hidden, for: .navigationBar)
                     }
+                    .opacity(model.selectedTab == 2 ? 1 : 0)
+                    .allowsHitTesting(model.selectedTab == 2)
+                    .accessibilityHidden(model.selectedTab != 2)
                 }
+                if !homeSelected && model.selectedTab != 2 { currentTab }
             }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             DemoraTabBar(selection: $model.selectedTab,
-                         locked: model.inTutorial,
-                         pendingCount: model.state.pending.count,
+                         approvalCount: approvalRequestCount,
                          inviteCount: model.incomingInviteCount)
         }
         .background(Ink.paper.ignoresSafeArea())
-    }
-
-    private var homeSelected: Bool { !(1...4).contains(model.selectedTab) }
-
-    @ViewBuilder private var currentTab: some View {
-        switch model.selectedTab {
-        // Rules replaces Limits; the legacy tutorial keeps the screens its
-        // steps were written for (docs/rules-redesign.md §8, R10).
-        case 1:
-            if model.inTutorial { LimitsView() } else { RulesView() }
-        case 2: SchedulesView()
-        // You replaces Settings until the four-tab switch (docs/you-redesign.md).
-        case 3: YouView()
-        case 4: DelaysOverridesTabView()
-        default: HomeView()
+        .onAppear { if model.selectedTab == 2 { insightsHasOpened = true } }
+        .onChange(of: model.selectedTab) { tab in
+            if tab == 2 { insightsHasOpened = true }
+        }
+        // Today owns its visible inbox poll. Elsewhere, fetch only the same
+        // pending requests for a badge. Switching among other tabs does not
+        // restart the task; backgrounding cancels it.
+        .task(id: model.selectedTab != 0 && scenePhase == .active) {
+            guard model.selectedTab != 0, scenePhase == .active else { return }
+            while !Task.isCancelled {
+                if let requests = try? await ContactsRelay.pendingRequestsForMe() {
+                    guard !Task.isCancelled, model.selectedTab != 0,
+                          scenePhase == .active else { return }
+                    approvalRequestCount = requests.count
+                }
+                do { try await Task.sleep(nanoseconds: 30_000_000_000) }
+                catch { return }
+            }
         }
     }
 
-    /// The single screen the tutorial is currently on (used on iPad, where the
-    /// tab bar can't be reliably locked). Mirrors the tab tags.
-    @ViewBuilder private var tutorialScreen: some View {
+    private var homeSelected: Bool { !(1...3).contains(model.selectedTab) }
+
+    @ViewBuilder private var currentTab: some View {
         switch model.selectedTab {
-        case 1:  LimitsView()
-        case 2:  SchedulesView()
-        case 3:  YouView()
-        default: HomeView()
+        case 1: RulesView()
+        case 3: YouView()
+        default: EmptyView()
         }
     }
 
@@ -174,50 +178,23 @@ struct RootView: View {
                 .background(Ink.paper.ignoresSafeArea())
             } else if RedesignIntroGate.shouldShow(
                 storageUnavailable: model.setupStorageUnavailable,
-                tutorialActive: model.tutorial != nil,
                 welcomeSeen: redesignWelcomeSeen, introSeen: redesignIntroSeen
             ) {
                 RedesignIntroView(variant: RedesignIntroGate.variant(isSetUp: model.state.isSetUp)) {
                     redesignIntroSeen = true
                 }
-            } else if model.state.isSetUp, model.tutorial == nil, !redesignWelcomeSeen {
+            } else if model.state.isSetUp, !redesignWelcomeSeen {
                 RedesignWelcomeView {
                     redesignWelcomeSeen = true
                     SharedStore.defaults.set(true, forKey: "latch.languageExpansionUpdate.shown")
                     requestUpdateReviewIfNeeded()
                 }
-            } else if model.state.isSetUp || model.tutorial != nil {
-                Group {
-                    if model.tutorial != nil
-                        && UIDevice.current.userInterfaceIdiom == .pad {
-                        // No switchable tab bar during the tutorial on iPad — render
-                        // only the active screen so the user can't tap to switch
-                        // (iPadOS's top tab bar ignores the selection lock). The
-                        // tutorial auto-navigates between screens itself.
-                        tutorialScreen
-                    } else {
-                        mainTabView
-                    }
-                }
-                .id(model.language)   // re-render everything on language change
-                .onPreferenceChange(TutorialHoleKey.self) { tutorialHoles = $0 }
-                .overlay {
-                    if let t = model.tutorial, t != .configure {
-                        TutorialBlocker(holes: tutorialHoles)
-                    }
-                }
-                .overlay(alignment: .bottom) { TutorialCallout() }
-                .overlay(alignment: .top) {
-                    if let t = model.tutorial, t != .configure {
-                        TutorialDemoBanner()
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                    }
-                }
-                .fullScreenCover(isPresented: Binding(
-                    get: { model.tutorial == .configure },
-                    set: { _ in })) {
-                    TutorialFinishView()
-                }
+            } else if model.state.isSetUp {
+                mainTabView
+                // tr() reads the language when a view evaluates, so rebuild
+                // the tabs on a language change; navigation paths that must
+                // survive live in AppModel, and the reports re-query anyway.
+                .id(model.language)
                 .alert(
                     model.queueNotice != nil ? tr(model.queueNoticeIsCapacity ? "Background monitoring limit" : "Already pending")
                                              : tr("Trusted contact removed"),
@@ -235,7 +212,7 @@ struct RootView: View {
             }
         }
         .onOpenURL { url in
-            guard model.state.isSetUp, !model.inTutorial, !model.setupStorageUnavailable,
+            guard model.state.isSetUp, !model.setupStorageUnavailable,
                   let destination = WidgetDestination.parse(url) else { return }
             model.selectedTab = 0
             widgetDestination = destination
@@ -252,43 +229,40 @@ struct RootView: View {
     }
 }
 
-/// The five destinations in the redesign use an app-owned navigation bar
+/// The four destinations use the approved app-owned navigation bar
 /// instead of the system TabView chrome. It leaves system permission sheets
 /// and app pickers native, where replacing them would reduce accessibility.
 /// Styled per docs/foundations-redesign.md §7 (equal items, icon above label,
 /// selected in accent, others in inkSoft, paper with a top hairline); the
-/// switch to four tabs waits for the Rules, Insights and You screens.
+/// four destinations are sections, never rule actions.
 private struct DemoraTabBar: View {
     @AppAccent private var accent
     @AppLoosen private var loosen
     @Binding var selection: Int
-    let locked: Bool
-    let pendingCount: Int
+    let approvalCount: Int
     let inviteCount: Int
 
     private let items: [(Int, String, String)] = [
-        (4, "Delays", "hourglass"),
-        (1, "Limits", "square.stack.3d.up"),
-        (0, "Home", "house.fill"),
-        (2, "Schedules", "calendar"),
-        (3, "Settings", "slider.horizontal.3")
+        (0, "Today", "sun.horizon"),
+        (1, "Rules", "list.bullet.rectangle"),
+        (2, "Insights", "chart.bar"),
+        (3, "You", "person.crop.circle")
     ]
 
     var body: some View {
         HStack(spacing: 4) {
             ForEach(items, id: \.0) { item in
                 Button {
-                    guard !locked else { return }
-                    withAnimation(.easeInOut(duration: 0.18)) { selection = item.0 }
+                    selection = item.0
                 } label: {
                     VStack(spacing: 6) {
                         ZStack(alignment: .topTrailing) {
                             Image(systemName: item.2)
-                                .font(.system(size: 18, weight: .regular))
+                                .font(.system(.body, design: .default))
                                 .foregroundStyle(selection == item.0
                                                  ? accent : Ink.inkSoft)
                                 .frame(width: 44, height: 26)
-                            let count = item.0 == 0 ? pendingCount
+                            let count = item.0 == 0 ? approvalCount
                                 : (item.0 == 3 ? inviteCount : 0)
                             if count > 0 {
                                 Circle().fill(loosen)
@@ -297,12 +271,11 @@ private struct DemoraTabBar: View {
                             }
                         }
                         Text(tr(item.1))
-                            .font(.system(size: 11, weight: selection == item.0
-                                          ? .semibold : .medium, design: .default))
+                            .font(.system(.caption2, design: .default)
+                                .weight(selection == item.0 ? .semibold : .medium))
                             .foregroundStyle(selection == item.0
                                              ? accent : Ink.inkSoft)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
+                            .lineLimit(2)
                     }
                     .frame(maxWidth: .infinity, minHeight: 56)
                     .contentShape(Rectangle())

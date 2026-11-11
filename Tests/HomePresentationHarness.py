@@ -9,6 +9,18 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def block(source, signature):
+    start = source.index(signature)
+    opening = source.index("{", start)
+    depth, end = 1, opening + 1
+    while depth:
+        depth += (source[end] == "{") - (source[end] == "}")
+        end += 1
+    return source[start:end]
+
+
 home = (ROOT / "Latch/HomeView.swift").read_text()
 host = (ROOT / "Latch/LimitsUsageReportView.swift").read_text()
 report = (ROOT / "LatchReport/LimitsUsageView.swift").read_text()
@@ -105,9 +117,7 @@ enum LimitFeatures {
     static func wakeState(for limit: Limit, at date: Date, guardedNow: Date) -> WakeState { limit.status }
 }
 func tr(_ text: String) -> String { text }
-final class Model { var inTutorial = false }
 final class Snapshot {
-    var model = Model()
     var wakePresentation: [HomeWakePresentation] = []
 '''+refresh+r'''
 }
@@ -138,11 +148,17 @@ for (name, seconds) in [("running", 600.0), ("legacy", 300.0)] {
     check(abs(release.timeIntervalSince(before) - seconds) < 2,
           "guarded remaining wait, not current configured wait")
 }
-snapshot.model.inTutorial = true
 let reads = GlobalWake.reads
 snapshot.refreshWakePresentation(state: state)
-check(snapshot.wakePresentation.isEmpty && GlobalWake.reads == reads, "tutorial avoids real status")
-print("Home projection passed: recurring anchors, DST, guarded waits/ceiling projection, wake waits, tutorial isolation")
+check(snapshot.wakePresentation.count == 4 && GlobalWake.reads == reads + 1,
+      "a normal event refresh re-reads status without tutorial gating")
+GlobalWake.value = .awake
+state.dayNightGroups = []
+state.limits = []
+snapshot.refreshWakePresentation(state: state)
+check(snapshot.wakePresentation.isEmpty && GlobalWake.reads == reads + 2,
+      "a later released/removed gate does not leave a stale snapshot")
+print("Home projection passed: recurring anchors, DST, guarded waits/ceiling projection, wake waits, event refresh replaces stale gates")
 '''
 
 with tempfile.TemporaryDirectory(prefix="demora-home-presentation-") as directory:
@@ -164,14 +180,147 @@ assert "startingWake: startingWake" in home_view and "onWakeUp: wakeUp" in home_
 today_view = (ROOT / "Latch/TodayView.swift").read_text()
 now_card = today_view.split("struct NowCard: View {", 1)[1].split("\n}\n", 1)[0]
 assert "if summary.action == .wakeUp {" in now_card and ".disabled(startingWake)" in now_card
-assert "if model.inTutorial {\n                    legacyHome" in home_view
-legacy = home_view.split("    private var legacyHome: some View {", 1)[1]
-assert "DemoraDayLine(date: context.date)" in legacy and "PendingChangeRow(" in legacy
-for retired in ("HomeDayTimeline", "Today's sessions", "UsageInsightsView()"):
-    assert retired not in legacy, ("legacy Home keeps only what the tutorial shows", retired)
+for retired in ("inTutorial", "legacyHome", "PendingChangeRow(", "tutorialRemaining",
+                "frozenRemaining:", "syncApplyBar()", "applyBarVisible", "moreLinks"):
+    assert retired not in home, ("retired Home path", retired)
+assert "NavigationStack(path: $todayPath)" in home_view
+assert "private enum TodayRoute: Hashable { case changes }" in home_view
+assert "ChangeRow(" in home_view and "onCancel: { model.cancel(change) }" in home_view
+assert "onOverride: { skipTarget = .changes([change]) }" in home_view
+assert "onDebugApply: { model.applyNow(change) }" in home_view
+assert "onOpenRequest: { openRequest(waiting) }" in home_view
 assert "CompactHomeUsageReport(limits:" in home_view
-assert all(token in home_view for token in ("model.tutorial == .applyBoth",
-    "model.tutorial == .applyViaContact", "frozenRemaining:", "syncApplyBar()"))
+
+# Today owns a cancellable poll only while it is the visible, active tab.
+# Root's retained hierarchy/badge lifetime is tested by the lead's harness.
+visible = block(home, "private var inboxVisible: Bool")
+assert "model.selectedTab == 0 && scenePhase == .active" in visible
+poll = block(home, ".task(id: inboxVisible)")
+assert "guard inboxVisible else { return }" in poll
+assert "while !Task.isCancelled" in poll
+assert poll.index("await loadInbox()") < poll.index("guard !Task.isCancelled, inboxVisible") \
+    < poll.index("loadOutgoing()") < poll.index("try await Task.sleep(nanoseconds: 30_000_000_000)")
+assert "catch {\n                        return" in poll, "cancellation exits without retrying"
+assert home.count(".task(id: inboxVisible)") == 1
+loader = block(home, "private func loadInbox() async")
+assert loader.count("guard !Task.isCancelled, inboxVisible else { return }") == 2
+assert loader.index("inbox = incoming") < loader.index("onInboxCountChanged(inbox.count)")
+failed_load = loader.split("} catch {", 1)[1]
+assert "inbox =" not in failed_load and "onInboxCountChanged(" not in failed_load
+respond = block(home, "private func respond(to request:")
+assert respond.index("try await ContactsRelay.respond") < respond.index("inbox.removeAll") \
+    < respond.index("onInboxCountChanged(inbox.count)")
+assert "inbox.removeAll" not in respond.split("} catch {", 1)[1], "failed response keeps the request"
+
+# Execute the real visibility predicate and inbox loader with a controllable
+# in-memory relay. Suspended responses are resumed explicitly: no live network,
+# polling delays, defaults, tokens, or SwiftUI rendering enter this fixture.
+inbox_driver = r'''
+import Foundation
+struct IncomingRequest: Equatable { let id: Int }
+enum ScenePhase { case active, inactive, background }
+final class Model { var selectedTab = 0 }
+enum FixtureError: Error { case offline }
+@MainActor enum ContactsRelay {
+    enum Mode { case success, failure, suspended }
+    static var mode = Mode.success
+    static var incoming = [IncomingRequest(id: 1), IncomingRequest(id: 2)]
+    static var calls = 0
+    static var onFetch: (() -> Void)?
+    static var response: CheckedContinuation<[IncomingRequest], Error>?
+    static func pendingRequestsForMe() async throws -> [IncomingRequest] {
+        calls += 1
+        switch mode {
+        case .success: return incoming
+        case .failure: throw FixtureError.offline
+        case .suspended:
+            return try await withCheckedThrowingContinuation { continuation in
+                response = continuation
+                let started = onFetch
+                onFetch = nil
+                started?()
+            }
+        }
+    }
+}
+@MainActor final class InboxSnapshot {
+    let model = Model()
+    var scenePhase = ScenePhase.active
+    var inbox: [IncomingRequest] = []
+    var callbacks: [Int] = []
+    func onInboxCountChanged(_ count: Int) { callbacks.append(count) }
+    func loadForTest() async { await loadInbox() }
+''' + visible + "\n" + loader + r'''
+}
+@main struct InboxChecks {
+    @MainActor static func main() async {
+        var checks = 0
+        func check(_ ok: @autoclosure () -> Bool, _ message: String) {
+            precondition(ok(), message)
+            checks += 1
+        }
+        let snapshot = InboxSnapshot()
+        snapshot.model.selectedTab = 1
+        await snapshot.loadForTest()
+        check(ContactsRelay.calls == 0 && snapshot.callbacks.isEmpty, "hidden tab does not fetch")
+        snapshot.model.selectedTab = 0
+        for phase in [ScenePhase.inactive, .background] {
+            snapshot.scenePhase = phase
+            await snapshot.loadForTest()
+            check(ContactsRelay.calls == 0 && snapshot.callbacks.isEmpty, "inactive scene does not fetch")
+        }
+        snapshot.scenePhase = .active
+        await snapshot.loadForTest()
+        check(snapshot.inbox == ContactsRelay.incoming && snapshot.callbacks == [2],
+              "visible success publishes rows and exactly one count")
+        ContactsRelay.mode = .failure
+        await snapshot.loadForTest()
+        check(snapshot.inbox.count == 2 && snapshot.callbacks == [2],
+              "transient error retains rows and badge")
+        let calls = ContactsRelay.calls
+        let cancelled = Task { await snapshot.loadForTest() }
+        cancelled.cancel()
+        await cancelled.value
+        check(ContactsRelay.calls == calls && snapshot.callbacks == [2],
+              "cancelled task does not begin a fetch")
+
+        for interruption in ["tab", "background", "cancel"] {
+            ContactsRelay.mode = .suspended
+            var pending: Task<Void, Never>?
+            await withCheckedContinuation { (started: CheckedContinuation<Void, Never>) in
+                ContactsRelay.onFetch = { started.resume() }
+                pending = Task { await snapshot.loadForTest() }
+            }
+            if interruption == "tab" { snapshot.model.selectedTab = 2 }
+            if interruption == "background" { snapshot.scenePhase = .background }
+            if interruption == "cancel" { pending!.cancel() }
+            let response = ContactsRelay.response!
+            ContactsRelay.response = nil
+            response.resume(returning: [])
+            await pending!.value
+            check(snapshot.inbox.count == 2 && snapshot.callbacks == [2],
+                  "late response after \(interruption) cannot publish stale rows/count")
+            snapshot.model.selectedTab = 0
+            snapshot.scenePhase = .active
+        }
+        ContactsRelay.mode = .success
+        ContactsRelay.incoming = []
+        await snapshot.loadForTest()
+        check(snapshot.inbox.isEmpty && snapshot.callbacks == [2, 0],
+              "a successful empty inbox publishes zero rather than retaining a stale badge")
+        check(ContactsRelay.response == nil && ContactsRelay.onFetch == nil,
+              "all synthetic continuations finished")
+        print("Home inbox passed: \(checks) checks — visible/active reads, errors, cancellation, late response fences, exact count callbacks")
+    }
+}
+'''
+with tempfile.TemporaryDirectory(prefix="demora-home-inbox-") as directory:
+    source = Path(directory) / "Inbox.swift"
+    binary = Path(directory) / "Inbox"
+    source.write_text(inbox_driver)
+    subprocess.run(["swiftc", "-swift-version", "5", "-parse-as-library", str(source),
+                    "-o", str(binary)], check=True, timeout=60)
+    subprocess.run([str(binary)], check=True, timeout=15)
 
 for forbidden in (".id(", "showReport", "reportID", "DispatchQueue", "Timer.publish",
                   "usedMinutes", "usedSeconds", "makeConfiguration", "NotificationCenter"):
@@ -192,4 +341,4 @@ assert "let shown = max(0, r.usedMinutes)" in report
 for forbidden in (".set(", "removeObject", "NotificationCenter", "FileManager",
                   "PreferenceKey", ".onAppear", ".task"):
     assert forbidden not in report, forbidden
-print("Home/report source guards passed: Now card wake action, tutorial routing, bounded viewport, stable refresh identity, no report-side writes or usage export")
+print("Home/report source guards passed: Today-only routing, visible cancellable inbox poll/count callbacks, bounded viewport, stable refresh identity, no report-side writes or usage export")

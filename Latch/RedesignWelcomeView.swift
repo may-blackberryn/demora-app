@@ -159,14 +159,15 @@ struct RedesignWelcomeView: View {
             preservedRules
             mathReplacementOffer
             VStack(alignment: .leading, spacing: 22) {
-                // The four-tab names land with the tab switch, not before it.
-                SectionHeader(tr("Your setup"))
-                DemoraWelcomeEntry(symbol: "house", title: tr("Home"),
-                                   detail: tr("See what's active, what's next, and which changes are waiting."))
-                DemoraWelcomeEntry(symbol: "hourglass", title: tr("Delays & overrides"),
-                                   detail: tr("Your waits and trusted contacts now have their own place."))
-                DemoraWelcomeEntry(symbol: "calendar", title: tr("Limits & schedules"),
-                                   detail: tr("Daily boundaries in Limits. Recurring and planned time in Schedules."))
+                SectionHeader(tr("Four tabs now"))
+                DemoraWelcomeEntry(symbol: "sun.horizon", title: tr("Today"),
+                                   detail: tr("Today — what's on, what's left, what's changing."))
+                DemoraWelcomeEntry(symbol: "list.bullet.rectangle", title: tr("Rules"),
+                                   detail: tr("Rules — every limit and schedule, with your waits on top."))
+                DemoraWelcomeEntry(symbol: "chart.bar", title: tr("Insights"),
+                                   detail: tr("Insights — your usage and trends."))
+                DemoraWelcomeEntry(symbol: "person.crop.circle", title: tr("You"),
+                                   detail: tr("You — ways to skip a wait, appearance and help."))
             }
             .paperCard()
         }

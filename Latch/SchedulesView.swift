@@ -1,799 +1,10 @@
 //
 //  SchedulesView.swift
-//  Recurring blocking schedules (daily/weekly/monthly), free periods,
-//  one-off planned windows, and immediate sessions. All delay-gated.
+//  Shared recurrence/time helpers and the Rules calendar.
 //
 
 import SwiftUI
 import FamilyControls
-
-struct SchedulesView: View {
-    @AppAccent private var accent
-    @EnvironmentObject var model: AppModel
-    @State private var showAddSchedule = false
-    @State private var newSession: NewSessionKind?
-
-    private enum NewSessionKind: String, Identifiable {
-        case now, planned, recurring
-        var id: String { rawValue }
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    HStack(alignment: .bottom) {
-                        DemoraPageTitle(title: tr("Schedules"))
-                        Spacer()
-                        if !model.inTutorial {
-                            NavigationLink {
-                                HelpGuideView().toolbar(.visible, for: .navigationBar)
-                            } label: {
-                                Image(systemName: "questionmark.circle")
-                            }
-                            .accessibilityLabel(tr("Help"))
-                        }
-                    }
-                    overviewSection
-                        .demoraSurface()
-                        .tutorialHighlight(model.tutorial == .exploreCalendar
-                                           && model.calendarFocusNowNext
-                                           && model.tutorialScreen == "schedulesRoot")
-                    if !model.inTutorial {
-                        Menu {
-                            Button(tr("Now"), systemImage: "play.circle") {
-                                newSession = .now
-                            }
-                            Button(tr("Planned"), systemImage: "calendar.badge.clock") {
-                                newSession = .planned
-                            }
-                            Button(tr("Recurring"), systemImage: "repeat") {
-                                newSession = .recurring
-                            }
-                        } label: {
-                            Label(tr("New session"), systemImage: "plus")
-                        }
-                        .buttonStyle(DemoraPrimaryButtonStyle())
-                    }
-                    if model.tutorial == .addSchedule
-                        && model.tutorialScreen == "schedulesRoot" {
-                        Button { showAddSchedule = true } label: {
-                            Label(tr("Add a recurring schedule"), systemImage: "repeat")
-                                .font(.headline).frame(maxWidth: .infinity).padding(16)
-                                .background(Ink.ink.opacity(0.04))
-                                .overlay(RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Ink.rule, lineWidth: 1))
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-                        }
-                        .buttonStyle(.plain)
-                        .tutorialHighlight(true)
-                    }
-                    if model.inTutorial {
-                        // Keep the practice walkthrough's existing highlighted
-                        // Recurring/Calendar actions directly reachable.
-                        sessionsIndex
-                        calendarIndex
-                    } else {
-                        scheduleDestinations
-                    }
-                }
-                .padding(.horizontal, 26)
-                .padding(.vertical, 24)
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity)
-            }
-            .background(Ink.paper.ignoresSafeArea())
-            .toolbar(.hidden, for: .navigationBar)
-            .onAppear {
-                if model.inTutorial && model.selectedTab == 2 {
-                    model.tutorialScreen = "schedulesRoot"
-                }
-            }
-            .refreshable { model.tick() }
-            .sheet(isPresented: $showAddSchedule) { TutorialScheduleEditorView() }
-            .sheet(item: $newSession) { kind in
-                switch kind {
-                case .now: SessionStartView()
-                case .planned: PlannedEditorView()
-                case .recurring: ScheduleEditorView()
-                }
-            }
-        }
-    }
-
-    // MARK: Now & next overview
-
-    private var overviewSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            DemoraSectionTitle(title: tr("now & next"), symbol: "calendar.badge.clock")
-            let active = activeItems
-            let upcoming = upcomingItems
-            if active.isEmpty && upcoming.isEmpty {
-                Text(tr("Nothing scheduled right now."))
-                    .font(.subheadline).foregroundStyle(.secondary)
-            } else {
-                if !active.isEmpty {
-                    overviewGroup(tr("Active now"), active, active: true)
-                }
-                if !upcoming.isEmpty {
-                    HStack {
-                        Text(tr("This week")).font(.caption.smallCaps())
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        NavigationLink {
-                            UpcomingWeekView(items: upcoming)
-                                .toolbar(.visible, for: .navigationBar)
-                        } label: {
-                            Text(tr("See all")).font(.caption.weight(.semibold))
-                        }
-                    }
-                    overviewGroup(tr("Coming up"), Array(upcoming.prefix(3)), active: false)
-                }
-            }
-        }
-    }
-
-    private func overviewGroup(_ title: String, _ items: [OverviewItem],
-                               active: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.caption.smallCaps()).foregroundStyle(.secondary)
-            ForEach(items) { item in
-                NavigationLink {
-                    ScheduledItemDetailView(title: item.name, summary: item.summary,
-                                            timing: item.detail, appsTitle: item.appsTitle,
-                                            selection: item.selection,
-                                            scheduleID: item.scheduleID)
-                        .toolbar(.visible, for: .navigationBar)
-                } label: {
-                    HStack(spacing: 16) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(item.name).font(.system(.title3, design: .serif))
-                                .foregroundStyle(Ink.ink)
-                            Text(item.detail).font(.system(.caption, design: .monospaced))
-                                .foregroundStyle(Ink.faint)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption).foregroundStyle(Ink.faint)
-                    }
-                    .padding(.vertical, 12).padding(.leading, 28)
-                    .overlay(alignment: .leading) {
-                        DemoraTimelineMark(color: active ? item.color : Ink.faint)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private var activeItems: [OverviewItem] {
-        var out: [OverviewItem] = []
-        for s in model.state.sessions where s.isActive {
-            out.append(.init(id: "sess-\(s.id)",
-                             symbol: s.kind == .block ? "nosign"
-                                : s.kind == .free ? "leaf" : "checkmark.circle",
-                             name: s.name,
-                             detail: String(format: tr("until %@"),
-                                            s.endsAt.formatted(date: .omitted, time: .shortened)),
-                             color: accent,
-                             summary: s.kind == .block
-                                ? tr("Blocking the selected apps")
-                                : s.kind == .free
-                                ? tr("Free period — nothing is blocked")
-                                : tr("Unblocking the selected apps"),
-                             appsTitle: s.kind == .free ? nil
-                                : (s.kind == .block
-                                   ? tr("Apps blocked") : tr("Apps unblocked")),
-                             selection: s.kind == .free ? nil : s.selection))
-        }
-        for sch in model.state.schedules where sch.isActive() {
-            out.append(.init(id: "sch-\(sch.id)", symbol: "calendar",
-                             name: sch.name,
-                             detail: String(format: tr("until %@"),
-                                            minutesLabel(sch.endMinutes)),
-                             color: accent,
-                             summary: sch.mode.label,
-                             appsTitle: sch.mode == .blockAllExcept
-                                ? tr("Apps that stay usable") : tr("Apps to block"),
-                             selection: sch.selection, scheduleID: sch.id))
-        }
-        for w in model.state.planned where w.isActive {
-            out.append(.init(id: "pl-\(w.id)",
-                             symbol: w.kind == .free ? "leaf" : "nosign",
-                             name: w.name,
-                             detail: String(format: tr("until %@"),
-                                            w.endsAt.formatted(date: .omitted, time: .shortened)),
-                             color: accent,
-                             summary: w.kind.label,
-                             appsTitle: w.kind == .free ? nil
-                                : (w.kind == .blockAllExcept
-                                   ? tr("Apps that stay usable") : tr("Apps to block")),
-                             selection: w.kind == .free ? nil : w.selection))
-        }
-        for ex in model.state.exemptions where ex.isActive() {
-            out.append(.init(id: "ex-\(ex.id)", symbol: "leaf",
-                             name: ex.name,
-                             detail: String(format: tr("until %@"),
-                                            minutesLabel(ex.endMinutes)),
-                             color: accent,
-                             summary: tr("Free period")))
-        }
-        return out
-    }
-
-    private var upcomingItems: [OverviewItem] {
-        let now = Date()
-        let cal = Calendar.current
-        let weekEnd = cal.date(byAdding: .day, value: 7, to: now) ?? now
-        var dated: [(Date, OverviewItem)] = []
-        for w in model.state.planned where w.startsAt > now && w.startsAt < weekEnd {
-            let detail = "\(w.startsAt.formatted(date: .abbreviated, time: .shortened)) → \(w.endsAt.formatted(date: .omitted, time: .shortened))"
-            dated.append((w.startsAt,
-                          OverviewItem(id: "upl-\(w.id)",
-                                       symbol: w.kind == .free ? "leaf" : "nosign",
-                                       name: w.name, detail: detail,
-                                       color: accent,
-                                       summary: w.kind.label,
-                                       appsTitle: w.kind == .free ? nil
-                                          : (w.kind == .blockAllExcept
-                                             ? tr("Apps that stay usable") : tr("Apps to block")),
-                                       selection: w.kind == .free ? nil : w.selection)))
-        }
-        var nextRecurringIDs = Set<UUID>()
-        var nextFreeIDs = Set<UUID>()
-        for offset in 0...7 {
-            guard let day = cal.date(byAdding: .day, value: offset,
-                                     to: cal.startOfDay(for: now)) else { continue }
-            for sch in model.state.schedules where sch.recurrence.matches(dayOf: day) {
-                guard !nextRecurringIDs.contains(sch.id) else { continue }
-                guard let start = cal.date(bySettingHour: sch.startMinutes / 60,
-                                           minute: sch.startMinutes % 60,
-                                           second: 0, of: day),
-                      start > now, start < weekEnd else { continue }
-                nextRecurringIDs.insert(sch.id)
-                let detail = "\(start.formatted(date: .abbreviated, time: .shortened))–\(minutesLabel(sch.endMinutes))"
-                dated.append((start,
-                              OverviewItem(id: "usch-\(sch.id)-\(offset)",
-                                           symbol: "calendar", name: sch.name,
-                                           detail: detail, color: accent,
-                                           summary: sch.mode.label,
-                                           appsTitle: sch.mode == .blockAllExcept
-                                              ? tr("Apps that stay usable") : tr("Apps to block"),
-                                           selection: sch.selection, scheduleID: sch.id)))
-            }
-            for ex in model.state.exemptions where ex.recurrence.matches(dayOf: day) {
-                guard !nextFreeIDs.contains(ex.id) else { continue }
-                guard let start = cal.date(bySettingHour: ex.startMinutes / 60,
-                                           minute: ex.startMinutes % 60,
-                                           second: 0, of: day),
-                      start > now, start < weekEnd else { continue }
-                nextFreeIDs.insert(ex.id)
-                let detail = "\(start.formatted(date: .abbreviated, time: .shortened))–\(minutesLabel(ex.endMinutes))"
-                dated.append((start,
-                              OverviewItem(id: "uex-\(ex.id)-\(offset)",
-                                           symbol: "leaf", name: ex.name,
-                                           detail: detail, color: accent,
-                                           summary: tr("Free period"))))
-            }
-        }
-        return dated.sorted { $0.0 < $1.0 }.map { $0.1 }
-    }
-
-    // MARK: Destinations on the same Schedules page (not inner tabs)
-
-    private var scheduleDestinations: some View {
-        VStack(spacing: 0) {
-            NavigationLink {
-                schedulePage(title: tr("Sessions")) { sessionsIndex }
-            } label: {
-                GridCard(symbol: "play.circle", title: tr("Sessions"),
-                         subtitle: [tr("Now"), tr("Planned"), tr("Recurring")]
-                            .joined(separator: " · "))
-            }
-            NavigationLink {
-                DayNightSchedulesView().toolbar(.visible, for: .navigationBar)
-            } label: {
-                GridCard(symbol: "sun.max", title: tr("Day & night"),
-                         subtitle: tr("Wake up") + " · " + tr("Sleep"))
-            }
-            calendarIndex
-            NavigationLink {
-                ScheduleConflictsView().toolbar(.visible, for: .navigationBar)
-            } label: {
-                GridCard(symbol: "arrow.triangle.branch", title: tr("Schedule conflicts"),
-                         subtitle: tr("See overlapping rules"))
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func schedulePage<Content: View>(title: String,
-                                             @ViewBuilder content: () -> Content) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                DemoraPageTitle(title: title)
-                content()
-            }
-            .padding(24).frame(maxWidth: 640).frame(maxWidth: .infinity)
-        }
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(title)
-        .toolbar(.visible, for: .navigationBar)
-    }
-
-    private var sessionsIndex: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            NavigationLink {
-                SessionsListView().toolbar(.visible, for: .navigationBar)
-            } label: {
-                TypeCard(symbol: "play.circle", title: tr("Now"),
-                         count: model.state.sessions.filter(\.isActive).count,
-                         activeCount: model.state.sessions.filter(\.isActive).count,
-                         color: accent)
-            }
-            NavigationLink {
-                PlannedListView().toolbar(.visible, for: .navigationBar)
-            } label: {
-                TypeCard(symbol: "calendar.badge.clock", title: tr("Planned"),
-                         count: model.state.planned.count,
-                         activeCount: model.state.planned.filter(\.isActive).count,
-                         color: accent)
-            }
-            NavigationLink {
-                RecurringListView().toolbar(.visible, for: .navigationBar)
-            } label: {
-                TypeCard(symbol: "repeat", title: tr("Recurring"),
-                         count: model.state.schedules.count + model.state.exemptions.count,
-                         activeCount: model.state.schedules.filter { $0.isActive() }.count
-                                    + model.state.exemptions.filter { $0.isActive() }.count,
-                         color: accent)
-            }
-            .tutorialHighlight(model.tutorial == .removeSchedule
-                               && model.tutorialScreen == "schedulesRoot")
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var calendarIndex: some View {
-        NavigationLink {
-            CalendarView().toolbar(.visible, for: .navigationBar)
-        } label: {
-            GridCard(symbol: "calendar", title: tr("Calendar"),
-                     subtitle: tr("month"))
-        }
-        .tutorialHighlight(model.tutorial == .exploreCalendar
-                           && !model.calendarFocusNowNext
-                           && model.tutorialScreen == "schedulesRoot")
-        .buttonStyle(.plain)
-    }
-
-}
-
-// MARK: - Overview model
-
-struct OverviewItem: Identifiable {
-    let id: String
-    let symbol: String
-    let name: String
-    let detail: String
-    var color: Color
-    var summary: String = ""
-    var appsTitle: String? = nil
-    var selection: FamilyActivitySelection? = nil
-    var scheduleID: UUID? = nil
-}
-
-private struct UpcomingWeekView: View {
-    let items: [OverviewItem]
-
-    var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
-                ForEach(items) { item in
-                    NavigationLink {
-                        ScheduledItemDetailView(title: item.name, summary: item.summary,
-                                                timing: item.detail,
-                                                appsTitle: item.appsTitle,
-                                                selection: item.selection,
-                                                scheduleID: item.scheduleID)
-                    } label: {
-                        HStack {
-                            Image(systemName: item.symbol).foregroundStyle(item.color)
-                            VStack(alignment: .leading) {
-                                Text(item.name).font(.headline)
-                                Text(item.detail).font(.caption).foregroundStyle(Ink.faint)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right").font(.caption)
-                        }
-                        .demoraSurface()
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
-        }
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("This week"))
-    }
-}
-
-/// Pushed when you tap a scheduled item (now & next, or a calendar day) —
-/// shows what it does, when, and the apps it covers.
-struct ScheduledItemDetailView: View {
-    @EnvironmentObject private var model: AppModel
-    @State private var showEditSelection = false
-    @State private var receipt: ChangeReceiptRequest?
-    let title: String
-    let summary: String
-    let timing: String
-    var appsTitle: String? = nil
-    var selection: FamilyActivitySelection? = nil
-    var scheduleID: UUID? = nil
-
-    private var currentSchedule: BlockSchedule? {
-        model.state.schedules.first { $0.id == scheduleID }
-    }
-
-    private var displayedSelection: FamilyActivitySelection? {
-        scheduleID == nil ? selection : currentSchedule?.selection
-    }
-
-    private var hasApps: Bool {
-        guard let s = displayedSelection else { return false }
-        return !(s.applicationTokens.isEmpty
-                 && s.categoryTokens.isEmpty
-                 && s.webDomainTokens.isEmpty)
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                DemoraPageTitle(title: title)
-                VStack(alignment: .leading, spacing: 10) {
-                if !summary.isEmpty {
-                    Text(summary).font(.system(.headline, design: .serif))
-                }
-                Label(timing, systemImage: "clock")
-                    .font(.subheadline).foregroundStyle(Ink.faint)
-                }
-                .demoraSurface()
-            if hasApps, let appsTitle, let selection = displayedSelection {
-                VStack(alignment: .leading, spacing: 12) {
-                    DemoraSectionTitle(title: appsTitle)
-                    SelectedAppsView(selection: selection)
-                }
-                .demoraSurface()
-            }
-                if let schedule = currentSchedule, !model.inTutorial {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Button(tr("Edit apps")) { showEditSelection = true }
-                            .disabled(scheduleChangePending(schedule.id, in: model.state))
-                        Button(tr("Remove…"), role: .destructive) {
-                            receipt = ChangeReceiptRequest(action: .removeSchedule(id: schedule.id))
-                        }
-                        .disabled(scheduleChangePending(schedule.id, in: model.state))
-                        if scheduleChangePending(schedule.id, in: model.state) {
-                            Text(tr("A change for this setting is already pending. Cancel it in Changes first if you want something different."))
-                                .font(.footnote).foregroundStyle(Ink.faint)
-                        }
-                    }
-                    .demoraSurface()
-                }
-            }
-            .padding(20)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
-        }
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(title)
-        .changeReceipt($receipt)
-        .sheet(isPresented: $showEditSelection) {
-            if let schedule = currentSchedule {
-                ScheduleSelectionEditorView(schedule: schedule)
-            }
-        }
-    }
-}
-
-// MARK: - Type card
-
-struct TypeCard: View {
-    @AppAccent private var accent
-    let symbol: String
-    let title: String
-    let count: Int
-    let activeCount: Int
-    var color: Color? = nil
-
-    private var subtitle: String {
-        if count == 0 { return tr("none") }
-        if activeCount > 0 { return String(format: tr("%d · %d active"), count, activeCount) }
-        return String(format: tr("%d total"), count)
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 18) {
-                Image(systemName: symbol)
-                    .font(.system(size: 23, weight: .light))
-                    .foregroundStyle(color ?? accent)
-                    .frame(width: 30)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(title).font(.system(.title3, design: .serif)).foregroundStyle(Ink.ink)
-                    Text(subtitle).font(.subheadline).foregroundStyle(Ink.faint)
-                }
-                Spacer()
-                Text("\(count)")
-                    .font(.system(.title2, design: .serif).monospacedDigit())
-                    .foregroundStyle(accent)
-                Image(systemName: "arrow.up.right")
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(Ink.faint)
-            }
-            .padding(.vertical, 22)
-            Rectangle().fill(Ink.rule).frame(height: 1)
-        }
-        .multilineTextAlignment(.leading)
-        .contentShape(Rectangle())
-    }
-}
-
-struct ActiveBadge: View {
-    var body: some View {
-        Text(tr("ACTIVE")).font(.caption2.bold())
-            .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(.green.opacity(0.2))
-            .clipShape(Capsule())
-    }
-}
-
-// MARK: - Per-type detail lists
-
-struct SessionsListView: View {
-    @EnvironmentObject var model: AppModel
-    @State private var showAdd = false
-    @State private var receipt: ChangeReceiptRequest?
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                DemoraPageTitle(title: tr("Sessions"))
-                if model.state.sessions.filter(\.isActive).isEmpty {
-                    Text(tr("No active sessions"))
-                        .foregroundStyle(Ink.faint).demoraSurface()
-                }
-                ForEach(model.state.sessions.filter(\.isActive)) { session in
-                    VStack(alignment: .leading, spacing: 6) {
-                        NavigationLink { detailView(for: session) } label: {
-                            HStack {
-                                Text(session.kind == .block ? "⛔️"
-                                     : session.kind == .free ? "🌴" : "✅")
-                                Text(session.name).font(.headline)
-                                    .foregroundStyle(Ink.ink)
-                                Spacer()
-                                Text(timerInterval: Date.now...max(session.endsAt, Date.now.addingTimeInterval(1)),
-                                     countsDown: true)
-                                    .font(.headline.monospacedDigit())
-                                    .foregroundStyle(Ink.ink)
-                                Image(systemName: "chevron.right")
-                                    .font(.caption).foregroundStyle(Ink.faint)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        Button(tr("End early…")) {
-                            receipt = ChangeReceiptRequest(action: .endSessionEarly(id: session.id))
-                        }
-                        .buttonStyle(.bordered).controlSize(.small)
-                    }
-                    .demoraSurface()
-                }
-                Button { showAdd = true } label: {
-                    Label(tr("New session…"), systemImage: "play.circle.fill")
-                }
-                .buttonStyle(DemoraPrimaryButtonStyle())
-                Text(String(format: tr("One-off and unplanned, but still delay-gated. A block session waits %@; an unblock session waits %@. Ending early flips the rule (or use an override)."),
-                            model.state.strictDelay.shortDelayLabel,
-                            model.state.lenientDelay.shortDelayLabel))
-                    .font(.footnote).foregroundStyle(Ink.faint)
-            }
-            .padding(20)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
-        }
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Sessions"))
-        .refreshable { model.tick() }
-        .sheet(isPresented: $showAdd) { SessionStartView() }
-        .changeReceipt($receipt)
-    }
-
-    /// Same session-info page the "now & next" rows push — shows what the
-    /// session does and which apps it covers.
-    private func detailView(for s: BlockSession) -> ScheduledItemDetailView {
-        ScheduledItemDetailView(
-            title: s.name,
-            summary: s.kind == .block ? tr("Blocking the selected apps")
-                   : s.kind == .free ? tr("Free period — nothing is blocked")
-                   : tr("Unblocking the selected apps"),
-            timing: String(format: tr("until %@"),
-                           s.endsAt.formatted(date: .omitted, time: .shortened)),
-            appsTitle: s.kind == .free ? nil
-                     : (s.kind == .block ? tr("Apps blocked") : tr("Apps unblocked")),
-            selection: s.kind == .free ? nil : s.selection)
-    }
-}
-
-struct PlannedListView: View {
-    @EnvironmentObject var model: AppModel
-    @State private var showAdd = false
-    @State private var receipt: ChangeReceiptRequest?
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                DemoraPageTitle(title: tr("Planned"))
-                if model.state.planned.isEmpty {
-                    Text(tr("Nothing planned"))
-                        .foregroundStyle(Ink.faint).demoraSurface()
-                }
-                ForEach(model.state.planned.sorted { $0.startsAt < $1.startsAt }) { w in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(w.kind == .free ? "🌴" : "⛔️")
-                            Text(w.name).font(.headline)
-                            if w.isActive { ActiveBadge() }
-                            Spacer()
-                        }
-                        Text("\(w.startsAt.formatted(date: .abbreviated, time: .shortened)) → \(w.endsAt.formatted(date: .abbreviated, time: .shortened))")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Text(w.kind.label)
-                            .font(.caption).foregroundStyle(.secondary)
-                        if w.kind != .free
-                            && !(w.selection.applicationTokens.isEmpty
-                                 && w.selection.categoryTokens.isEmpty
-                                 && w.selection.webDomainTokens.isEmpty) {
-                            DisclosureGroup(w.kind == .blockAllExcept
-                                            ? tr("Apps that stay usable") : tr("Apps to block")) {
-                                SelectedAppsView(selection: w.selection)
-                            }
-                            .font(.caption)
-                        }
-                        Button(tr("Remove…"), role: .destructive) {
-                            receipt = ChangeReceiptRequest(action: .removePlanned(id: w.id))
-                        }
-                        .buttonStyle(.bordered).controlSize(.small)
-                    }
-                    .demoraSurface()
-                }
-                Button { showAdd = true } label: {
-                    Label(tr("Plan a window…"), systemImage: "calendar.badge.plus")
-                }
-                .buttonStyle(DemoraPrimaryButtonStyle())
-                Text(tr("Plan ahead for specific dates — a trip, a weekend, an exam. Doesn't repeat. Planning a block is stricter; planning a free period is less strict."))
-                    .font(.footnote).foregroundStyle(Ink.faint)
-            }
-            .padding(20)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
-        }
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Planned"))
-        .refreshable { model.tick() }
-        .changeReceipt($receipt)
-        .sheet(isPresented: $showAdd) { PlannedEditorView() }
-    }
-}
-
-struct RecurringListView: View {
-    @EnvironmentObject var model: AppModel
-    @State private var showAdd = false
-    @State private var editingSchedule: BlockSchedule?
-    @State private var receipt: ChangeReceiptRequest?
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                DemoraPageTitle(title: tr("Recurring"))
-                DemoraSectionTitle(title: tr("Blocks"), symbol: "shield")
-                if model.state.schedules.isEmpty {
-                    Text(tr("No schedules"))
-                        .foregroundStyle(Ink.faint).demoraSurface()
-                }
-                ForEach(model.state.schedules) { sched in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(sched.name).font(.headline)
-                            if sched.isActive() { ActiveBadge() }
-                            Spacer()
-                            Text(sched.windowLabel).foregroundStyle(.secondary)
-                        }
-                        Text("\(sched.recurrence.label) · \(sched.mode.label)")
-                            .font(.caption).foregroundStyle(.secondary)
-                        if !(sched.selection.applicationTokens.isEmpty
-                             && sched.selection.categoryTokens.isEmpty
-                             && sched.selection.webDomainTokens.isEmpty) {
-                            DisclosureGroup(sched.mode == .blockAllExcept
-                                            ? tr("Apps that stay usable") : tr("Apps to block")) {
-                                SelectedAppsView(selection: sched.selection)
-                            }
-                            .font(.caption)
-                        }
-                        if !model.inTutorial {
-                            Button(tr("Edit apps")) { editingSchedule = sched }
-                                .disabled(scheduleChangePending(sched.id, in: model.state))
-                        }
-                        Button(tr("Remove…"), role: .destructive) {
-                            remove(.removeSchedule(id: sched.id))
-                        }
-                        .buttonStyle(.bordered).controlSize(.small)
-                        .disabled(scheduleChangePending(sched.id, in: model.state))
-                        .tutorialHighlight(model.tutorial == .removeSchedule
-                                           && model.tutorialScreen == "recurring")
-                        if scheduleChangePending(sched.id, in: model.state) {
-                            Text(tr("A change for this setting is already pending. Cancel it in Changes first if you want something different."))
-                                .font(.footnote).foregroundStyle(Ink.faint)
-                        }
-                    }
-                    .demoraSurface()
-                }
-                DemoraSectionTitle(title: tr("Free periods"), symbol: "leaf")
-                if model.state.exemptions.isEmpty {
-                    Text(tr("No free periods"))
-                        .foregroundStyle(Ink.faint).demoraSurface()
-                }
-                ForEach(model.state.exemptions) { ex in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(ex.name).font(.headline)
-                            if ex.isActive() { ActiveBadge() }
-                            Spacer()
-                            Text(ex.windowLabel).foregroundStyle(.secondary)
-                        }
-                        Text("\(ex.recurrence.label) · \(tr("Free period"))")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Button(tr("Remove…"), role: .destructive) {
-                            remove(.removeExemption(id: ex.id))
-                        }
-                        .buttonStyle(.bordered).controlSize(.small)
-                        .tutorialHighlight(model.tutorial == .removeSchedule
-                                           && model.tutorialScreen == "recurring")
-                    }
-                    .demoraSurface()
-                }
-                Text(String(format: tr("Repeating windows: every day, chosen weekdays, or monthly patterns. Adding waits %@; removing waits %@."),
-                            model.state.strictDelay.shortDelayLabel,
-                            model.state.lenientDelay.shortDelayLabel))
-                    .font(.footnote).foregroundStyle(Ink.faint)
-            }
-            .padding(20)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
-        }
-        .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Recurring"))
-        .onAppear { if model.inTutorial { model.tutorialScreen = "recurring" } }
-        .refreshable { model.tick() }
-        .toolbar {
-            if !model.inTutorial {
-                Button { showAdd = true } label: { Image(systemName: "plus") }
-            }
-        }
-        .sheet(isPresented: $showAdd) { ScheduleEditorView() }
-        .sheet(item: $editingSchedule) { ScheduleSelectionEditorView(schedule: $0) }
-        .changeReceipt($receipt)
-    }
-
-    /// Removing waits behind the receipt. The legacy tutorial still queues
-    /// directly, as its steps expect.
-    private func remove(_ action: ChangeAction) {
-        if model.inTutorial {
-            model.queue(action)
-        } else {
-            receipt = ChangeReceiptRequest(action: action)
-        }
-    }
-}
 
 // MARK: - Recurrence picker
 
@@ -884,167 +95,6 @@ struct RecurrencePicker: View {
     var isValid: Bool { mode != .weekly || !weekdays.isEmpty }
 }
 
-// MARK: - Schedule selection editing
-
-private func scheduleChangePending(_ id: UUID, in state: LatchState) -> Bool {
-    let key = ChangeEngine.conflictKey(.removeSchedule(id: id))
-    return state.pending.contains { ChangeEngine.conflictKey($0.action) == key }
-}
-
-// MARK: - Legacy tutorial schedule editor
-
-/// The recurring editor the legacy tutorial's "add a schedule" step was
-/// written for: it queues directly. Everyone else uses `ScheduleEditorView`
-/// (RuleEditors.swift). Retired with the tutorial at the four-tab switch (R10).
-struct TutorialScheduleEditorView: View {
-    @EnvironmentObject var model: AppModel
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var name = ""
-    @State private var mode: ScheduleMode = .blockAllExcept
-    @State private var selection = FamilyActivitySelection()
-    @State private var start = defaultTime(hour: 22)
-    @State private var end = defaultTime(hour: 7)
-    @State private var recurrence: Recurrence = .daily
-    @State private var showPicker = false
-    @State private var isFree = false
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    DemoraPageTitle(title: tr("New recurring"))
-                    VStack(alignment: .leading, spacing: 12) {
-                        DemoraSectionTitle(title: tr("Name"))
-                        TextField(tr("e.g. Bedtime"), text: $name)
-                            .textFieldStyle(.plain)
-                            .font(.system(.title3, design: .serif))
-                    }
-                    .demoraSurface()
-                    VStack(alignment: .leading, spacing: 14) {
-                        DemoraSectionTitle(title: tr("Type"))
-                    Picker(tr("Type"), selection: $isFree) {
-                        Text(tr("Block")).tag(false)
-                        Text(tr("Free period")).tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    if isFree {
-                        Text(tr("Limits won't block and usage won't count during this window."))
-                            .font(.footnote).foregroundStyle(Ink.faint)
-                    }
-                    }
-                    .demoraSurface()
-                if !isFree {
-                    VStack(alignment: .leading, spacing: 14) {
-                        DemoraSectionTitle(title: tr("Apps"))
-                        Picker(tr("Mode"), selection: $mode) {
-                            ForEach(ScheduleMode.allCases) { Text($0.label).tag($0) }
-                        }
-                        Button {
-                            showPicker = true
-                        } label: {
-                            HStack {
-                                Text(mode == .blockAllExcept
-                                     ? tr("Apps that stay usable") : tr("Apps to block"))
-                                Spacer()
-                                Text(String(format: tr("%d selected"),
-                                            selection.applicationTokens.count
-                                            + selection.categoryTokens.count
-                                            + selection.webDomainTokens.count))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        SelectedAppsView(selection: selection)
-                        Text(mode == .blockAllExcept
-                             ? tr("Everything on the iPhone is blocked during the window except the apps picked here.")
-                             : tr("Only the apps picked here are blocked during the window."))
-                            .font(.footnote).foregroundStyle(Ink.faint)
-                    }
-                    .demoraSurface()
-                }
-                    VStack(alignment: .leading, spacing: 12) {
-                        DemoraSectionTitle(title: tr("Window"))
-                    DatePicker(tr("Start"), selection: $start,
-                               displayedComponents: .hourAndMinute)
-                    DatePicker(tr("End"), selection: $end,
-                               displayedComponents: .hourAndMinute)
-                    RecurrencePicker(recurrence: $recurrence, allowWrap: true)
-                    }
-                    .demoraSurface()
-                if monthlyWrapProblem {
-                        Text(tr("Monthly schedules can't cross midnight — set the end time after the start time."))
-                            .font(.footnote).foregroundStyle(Ink.danger)
-                            .demoraSurface()
-                }
-                    VStack(alignment: .leading, spacing: 8) {
-                    let (dir, delay) = model.preview(scheduleAction)
-                    Label(String(format: tr("%@ — takes effect in %@"),
-                                 dir.label, delay.shortDelayLabel),
-                          systemImage: "clock")
-                        .font(.footnote).foregroundStyle(Ink.faint)
-                    }
-                    .demoraSurface()
-                }
-                .padding(20)
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity)
-            }
-            .background(Ink.paper.ignoresSafeArea())
-            .casedNavigationTitle(tr("New recurring"))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(tr("Cancel")) { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(tr("Queue change")) {
-                        model.queue(scheduleAction)
-                        dismiss()
-                    }
-                    .disabled(!isValid)
-                }
-            }
-            .sheet(isPresented: $showPicker) {
-                AppPickerSheet(selection: $selection)
-            }
-        }
-    }
-
-    private var scheduleAction: ChangeAction {
-        isFree ? .addExemption(exemptDraft) : .addSchedule(draft)
-    }
-    private var draft: BlockSchedule {
-        BlockSchedule(name: name.isEmpty ? tr("Schedule") : name,
-                      mode: mode,
-                      selection: selection,
-                      startMinutes: minutesOfDay(start),
-                      endMinutes: minutesOfDay(end),
-                      recurrence: recurrence)
-    }
-    private var exemptDraft: ExemptSchedule {
-        ExemptSchedule(name: name.isEmpty ? tr("Free period") : name,
-                       startMinutes: minutesOfDay(start),
-                       endMinutes: minutesOfDay(end),
-                       recurrence: recurrence)
-    }
-    private var isMonthly: Bool {
-        if case .monthlyDay = recurrence { return true }
-        if case .monthlyOrdinal = recurrence { return true }
-        return false
-    }
-    private var monthlyWrapProblem: Bool {
-        isMonthly && minutesOfDay(start) >= minutesOfDay(end)
-    }
-    private var isValid: Bool {
-        guard !name.isEmpty,
-              minutesOfDay(start) != minutesOfDay(end),
-              !monthlyWrapProblem else { return false }
-        if case .weekly(let days) = recurrence, days.isEmpty { return false }
-        if isFree { return true }
-        return draft.acceptsSelection(selection)
-    }
-}
-
-// MARK: - Time helpers
 
 func minutesOfDay(_ date: Date) -> Int {
     let c = Calendar.current.dateComponents([.hour, .minute], from: date)
@@ -1065,7 +115,8 @@ struct CalendarView: View {
     @State private var anchor = Date()
     @State private var selected = Calendar.current.startOfDay(for: Date())
     @State private var summary: RuleSummaryRequest?
-    /// Opens a waiting change in Changes. Without one (the Schedules tab),
+    @ScaledMetric(relativeTo: .body) private var dayControlSize: CGFloat = 44
+    /// Opens a waiting change in Changes. Without a callback,
     /// "See in Changes" goes to Today, where Changing soon lists it.
     let onSeeChange: ((PendingChange.ID) -> Void)?
 
@@ -1078,52 +129,87 @@ struct CalendarView: View {
         c.firstWeekday = weekStartMonday ? 2 : 1
         return c
     }
-    private let cols = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
+    private var cols: [GridItem] {
+        Array(repeating: GridItem(.flexible(minimum: max(44, dayControlSize)),
+                                  spacing: DemoraSpace.xxs), count: 7)
+    }
 
     var body: some View {
         ScrollView {
             calendarContents
-                .padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
+                .padding(DemoraSpace.pageGutter)
+                .frame(maxWidth: DemoraSpace.maxContentWidth)
+                .frame(maxWidth: .infinity)
         }
         .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(tr("Calendar"))
-        .onAppear {
-            if model.inTutorial { model.tutorialScreen = "calendar" }
-            model.tutorialDidOpenCalendar()
-        }
         .ruleSummary($summary) { id in
             if let onSeeChange { onSeeChange(id) } else { model.selectedTab = 0 }
         }
     }
 
     private var calendarContents: some View {
-            VStack(spacing: 16) {
-                HStack {
-                    Button { shift(-1) } label: { Image(systemName: "chevron.left") }
-                    Spacer()
-                    Text(periodTitle).font(.headline)
-                    Spacer()
-                    Button { shift(1) } label: { Image(systemName: "chevron.right") }
+        VStack(alignment: .leading, spacing: DemoraSpace.sectionGap) {
+            VStack(spacing: DemoraSpace.s) {
+                HStack(spacing: DemoraSpace.xs) {
+                    Button { shift(-1) } label: {
+                        Image(systemName: "chevron.left")
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel(tr("Back"))
+                    Text(periodTitle)
+                        .demoraType(.cardTitle)
+                        .foregroundStyle(Ink.ink)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityAddTraits(.isHeader)
+                    Button { shift(1) } label: {
+                        Image(systemName: "chevron.right")
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel(tr("Next"))
                 }
+                .buttonStyle(.plain)
+                .foregroundStyle(accent)
 
-                LazyVGrid(columns: cols, spacing: 4) {
-                    // Index the labels, not the strings — weekday symbols repeat
-                    // ("T", "S"), which would collapse under id: \.self.
-                    ForEach(orderedWeekdaySymbols.indices, id: \.self) { i in
-                        Text(orderedWeekdaySymbols[i])
-                            .font(.caption2).foregroundStyle(.secondary)
+                // Preserve full touch targets on narrow screens and at large
+                // text sizes rather than squeezing seven days into tiny cells.
+                ViewThatFits(in: .horizontal) {
+                    monthGrid
+                    ScrollView(.horizontal) {
+                        monthGrid
                     }
                 }
-
-                LazyVGrid(columns: cols, spacing: 4) {
-                    ForEach(monthDays, id: \.self) { day in
-                        dayCell(day, faded: !cal.isDate(day, equalTo: anchor,
-                                                        toGranularity: .month))
-                    }
-                }
-
-                dayEvents
             }
+            .paperCard()
+
+            dayEvents
+        }
+    }
+
+    private var monthGrid: some View {
+        VStack(spacing: DemoraSpace.xs) {
+            LazyVGrid(columns: cols, spacing: DemoraSpace.xxs) {
+                // Index the labels, not the strings — weekday symbols repeat
+                // ("T", "S"), which would collapse under id: \.self.
+                ForEach(orderedWeekdaySymbols.indices, id: \.self) { i in
+                    Text(orderedWeekdaySymbols[i])
+                        .demoraType(.label)
+                        .foregroundStyle(Ink.inkSoft)
+                }
+            }
+
+            LazyVGrid(columns: cols, spacing: DemoraSpace.xxs) {
+                ForEach(monthDays, id: \.self) { day in
+                    dayCell(day, faded: !cal.isDate(day, equalTo: anchor,
+                                                    toGranularity: .month))
+                }
+            }
+        }
+        .frame(minWidth: max(44, dayControlSize) * 7 + DemoraSpace.xxs * 6)
     }
 
     private func dayCell(_ day: Date, faded: Bool) -> some View {
@@ -1131,69 +217,77 @@ struct CalendarView: View {
         let isToday = cal.isDateInToday(day)
         let count = events(on: day).count
         return Button { selected = day } label: {
-            VStack(spacing: 1) {
+            VStack(spacing: DemoraSpace.xxs) {
                 Text("\(cal.component(.day, from: day))")
-                    .font(.callout)
-                    .foregroundStyle(faded ? Ink.faint : Ink.ink)
+                    .demoraType(.time)
+                    .foregroundStyle(faded ? Ink.inkSoft : Ink.ink)
                 // Small count of things scheduled that day. Blank space is
                 // reserved so the day numbers stay aligned across the grid.
                 Text(count > 0 ? "\(count)" : " ")
-                    .font(.system(size: 9, weight: .semibold))
+                    .demoraType(.chip)
                     .foregroundStyle(accent)
             }
-            .frame(maxWidth: .infinity, minHeight: 42)
-            .background(isSel ? accent.opacity(0.15) : Color.clear)
-            .overlay(RoundedRectangle(cornerRadius: 8)
+            .padding(.vertical, DemoraSpace.xxs)
+            .frame(maxWidth: .infinity, minHeight: max(44, dayControlSize))
+            .background(isSel ? accent.opacity(InkPalette.tintLight) : Color.clear)
+            .overlay(RoundedRectangle(cornerRadius: DemoraSpace.xs)
                 .stroke(isToday ? accent : Color.clear, lineWidth: 1))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: DemoraSpace.xs))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(day.formatted(date: .complete, time: .omitted))
+        .accessibilityValue(count > 0 ? "\(count)" : "")
+        .accessibilityAddTraits(isSel ? [.isSelected] : [])
     }
 
     private var dayEvents: some View {
         let evs = events(on: selected)
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: DemoraSpace.cardGap) {
             Text(selected.formatted(date: .complete, time: .omitted))
-                .font(.subheadline.bold())
+                .demoraType(.cardTitle)
+                .foregroundStyle(Ink.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
             if evs.isEmpty {
                 Text(tr("Nothing on this day."))
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .demoraType(.body).foregroundStyle(Ink.inkSoft)
             } else {
-                ForEach(evs) { e in
-                    // Outside the legacy tutorial an item opens its rule's
-                    // summary sheet (docs/rules-redesign.md §5.8).
-                    if !model.inTutorial, let ref = e.ref {
-                        Button { summary = RuleSummaryRequest(ref: ref) } label: { eventRow(e) }
-                            .buttonStyle(.plain)
-                    } else {
-                        NavigationLink {
-                            ScheduledItemDetailView(title: e.name, summary: e.summary,
-                                                    timing: e.detail, appsTitle: e.appsTitle,
-                                                    selection: e.selection,
-                                                    scheduleID: e.scheduleID)
-                        } label: {
+                VStack(spacing: 0) {
+                    ForEach(evs) { e in
+                        Button { summary = RuleSummaryRequest(ref: e.ref) } label: {
                             eventRow(e)
                         }
                         .buttonStyle(.plain)
+                        if e.id != evs.last?.id {
+                            Rectangle().fill(Ink.hairline).frame(height: 1)
+                        }
                     }
                 }
+                .paperCard(padding: 0)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func eventRow(_ e: DayEvent) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DemoraSpace.s) {
             Image(systemName: e.symbol).foregroundStyle(e.color)
                 .frame(width: 22)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(e.name).font(.subheadline).foregroundStyle(Ink.ink)
-                Text(e.detail).font(.caption).foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: DemoraSpace.xxs) {
+                Text(e.name).demoraType(.cardTitle).foregroundStyle(Ink.ink)
+                Text(e.detail).demoraType(.meta).foregroundStyle(Ink.inkSoft)
             }
-            Spacer()
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
             Image(systemName: "chevron.right")
-                .font(.caption).foregroundStyle(Ink.faint)
+                .font(.caption).foregroundStyle(Ink.inkSoft)
+                .accessibilityHidden(true)
         }
+        .multilineTextAlignment(.leading)
+        .padding(DemoraSpace.cardPadding)
+        .frame(minHeight: 44)
         .contentShape(Rectangle())
     }
 
@@ -1207,7 +301,7 @@ struct CalendarView: View {
         var appsTitle: String? = nil
         var selection: FamilyActivitySelection? = nil
         var scheduleID: UUID? = nil
-        var ref: RuleRef? = nil
+        let ref: RuleRef
     }
 
     private func events(on day: Date) -> [DayEvent] {

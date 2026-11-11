@@ -90,14 +90,16 @@ print("Home report schedule/filter checks passed: \(checks)")
 '''
 
 main_view = root.split('    private var mainTabView: some View {', 1)[1].split('    private var homeSelected:', 1)[0]
+# Navigation chrome is iOS-only; strip just that modifier in this macOS
+# identity fixture. The host's iOS build separately checks its availability.
+main_view = main_view.replace('.toolbar(.hidden, for: .navigationBar)', '')
 home_selection = root.split('    private var homeSelected: Bool {', 1)[1].split('\n', 1)[0]
-tabs = root.split('    @ViewBuilder private var currentTab: some View {', 1)[1].split('    /// The single screen', 1)[0]
+tabs = root.split('    @ViewBuilder private var currentTab: some View {', 1)[1].split('    var body: some View {', 1)[0]
 lifetime_driver = r'''
 import AppKit
 import SwiftUI
 @MainActor final class Model: ObservableObject {
     @Published var selectedTab = 0
-    @Published var inTutorial = false
     let state = StateStub()
     let incomingInviteCount = 0
 }
@@ -105,12 +107,11 @@ struct StateStub { let pending: [Int] = [] }
 enum Ink { static let paper = Color.white }
 struct DemoraTabBar: View {
     @Binding var selection: Int
-    let locked: Bool
-    let pendingCount: Int
+    let approvalCount: Int
     let inviteCount: Int
     var body: some View { Text("tabs").frame(height: 56) }
 }
-@MainActor final class Lifetime: ObservableObject {
+@MainActor final class HomeLifetime: ObservableObject {
     static var created = 0
     let number: Int
     init() { Self.created += 1; number = Self.created }
@@ -118,20 +119,34 @@ struct DemoraTabBar: View {
 enum WidgetDestination { case today, changes }
 struct HomeView: View {
     @Binding var widgetDestination: WidgetDestination?
-    init(widgetDestination: Binding<WidgetDestination?> = .constant(nil)) {
+    let onInboxCountChanged: (Int) -> Void
+    init(widgetDestination: Binding<WidgetDestination?> = .constant(nil),
+         onInboxCountChanged: @escaping (Int) -> Void = { _ in }) {
         _widgetDestination = widgetDestination
+        self.onInboxCountChanged = onInboxCountChanged
     }
-    @StateObject var lifetime = Lifetime()
+    @StateObject var lifetime = HomeLifetime()
     var body: some View { Text("home \(lifetime.number)") }
 }
-struct LimitsView: View { var body: some View { Text("limits") } }
+@MainActor final class InsightsLifetime: ObservableObject {
+    static var created = 0
+    init() { Self.created += 1 }
+}
+struct UsageInsightsView: View {
+    @StateObject var lifetime = InsightsLifetime()
+    var body: some View { Text("insights") }
+}
+enum ContactsRelay {
+    static func pendingRequestsForMe() async throws -> [Int] { [] }
+}
 struct RulesView: View { var body: some View { Text("rules") } }
-struct SchedulesView: View { var body: some View { Text("schedules") } }
 struct YouView: View { var body: some View { Text("you") } }
-struct DelaysOverridesTabView: View { var body: some View { Text("delays") } }
 struct RetainedRoot: View {
     @EnvironmentObject var model: Model
     @State private var widgetDestination: WidgetDestination?
+    @State private var scenePhase = ScenePhase.active
+    @State private var insightsHasOpened = false
+    @State private var approvalRequestCount = 0
     var body: some View { mainTabView }
     private var mainTabView: some View {
 '''+main_view+r'''
@@ -154,32 +169,41 @@ struct RetainedRoot: View {
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
         settle()
-        precondition(Lifetime.created == 1, "initial Home")
-        for tab in [1, 2, 3, 4, 0, 2, 0] {
-            model.selectedTab = tab; settle()
-            precondition(Lifetime.created == 1, "tab switches preserve Home state")
-        }
-        model.inTutorial = true; model.selectedTab = 0; settle()
-        let legacyHome = Lifetime.created
+        precondition(HomeLifetime.created == 1, "initial Home")
+        precondition(InsightsLifetime.created == 0, "Insights does not query or construct before first visit")
         model.selectedTab = 1; settle()
-        model.selectedTab = 0; settle()
-        precondition(Lifetime.created > legacyHome, "legacy tutorial retains its original routing")
-        print("Native synthetic Home lifetime passed: seven normal tab switches retain Home; legacy tutorial remains separate")
+        precondition(InsightsLifetime.created == 0, "Rules does not construct Insights")
+        for tab in [2, 3, 0, 1, 2, 0, 3, 2, 0] {
+            model.selectedTab = tab; settle()
+            precondition(HomeLifetime.created == 1, "tab switches preserve Home state")
+            precondition(InsightsLifetime.created == 1, "tab switches preserve lazy Insights state")
+        }
+        print("Native synthetic report lifetime passed: Home retained; Insights lazy and retained across ten switches")
     }
 }
 '''
 assert '.opacity(homeSelected ? 1 : 0)' in root
 assert '.allowsHitTesting(homeSelected)' in root and '.accessibilityHidden(!homeSelected)' in root
-assert 'model.selectedTab == 0 && selecting' in home
-assert '.task(id: model.selectedTab == 0)' in home
-assert 'guard !Task.isCancelled, model.selectedTab == 0 else { return }' in home
+assert 'selection.formIntersection(pendingIDs)' in (ROOT / 'Latch/ChangesLedgerView.swift').read_text()
+assert '.task(id: inboxVisible)' in home
+assert 'model.selectedTab == 0 && scenePhase == .active' in home
+assert 'guard !Task.isCancelled, inboxVisible else { return }' in home
+assert 'while !Task.isCancelled' in home and '30_000_000_000' in home
+assert '.task(id: model.selectedTab != 0 && scenePhase == .active)' in root
+assert 'approvalRequestCount = requests.count' in root
+assert 'if let requests = try? await ContactsRelay.pendingRequestsForMe()' in root
+assert '.id(model.language)' not in main_view, 'tab switches never remount private reports'
+assert 'mainTabView\n                // tr() reads the language' in root and '                .id(model.language)\n' in root, \
+    'a language change rebuilds the tabs so every tr() string follows it'
+assert '.opacity(model.selectedTab == 2 ? 1 : 0)' in root
+assert '.allowsHitTesting(model.selectedTab == 2)' in root and '.accessibilityHidden(model.selectedTab != 2)' in root
 assert 'usageRefreshRequest = UUID()' in home and 'reloadRequest: usageRefreshRequest' in home
 assert '.onChange(of: reloadRequest)' in host
-assert 'onScreen && scenePhase == .active && model.selectedTab == 0' in insights
+assert 'onScreen && scenePhase == .active && model.selectedTab == 2' in insights
 assert '.onChange(of: canRefresh)' in insights
 assert 'guard canRefresh else { return }' in insights
 assert 'onScreen && scenePhase == .active && model.selectedTab == 0' in host
-assert 'model.authorized && !model.inTutorial' in host
+assert 'model.authorized' in host and 'model.inTutorial' not in host
 assert '.task(id: refreshRequest)' in host and 'refreshRequest = nil' in host
 assert host.count('guard !Task.isCancelled, canRefresh') == 2
 assert host.count('try await Task.sleep') == 2  # one coalesced query, one retry, no loop

@@ -266,30 +266,38 @@ presenter = section(receipt, 'private struct ChangeReceiptPresenter: ViewModifie
 assert 'if queued { queued = false; onQueued() }' in presenter, 'the editor closes after the receipt'
 
 limits = (ROOT / 'Latch/LimitsView.swift').read_text()
-# Rules build: the legacy tutorial keeps its own limit editor (it queues
-# directly, as its steps expect); everyone else uses the rebuilt editor,
-# which only ever queues through the receipt. Removing moved to the sheet.
-editor = section(limits, 'struct TutorialLimitEditorView: View {', '\n/// Hosts FamilyActivityPicker')
-submit = section(editor, 'private func submit(_ action: ChangeAction) {', '\n    }\n')
-assert 'if model.inTutorial {' in submit and 'receipt = ChangeReceiptRequest(action: action)' in submit
-assert editor.count('model.queue(') == 1, 'the tutorial editor queues only through submit'
-assert 'submit(.removeLimit(id: existing.id))' in editor
-rebuilt = section((ROOT / 'Latch/RuleEditors.swift').read_text(), 'struct LimitEditorView: View {',
+# The retired tab/editor is gone; all real editors stage a receipt, which
+# queues only after confirm/hold. Removals live in the live rule summary.
+assert 'TutorialLimitEditorView' not in limits and 'struct LimitsView:' not in limits
+assert 'model.queue(' not in limits and 'inTutorial' not in limits
+editors = (ROOT / 'Latch/RuleEditors.swift').read_text()
+rebuilt = section(editors, 'struct LimitEditorView: View {',
                   '\nprivate struct WeekdayBudgetsPage')
 assert 'model.queue(' not in rebuilt, 'the rebuilt limit editor queues only through the receipt'
 assert 'receipt = ChangeReceiptRequest(action: existing != nil ? .configureLimit(draftLimit)' in rebuilt
 assert '.changeReceipt($receipt) { dismiss() }' in rebuilt
 
 schedules = (ROOT / 'Latch/SchedulesView.swift').read_text()
-for action in ('.removePlanned(', '.removeExemption('):
-    assert f'model.queue({action}' not in schedules, ('removal bypasses the receipt', action)
-detail = section(schedules, 'struct ScheduledItemDetailView: View {', '\n// MARK: - Type card')
-assert 'receipt = ChangeReceiptRequest(action: .removeSchedule(id: schedule.id))' in detail
-recurring = section(schedules, 'struct RecurringListView: View {', '\n// MARK: - Recurrence picker')
-assert 'model.queue(' in recurring and recurring.count('model.queue(') == 1 \
-    and 'if model.inTutorial {\n            model.queue(action)' in recurring, 'only the tutorial queues directly'
-for view in (detail, recurring, section(schedules, 'struct PlannedListView: View {', '\nstruct RecurringListView')):
-    assert '.changeReceipt($receipt)' in view
+assert 'model.queue(' not in schedules and 'inTutorial' not in schedules
+for retired in ('ScheduledItemDetailView', 'RecurringListView', 'PlannedListView', 'SessionsListView'):
+    assert f'struct {retired}:' not in schedules, ('obsolete direct-queue wrapper', retired)
+for name, action in (
+    ('ScheduleEditorView', 'action: isFree ? .addExemption(exemptDraft) : .addSchedule(draft)'),
+    ('ScheduleSelectionEditorView', 'action: action'),
+    ('PlannedEditorView', 'action: .addPlanned(draft)'),
+    ('SessionStartView', 'action: draft'),
+):
+    editor = section(editors, f'struct {name}: View {{', '\n// MARK:')
+    assert 'model.queue(' not in editor and 'ChangeEngine.queue' not in editor, name
+    assert f'receipt = ChangeReceiptRequest({action}' in editor, name
+    assert '.changeReceipt($receipt) { dismiss() }' in editor, name
+summary = (ROOT / 'Latch/RuleSummarySheet.swift').read_text()
+for action in ('.removeLimit(id: id)', '.removeSchedule(id: id)', '.removeExemption(id: id)',
+               '.removePlanned(id: id)', '.endSessionEarly(id: id)'):
+    assert f'receipt = ChangeReceiptRequest(action: {action})' in summary, action
+assert 'model.queue(' not in summary and '.changeReceipt($receipt)' in summary
+assert 'Button { summary = RuleSummaryRequest(ref: e.ref) }' in schedules
+assert '.ruleSummary($summary)' in schedules, 'Calendar actions use the live receipt-based summary'
 # You build: contact removal moved to the one detail page (SkipWayEditors.swift).
 contacts = (ROOT / 'Latch/ContactsOverrideViews.swift').read_text() + (ROOT / 'Latch/SkipWayEditors.swift').read_text()
 assert 'model.queue(.removeContact(' not in contacts
@@ -329,13 +337,18 @@ row = section(ledger, 'struct ChangeRow: View {', '\n}\n')
 assert 'CountdownText(to: change.appliesAt)' in row
 assert 'Text(timerInterval:' not in row and 'TimeGuard.now()' not in row, \
     'projection must live only in CountdownProjection'
-assert row.index('if let frozenRemaining') < row.index('} else if change.isDue') \
-    < row.index('CountdownText(to: change.appliesAt'), 'tutorial → due → countdown order kept'
+assert row.index('if change.isDue') < row.index('CountdownText(to: change.appliesAt'), \
+    'due changes show Applying before the normal countdown'
+for retired in ('frozenRemaining', 'reportHole', 'TutorialCountdownText', 'tutorialHighlight'):
+    assert retired not in row, ('retired tutorial-only row state', retired)
 assert 'Text(tr("Applying…"))' in row
 assert 'if canOverride && !change.isDue {' in row, 'Apply now only when an override exists'
 assert '#if DEBUG' in row and 'Skip delay (dev)' in row.split('#if DEBUG', 1)[1].split('#endif', 1)[0], \
     'the developer skip stays Debug-only'
 assert 'tr(change.direction == .stricter ? "Stricter" : "Looser")' in row
+for callback in ('onCancel', 'onOverride', 'onDebugApply', 'onOpenRequest'):
+    assert f'Button(action: {callback})' in row or f'Button(tr("Skip delay (dev)"), action: {callback})' in row \
+        or f'action: {callback}' in row, ('normal row action retained', callback)
 ledger_view = section(ledger, 'struct ChangesLedgerView: View {', '\nprivate struct LedgerSection')
 assert 'LedgerGrouping.groups(model.state.pending, date: \\.appliesAt,' in ledger_view, 'stored appliesAt'
 assert 'selection.formIntersection(pendingIDs)' in ledger_view
@@ -362,11 +375,13 @@ home = (ROOT / 'Latch/HomeView.swift').read_text()
 today_src = (ROOT / 'Latch/TodayView.swift').read_text()
 host = (ROOT / 'Latch/LimitsUsageReportView.swift').read_text()
 body = section(home, 'struct HomeView: View {', '    /// Status helpers')
-today = section(body, '    private var today: some View {', '    // MARK: Legacy Home')
-assert 'if model.inTutorial {\n                    legacyHome\n                } else {\n                    today' in body, \
-    'the legacy tutorial keeps its Home'
+today = section(body, '    private var today: some View {', '    private var limitsSection:')
+assert 'NavigationStack(path: $todayPath)' in body
+assert 'private enum TodayRoute: Hashable { case changes }' in body
+for retired in ('inTutorial', 'legacyHome', 'moreLinks', 'tutorialScreen'):
+    assert retired not in home, ('Today has no retired tutorial routing', retired)
 order = ['TodayHeader(', 'TodayAttentionCard(', 'NowCard(', 'InboxCard(', 'limitsSection',
-         'dayThread(at:', 'changingSoon', 'moreLinks']
+         'dayThread(at:', 'changingSoon']
 positions = [today.index(token) for token in order]
 assert positions == sorted(positions), ('Today order', order)
 assert 'if !needsWakeTap {' in today and 'Label(tr("Block now")' in today and 'SessionStartView()' in today, \
@@ -383,16 +398,19 @@ assert home.count('.skipWaitSheet($skipTarget') == 1 and 'OverrideGateView' not 
     and 'ContactGateView' not in home, 'one Skip the wait sheet on Today'
 assert 'CompactHomeUsageReport(limits: model.state.limits,\n                                       reloadRequest: usageRefreshRequest)' in body
 assert 'pending.prefix(2)' in body and 'String(format: tr("All %d"), pending.count)' in body
-# You build: the Help link opens You's Help & guide page until the four-tab switch.
-assert 'UsageInsightsView()' in body and 'HelpGuideView()' in body, 'kept at the bottom until the four-tab switch'
-assert body.count('.task(id: model.selectedTab == 0)') == 1, 'one inbox load per Home, both layouts'
+assert 'UsageInsightsView()' not in body and 'HelpGuideView()' not in body, \
+    'Insights and Help belong to their own tabs, not duplicate Today destinations'
+assert body.count('.task(id: inboxVisible)') == 1, 'one visible/active cancellable inbox task'
+assert 'model.selectedTab == 0 && scenePhase == .active' in body
+assert 'while !Task.isCancelled' in body and 'try await Task.sleep(nanoseconds: 30_000_000_000)' in body
+assert 'onInboxCountChanged(inbox.count)' in body, 'successful response publishes the new badge count'
 assert '.refreshable {\n                usageRefreshRequest = UUID()' in body, 'pull to refresh stays'
 for forbidden in ('GlobalWake.status(', 'DayNightWake.status(', 'LimitFeatures.wakeState(',
                   'LimitFeatures.extraTimeState(', 'SharedStore.loadBlockedLimitIDs(', 'TimeGuard.now()'):
     assert forbidden not in body, ('read in event callbacks, never in the body', forbidden)
 snapshot = section(home, '    private func refreshSnapshot(state: LatchState) {', '\n    }\n')
 assert 'SharedStore.loadBlockedLimitIDs()' in snapshot and 'LimitFeatures.extraTimeState(for: limit)' in snapshot
-assert 'guard !model.inTutorial else' in snapshot
+assert 'inTutorial' not in snapshot, 'normal events always refresh the real status snapshot'
 for call in ('refreshWakePresentation(state: state)',):
     assert call in snapshot
 sources = section(home, "private enum HomeDaySources {", "\nextension NowSummary {")
@@ -413,7 +431,7 @@ assert 'CountdownText(to: until)' in today_src, 'extra-time wait is a TimeGuard 
 # Report host: refresh arrow gone (Insights I6), pull-to-refresh and refresh-on-appear kept.
 assert 'arrow.clockwise' not in host and 'tr("Refresh")' not in host
 assert '.onAppear { onScreen = true; requestRefresh() }' in host and '.onChange(of: reloadRequest)' in host
-print('Today layout guards passed: section order, legacy tutorial routing, pinned Block now, event-only reads, rule names only, report refresh')
+print('Today layout guards passed: section order, Changes-only navigation, visible inbox task, pinned Block now, event-only reads, rule names only, report refresh')
 
 # --- Report restyle (§5.5) and its palette copy -----------------------------
 theme = (ROOT / 'Latch/Theme.swift').read_text()
@@ -436,10 +454,10 @@ assert 'if let seconds = perApp[t] { used += seconds; reported = true }' in exte
 print('Report guards passed: palette copy matches InkPalette, no-data rows, used-up rows, read-only theme')
 
 # --- T5: extra time moved from the Limits tab to Today -----------------------
-limits_tab = section((ROOT / 'Latch/LimitsView.swift').read_text(), 'struct LimitsView: View {', '\n/// A limit row')
+rules_tab = (ROOT / 'Latch/RulesView.swift').read_text()
 for gone in ('extraTimeControl', 'requestExtraTimeOffMain', 'ExtraTimePasswordGate', 'ExtraTimePhraseGate',
              'extraContactTarget'):
-    assert gone not in limits_tab, ('extra time lives on Today only', gone)
+    assert gone not in limits and gone not in rules_tab, ('extra time lives on Today only', gone)
 assert 'ExtraTimeRows(limits: model.state.limits, states: extraTimes,' in home
 assert 'ChangeEngine.requestExtraTimeOffMain(limitID: id)' in home
 print('Extra time guards passed: one place (Today), same gates')

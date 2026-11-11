@@ -51,7 +51,6 @@ struct UsageInsightsView: View {
     @AppAccent private var accent
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.dismiss) private var dismiss
     @AppStorage("appearance") private var appearanceRaw = Appearance.system.rawValue
     @AppStorage("latch.accentColor", store: SharedStore.defaults) private var accentRaw = "blue"
     @State private var showingAbout = false
@@ -67,11 +66,9 @@ struct UsageInsightsView: View {
 
     private enum AboutRoute: Hashable { case startingPoint }
 
-    // Until the four-tab switch Insights is pushed from Today (tab 0); the
-    // switch replaces this with the Insights tab's identity (spec §5.1).
     private var canRefresh: Bool {
-        onScreen && scenePhase == .active && model.selectedTab == 0
-            && model.authorized && !model.inTutorial
+        onScreen && scenePhase == .active && model.selectedTab == 2
+            && model.authorized
     }
 
 #if DEBUG
@@ -140,6 +137,15 @@ struct UsageInsightsView: View {
             if visible { estimate = WeeklyUsageEstimate.load(); requestRefresh() }
             else { refreshRequest = nil }
         }
+        .onChange(of: model.selectedTab) { tab in
+            // A widget can switch tabs while About is open. Retain the
+            // private report, not a modal over the widget's destination.
+            if tab != 2 {
+                showingAbout = false
+                aboutPath = []
+                saveFailed = false
+            }
+        }
         .onChange(of: appearanceRaw) { _ in requestRefresh() }
         .onChange(of: accentRaw) { _ in requestRefresh() }
         .onChange(of: model.language) { _ in requestRefresh() }
@@ -202,10 +208,7 @@ struct UsageInsightsView: View {
     }
 
     private func goToToday() {
-        // Pushed from Today for now: going back lands on Today. After the
-        // four-tab switch the tab change does the work.
         model.selectedTab = 0
-        dismiss()
     }
 
     // MARK: About this data

@@ -505,8 +505,7 @@ enum ReceiptBatch {
 // MARK: - Invites (Y7)
 
 enum YouInvites {
-    /// The tab that answers invites carries the dot: You (tab 3 until the
-    /// four-tab switch), never Delays.
+    /// The tab that answers invites carries the dot: You (tag 3).
     static let youTab = 3
 
     static func showsDot(onTab tab: Int, inviteCount: Int) -> Bool {

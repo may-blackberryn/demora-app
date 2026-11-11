@@ -2,7 +2,7 @@
 //  YouView.swift
 //  The You page (docs/you-redesign.md §5, Y1): an invite when someone asked,
 //  Ways to skip a wait, Approving for others, Notifications, App and a
-//  footer. Until the four-tab switch it sits behind tab 3. The decisions
+//  footer. It is the fourth tab (tag 3). The decisions
 //  live in YouPresentation.swift; this file reads the relay and preferences
 //  in events and draws. Every rule change still goes through the receipt.
 //

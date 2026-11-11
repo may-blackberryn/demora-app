@@ -87,7 +87,7 @@ struct CompactHomeUsageReport: View {
 
     private var canRefresh: Bool {
         onScreen && scenePhase == .active && model.selectedTab == 0
-            && model.authorized && !model.inTutorial
+            && model.authorized
     }
 
     /// Bounded for any row count: 30 limits or a missing extension cannot leave

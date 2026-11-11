@@ -50,7 +50,8 @@ class GuideContentTests(unittest.TestCase):
                       "Day & night", "Calendar", "Conflicts", "Recheck blocked limits",
                       "Manual extra time"]:
             self.assertTrue(f'"{label}"' in sources, f"Missing destination: {label}")
-        self.assertIn("UsageInsightsView()", (ROOT / "Latch/HomeView.swift").read_text())
+        self.assertIn("UsageInsightsView()", (ROOT / "Latch/LatchApp.swift").read_text())
+        self.assertNotIn("UsageInsightsView()", (ROOT / "Latch/HomeView.swift").read_text())
         usage = (ROOT / "Latch/UsageInsightsView.swift").read_text()
         self.assertIn('tr("About this data")', usage)
         self.assertIn('aboutPath.append(.startingPoint)', usage)

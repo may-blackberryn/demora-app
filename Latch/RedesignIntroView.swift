@@ -8,9 +8,9 @@ enum RedesignIntroGate {
     static func variant(isSetUp: Bool) -> RedesignIntroVariant {
         isSetUp ? .upgrader : .fresh
     }
-    static func shouldShow(storageUnavailable: Bool, tutorialActive: Bool,
+    static func shouldShow(storageUnavailable: Bool,
                            welcomeSeen: Bool, introSeen: Bool) -> Bool {
-        !storageUnavailable && !tutorialActive && !welcomeSeen && !introSeen
+        !storageUnavailable && !welcomeSeen && !introSeen
     }
 }
 

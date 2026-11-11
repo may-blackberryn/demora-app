@@ -92,13 +92,15 @@ assert wake_all.index('ShieldController.refresh()') < wake_all.index('DemoraWidg
 host = (ROOT / 'Latch/LatchApp.swift').read_text()
 home = (ROOT / 'Latch/HomeView.swift').read_text()
 handler = host.split('.onOpenURL { url in', 1)[1].split('private func requestUpdateReviewIfNeeded', 1)[0]
-assert 'model.state.isSetUp' in handler and '!model.inTutorial' in handler and '!model.setupStorageUnavailable' in handler
+assert 'model.state.isSetUp' in handler and '!model.setupStorageUnavailable' in handler
 assert 'WidgetDestination.parse(url)' in handler and 'model.selectedTab = 0' in handler
-assert 'HomeView(widgetDestination: $widgetDestination)' in host
+assert 'HomeView(widgetDestination: $widgetDestination,' in host
 consume = home.split('private func consumeWidgetDestination()', 1)[1].split('private var today:', 1)[0]
 assert 'todayPath = destination == .changes ? [.changes] : []' in consume and 'widgetDestination = nil' in consume
 assert 'NavigationStack(path: $todayPath)' in home and '.navigationDestination(for: TodayRoute.self)' in home
-assert 'NavigationLink(value: TodayRoute.insights)' in home and 'NavigationLink(value: TodayRoute.help)' in home
+assert 'TodayRoute.insights' not in home and 'TodayRoute.help' not in home
+assert 'UsageInsightsView().toolbar(.hidden, for: .navigationBar)' in host
+assert 'case 3: YouView()' in host, 'Insights and Help now have dedicated tabs'
 assert 'ledgerNavigationReset = UUID()' in consume
 assert 'homeNotice = nil' in consume, 'a prior Home alert must not obscure the widget destination'
 assert 'navigationReset: ledgerNavigationReset' in home

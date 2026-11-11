@@ -60,17 +60,15 @@ struct RulesView: View {
             .toolbar(.hidden, for: .navigationBar)
             .refreshable { model.tick() }
             .safeAreaInset(edge: .bottom) {
-                if !model.inTutorial {
-                    Button { showChooser = true } label: {
-                        Label(tr("New rule"), systemImage: "plus")
-                    }
-                    .buttonStyle(DemoraPrimaryButtonStyle())
-                    .padding(.horizontal, DemoraSpace.pageGutter)
-                    .padding(.vertical, DemoraSpace.xs)
-                    .frame(maxWidth: DemoraSpace.maxContentWidth)
-                    .frame(maxWidth: .infinity)
-                    .background(Ink.paper)
+                Button { showChooser = true } label: {
+                    Label(tr("New rule"), systemImage: "plus")
                 }
+                .buttonStyle(DemoraPrimaryButtonStyle())
+                .padding(.horizontal, DemoraSpace.pageGutter)
+                .padding(.vertical, DemoraSpace.xs)
+                .frame(maxWidth: DemoraSpace.maxContentWidth)
+                .frame(maxWidth: .infinity)
+                .background(Ink.paper)
             }
             .navigationDestination(for: RulesRoute.self) { route in
                 destination(route).toolbar(.visible, for: .navigationBar)
@@ -282,7 +280,6 @@ struct RulesView: View {
     // MARK: Events
 
     private func refresh(_ state: LatchState) {
-        guard !model.inTutorial else { return }
         let reads = RuleLiveReads.read(state: state)
         blockedLimitIDs = reads.blockedLimitIDs
         wakeOpens = reads.wakeOpens

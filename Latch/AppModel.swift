@@ -12,46 +12,12 @@ import DeviceActivity
 import UserNotifications
 import UIKit
 
-/// Steps of the guided first-run tutorial. While non-nil the app shows the
-/// real tabs but in a coached, constrained mode.
-enum TutorialStep: Int {
-    case addLimit         // Limits: add your first limit
-    case addSchedule      // Schedules: add a recurring schedule
-    case applyBoth        // Home: select both pending and apply via contact
-    case exploreCalendar  // Schedules: see now & next, open the calendar
-    case removeSchedule   // Schedules: remove the recurring schedule
-    case removeLimit      // Limits: remove the limit (auto-switched here)
-    case addContact       // Settings: add a sample trusted contact
-    case applyViaContact  // Home: apply the removals via the trusted contact
-    case configure        // final: pick real overrides + delays
-}
-
 @MainActor
 final class AppModel: ObservableObject {
     @Published var state = SharedStore.loadState()
     @Published var authorized = false
 
-    /// Non-nil while the first-run tutorial is running.
-    @Published var tutorial: TutorialStep?
     @Published var setupStorageUnavailable = false
-    var inTutorial: Bool { tutorial != nil }
-
-    /// True while replaying the walkthrough from Help (vs the first-run tour).
-    /// In a replay the real setup is restored at the end instead of writing a
-    /// fresh one, so nothing is lost.
-    @Published var isReplay = false
-
-    /// Set when a replay was blocked because the real setup couldn't be backed
-    /// up. Drives a warning alert in the Help screen; nothing was changed.
-    @Published var replayFailed = false
-
-    /// During the calendar step: focus "now & next" first, then the calendar.
-    @Published var calendarFocusNowNext = false
-
-    /// The screen currently on top, so only its highlight feeds the blocker
-    /// (a screen pushed away no longer counts). Set by advanceTutorial for the
-    /// step's root screen, and by each pushed screen's onAppear.
-    @Published var tutorialScreen = ""
     @Published var language: AppLanguage = AppLanguage.current {
         didSet { AppLanguage.current = language }
     }
@@ -63,13 +29,8 @@ final class AppModel: ObservableObject {
     @Published var contactNotice: String?
 
     /// Count of pending "be my trusted contact" invites awaiting your answer;
-    /// drives the red badge on the Settings tab.
+    /// drives the invite dot on the You tab.
     @Published var incomingInviteCount = 0
-
-    /// True while Home's multi-select "Apply" bar is on screen. The tutorial
-    /// callout lifts above it when set, and otherwise sits at the bottom so it
-    /// doesn't cover the pending changes.
-    @Published var applyBarVisible = false
 
     /// Mirror of SharedStore.enforcementDegraded — drives the warning banner
     /// when iOS couldn't schedule all the background monitors (too many
@@ -83,14 +44,12 @@ final class AppModel: ObservableObject {
     /// in-app "Unavailable" indicator; no notification is sent.
     @Published var unavailableContactCodes: Set<String> = []
 
-    /// Selected bottom tab (0 Home, 1 Limits, 2 Schedules, 3 Settings,
-    /// 4 Delays & Overrides). Published for cross-tab navigation.
+    /// Selected bottom tab (0 Today, 1 Rules, 2 Insights, 3 You).
+    /// Published for navigation-only cross-tab actions and widget links.
     @Published var selectedTab = 0
 
-    /// Navigation path for the Settings tab. Held here (not @State in the view)
-    /// so it survives the language re-render — the TabView is rebuilt on a
-    /// language change, which would otherwise pop you back to the root and
-    /// kick you out of e.g. Appearance. Home's "change" link also sets it.
+    /// Navigation path for You. Keep it when its tab is reconstructed so
+    /// language changes in Appearance never pop the user back to its root.
     @Published var youPath: [YouRoute] = []
 
     private var timer: AnyCancellable?
@@ -112,7 +71,6 @@ final class AppModel: ObservableObject {
         if migrationSucceeded && !SharedStore.stateRecoveryNeeded && !SharedStore.loadState().isSetUp {
             resetForOnboarding()
         }
-        isReplay = SharedStore.isReplaying
         // Fast path so an approved install doesn't flash the banner.
         authorized = AuthorizationCenter.shared.authorizationStatus == .approved
         // authorizationStatus is unreliable — it can read .notDetermined even
@@ -121,7 +79,7 @@ final class AppModel: ObservableObject {
         // when already approved, so confirm with it for a set-up install. It
         // won't prompt unless access is genuinely missing, and never runs during
         // onboarding/the tutorial (which handle authorization themselves).
-        if !setupStorageUnavailable && SharedStore.loadState().isSetUp && tutorial == nil {
+        if !setupStorageUnavailable && SharedStore.loadState().isSetUp {
             Task { [weak self] in await self?.verifyAuthorization() }
         }
         // Re-check due changes every 30s while the app is open so a
@@ -466,39 +424,8 @@ final class AppModel: ObservableObject {
         let change = ChangeEngine.queue(action)
         state = SharedStore.loadState()
         let haptic = UINotificationFeedbackGenerator()
-        if let change {
+        if change != nil {
             haptic.notificationOccurred(.success)
-            // Tutorial: each queued change is frozen (can't be waited out) and
-            // moves the tour along.
-            if let step = tutorial {
-                switch step {
-                case .addLimit:
-                    if case .addLimit = action {
-                        freezePending(change.id); advanceTutorial(to: .addSchedule)
-                    }
-                case .addSchedule:
-                    // A recurring block or a recurring free period both count.
-                    if case .addSchedule = action {
-                        freezePending(change.id); advanceTutorial(to: .addContact)
-                    } else if case .addExemption = action {
-                        freezePending(change.id); advanceTutorial(to: .addContact)
-                    }
-                case .removeSchedule:
-                    // The thing they added may be a block schedule or a free
-                    // period (exemption) — removing either advances the tour.
-                    if case .removeSchedule = action {
-                        freezePending(change.id); advanceTutorial(to: .removeLimit)
-                    } else if case .removeExemption = action {
-                        freezePending(change.id); advanceTutorial(to: .removeLimit)
-                    }
-                case .removeLimit:
-                    if case .removeLimit = action {
-                        freezePending(change.id); advanceTutorial(to: .applyViaContact)
-                    }
-                default:
-                    break
-                }
-            }
         } else {
             haptic.notificationOccurred(.error)
             let capacityNotice = MonitorRegistration.rejectionMessage
@@ -535,79 +462,6 @@ final class AppModel: ObservableObject {
 
     func refreshAfterExternalApply() {
         state = SharedStore.loadState()
-        // Tutorial: once all the staged changes are applied, move on.
-        if tutorial == .applyBoth, state.pending.isEmpty {
-            advanceTutorial(to: .exploreCalendar)
-        } else if tutorial == .applyViaContact, state.pending.isEmpty {
-            advanceTutorial(to: .configure)
-        }
-    }
-
-    // MARK: - Guided tutorial (retired)
-
-    // Nothing starts the walkthrough any more (docs/you-redesign.md Y10,
-    // owner answer 4). The remaining tutorial branches go with the legacy
-    // screens at the four-tab switch; replay recovery below stays so a
-    // replay interrupted in an older build still restores the real setup.
-
-    private func advanceTutorial(to step: TutorialStep) {
-        tutorial = step
-        switch step {
-        case .addLimit:        selectedTab = 1; tutorialScreen = "limits"
-        case .addSchedule:     selectedTab = 2; tutorialScreen = "schedulesRoot"
-        case .applyBoth:       selectedTab = 0; tutorialScreen = "home"
-        case .exploreCalendar:
-            selectedTab = 2; tutorialScreen = "schedulesRoot"
-            calendarFocusNowNext = false          // skip now & next; go to calendar
-        case .removeSchedule:  selectedTab = 2; tutorialScreen = "schedulesRoot"
-        case .removeLimit:     selectedTab = 1; tutorialScreen = "limits"
-        case .addContact:      selectedTab = 3; tutorialScreen = "settings"
-        case .applyViaContact: selectedTab = 0; tutorialScreen = "home"
-        case .configure:       break
-        }
-    }
-
-    /// Called when the calendar opens during the tour.
-    func tutorialDidOpenCalendar() {
-        if tutorial == .exploreCalendar { advanceTutorial(to: .removeSchedule) }
-    }
-
-    /// When the current tutorial change was frozen — anchors the countdown.
-    private var tutorialFreezeStart: Date?
-
-    /// Push a pending change's real apply time far into the future so it never
-    /// auto-applies (it can't be waited out); the displayed countdown is driven
-    /// separately by `tutorialRemaining` so it still ticks down a little.
-    private func freezePending(_ id: UUID) {
-        var s = SharedStore.loadState()
-        if let i = s.pending.firstIndex(where: { $0.id == id }) {
-            s.pending[i].appliesAt = .distantFuture
-            SharedStore.save(s)
-            state = s
-            tutorialFreezeStart = Date()
-        }
-    }
-
-    /// Seconds to show for a frozen tutorial change: starts at the full delay
-    /// (5 or 15 min), counts down for one minute, then holds at the floor
-    /// (4 or 14 min) so it visibly can't be waited out. nil when not applicable.
-    func tutorialRemaining(for change: PendingChange) -> TimeInterval? {
-        guard inTutorial, let start = tutorialFreezeStart else { return nil }
-        let total: TimeInterval = change.direction == .stricter ? 5 * 60 : 15 * 60
-        let floor = total - 60
-        return max(floor, total - Date().timeIntervalSince(start))
-    }
-
-    /// End a replay: put the user's real limits, schedules, delays, overrides,
-    /// and protections back exactly as they were.
-    func finishReplay() { restoreFromReplay() }
-
-    /// Let the user bail out of the walkthrough at any point. A replay restores
-    /// the real setup; a first run jumps straight to the final setup screen so
-    /// they're never trapped behind the tutorial's locked tab bar.
-    func skipTutorial() {
-        if SharedStore.isReplaying { finishReplay(); return }
-        tutorial = .configure
     }
 
     #if DEBUG
@@ -620,8 +474,6 @@ final class AppModel: ObservableObject {
         let s = LatchState()                 // isSetUp == false → onboarding
         SharedStore.save(s)
         state = s
-        tutorial = nil
-        isReplay = false
         selectedTab = 0
         youPath = []
         ChangeEngine.reconfigureDailyMonitoring(state: s)
@@ -631,6 +483,8 @@ final class AppModel: ObservableObject {
         ShieldController.refresh()
     }
     #endif
+
+    // MARK: - Legacy replay recovery
 
     private func restoreFromReplay() {
         guard !SharedStore.stateRecoveryNeeded,
@@ -645,48 +499,13 @@ final class AppModel: ObservableObject {
         SharedStore.isReplaying = false
         guard !SharedStore.isReplaying else { setupStorageUnavailable = true; return }
         SharedStore.clearBackup()
-        tutorial = nil
         SharedStore.simulating = false
         state = backup
-        isReplay = false
         SharedStore.saveBlockedLimitIDs([])
         ChangeEngine.reconfigureDailyMonitoring(state: state)
         LimitFeatures.reconfigureSplitMonitoring(state: state)
         LimitFeatures.reconcile(state: state)
         ChangeEngine.reconfigureWindowMonitoring(state: state)
-        ShieldController.refresh()
-        selectedTab = 0
-    }
-
-    func finishTutorial(strictDelay: TimeInterval,
-                        lenientDelay: TimeInterval,
-                        overrides: OverridesConfig,
-                        blockAppRemoval: Bool = false,
-                        blockAdultWebsites: Bool = false,
-                        delayMode: DelayMode = .separate) {
-        // A replay ends by restoring the real setup, not writing a new one.
-        if SharedStore.isReplaying { restoreFromReplay(); return }
-        tutorial = nil
-        SharedStore.simulating = false    // back to real blocking
-        var s = SharedStore.loadState()
-        s.pending = []
-        s.limits = []
-        s.schedules = []
-        s.exemptions = []
-        s.sessions = []
-        s.delayPolicy = DelayPolicy(mode: delayMode, strictDelay: strictDelay, lenientDelay: lenientDelay)
-        s.overrides = overrides
-        s.blockAppRemoval = blockAppRemoval
-        s.blockAdultWebsites = blockAdultWebsites
-        s.isSetUp = true
-        SharedStore.save(s)
-        SharedStore.defaults.set(true, forKey: SharedStore.redesignWelcomeKey)
-        SharedStore.saveBlockedLimitIDs([])
-        state = s
-        ChangeEngine.reconfigureDailyMonitoring(state: s)
-        LimitFeatures.resetForNewDay()
-        LimitFeatures.reconfigureSplitMonitoring(state: s)
-        ChangeEngine.reconfigureWindowMonitoring(state: s)
         ShieldController.refresh()
         selectedTab = 0
     }

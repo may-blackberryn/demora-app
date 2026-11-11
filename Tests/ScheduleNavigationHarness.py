@@ -1,47 +1,57 @@
 #!/usr/bin/env python3
-"""Source-level routing checks, not an interactive SwiftUI navigation test."""
+"""Source routing contracts for Rules/Today after the four-tab switch.
+
+Checks live replacements, not deleted tutorial/list pages. No interactive iOS
+navigation, Screen Time access, network request or saved-state write.
+"""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 source = (ROOT / "Latch/SchedulesView.swift").read_text()
-root = source[:source.index("// MARK: - Overview model")]
-destinations = root[root.index("    private var scheduleDestinations"):
-                    root.index("    private func schedulePage")]
-sessions = root[root.index("    private var sessionsIndex"):
-                root.index("    private var calendarIndex")]
-day_night = (ROOT / "Latch/DayNightViews.swift").read_text()
-calendar = root[root.index("    private var calendarIndex"):]
-
-for old_tabs in ("ScheduleSection", "selectedSection", "sectionSelector", "selectTutorialSection"):
-    assert old_tabs not in root, old_tabs
-assert 'schedulePage(title: tr("Sessions")) { sessionsIndex }' in destinations
-assert 'DayNightSchedulesView()' in destinations
-assert "calendarIndex" in destinations
-assert all(view in sessions for view in ("SessionsListView()", "PlannedListView()",
-                                         "RecurringListView()"))
-assert "ExemptionsListView" not in source and "RecurringSessionChoiceView" not in source
-assert 'tr("Free periods")' not in sessions + destinations
-assert 'case .recurring: ScheduleEditorView()' in root
-# Free periods are still a session kind and recurring editor option. Existing
-# recurring exemptions remain in Recurring, not a redundant top-level menu.
-# The session editor moved to RuleEditors.swift with the Rules build; free
-# periods stay a session kind there.
+rules = (ROOT / "Latch/RulesView.swift").read_text()
+home = (ROOT / "Latch/HomeView.swift").read_text()
+summary = (ROOT / "Latch/RuleSummarySheet.swift").read_text()
 editors = (ROOT / "Latch/RuleEditors.swift").read_text()
+presentation = (ROOT / "Latch/RulesPresentation.swift").read_text()
+day_night = (ROOT / "Latch/DayNightViews.swift").read_text()
+
+for retired in ("struct SchedulesView:", "struct SessionsListView:",
+                "struct PlannedListView:", "struct RecurringListView:",
+                "struct ScheduledItemDetailView:", "TutorialScheduleEditorView",
+                "tutorialHighlight", "model.tutorial", "model.inTutorial"):
+    assert retired not in source, retired
+
+editor_routes = rules.split("private func editor(for kind:", 1)[1].split("private func destination", 1)[0]
+for route in ("case .blockNow: SessionStartView()", "case .repeating: ScheduleEditorView()",
+              "case .planned: PlannedEditorView()", "case .dayNight: DayNightQueuedEditor("):
+    assert route in editor_routes, ("New rule keeps each schedule kind reachable", route)
+assert 'Button { showSession = true }' in home and 'SessionStartView()' in home
+assert 'case .calendar: CalendarView(onSeeChange:' in rules
+assert 'CalendarView(onSeeChange:' in home and 'showCalendar = false' in home
+assert '.ruleSummary($summary)' in source and 'RuleSummaryRequest(ref: e.ref)' in source
+for ref in ('.schedule(s.id)', '.exemption(e.id)', '.planned(w.id)', '.session(s.id)'):
+    assert ref in source, ('Calendar uses the real rule identity', ref)
+
+# Free periods remain kinds, not an obsolete top-level destination.
 assert 'Text(tr("Free")).tag(SessionKind.free)' in editors
 assert 'Picker(tr("Type"), selection: $isFree)' in editors
-assert 'Picker(tr("Type"), selection: $isFree)' in source
-assert 'ForEach(model.state.exemptions)' in source
-assert "WakeScheduleView()" in day_night and "SleepBlockEditor()" in day_night
-assert "CalendarView()" in calendar and "embedded" not in source
-assert "overviewSection" in root and 'Label(tr("New session")' in root
-assert all(kind in root for kind in ("newSession = .now", "newSession = .planned",
-                                     "newSession = .recurring"))
-# The tutorial retains its direct Recurring and Calendar links, and no new
-# model action, queue, or timer mutation is introduced in the navigation hub.
-assert "if model.inTutorial {\n                        // Keep the practice" in root
-assert 'model.tutorial == .removeSchedule' in sessions
-assert 'model.tutorial == .exploreCalendar' in calendar
-assert 'model.tutorialScreen == "schedulesRoot"' in sessions + calendar
-for forbidden in ("model.queue", "SharedStore.save", "ChangeEngine.", "ShieldController."):
-    assert forbidden not in destinations + calendar, forbidden
-print("Schedules single-page hub, nested session lists, unchanged quick actions and tutorial routing: source checks passed")
+assert 'case .exemption(let id)' in summary and 'state.exemptions' in summary
+assert 'case .session(let id)' in summary and 'state.sessions' in summary
+assert '.endSessionEarly(id: id)' in summary and '.changeReceipt($receipt)' in summary
+assert 'case .exemption: return .freePeriod' in presentation
+assert 'case .session, .queuedSession: return .session' in presentation
+assert 'WakeScheduleView()' in day_night and 'SleepBlockEditor()' in day_night
+
+calendar = source.split('struct CalendarView: View {', 1)[1]
+for forbidden in ('model.queue', 'SharedStore.save', 'ChangeEngine.', 'ShieldController.'):
+    assert forbidden not in calendar + editor_routes, forbidden
+# Calendar restyle (rules spec §5.8): tokens only, full touch targets.
+for token in ('.paperCard()', '.paperCard(padding: 0)', '.demoraType(.cardTitle)', 'Ink.inkSoft', 'DemoraSpace.'):
+    assert token in calendar, ('calendar uses redesign tokens', token)
+for retired_style in ('.demoraSurface()', 'design: .monospaced', 'DemoraSectionTitle', 'GridCard('):
+    assert retired_style not in calendar, ('calendar keeps no pre-redesign styling', retired_style)
+assert calendar.count('.frame(minWidth: 44, minHeight: 44)') == 2, 'month arrows keep 44 pt targets'
+assert 'minHeight: max(44, dayControlSize)' in calendar and 'ViewThatFits(in: .horizontal)' in calendar, \
+    'day cells keep 44 pt targets and scroll rather than shrink at large text'
+assert '.accessibilityAddTraits(isSel ? [.isSelected] : [])' in calendar
+print('Schedule routing: Rules editors, Today Block now, Calendar summaries and restyle, free periods and delayed session removal passed')

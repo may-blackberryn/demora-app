@@ -589,8 +589,12 @@ def section(text, start, end):
 
 
 app = (ROOT / 'Latch/LatchApp.swift').read_text()
-assert 'case 1:\n            if model.inTutorial { LimitsView() } else { RulesView() }' in app, \
-    'Rules sits behind tab 1; the legacy tutorial keeps Limits (R10)'
+current_tab = declaration(app, 'private var currentTab: some View')
+assert 'case 1: RulesView()' in current_tab and 'case 3: YouView()' in current_tab
+assert 'UsageInsightsView()' in app and 'model.selectedTab == 2' in app
+assert 'insightsHasOpened || model.selectedTab == 2' in app, 'Insights is a retained root destination'
+for retired in ('model.inTutorial', 'LimitsView()', 'SchedulesView()', 'case 4:'):
+    assert retired not in app, ('retired tab routing', retired)
 rules = (ROOT / 'Latch/RulesView.swift').read_text()
 reads = section(rules, 'enum RuleLiveReads {', '\n}\n')
 outside = rules.replace(reads, '')
@@ -601,7 +605,11 @@ for runtime in ('SharedStore.', 'TimeGuard.', 'LimitFeatures.', 'DayNightWake.',
 assert '.onReceive(model.$state) { refresh($0) }' in rules and '.onAppear { refresh(model.state) }' in rules
 for forbidden in ('model.queue(', 'ChangeEngine.queue', 'applyNow'):
     assert forbidden not in rules, ('Rules never queues directly', forbidden)
-assert 'if !model.inTutorial {\n                    Button { showChooser = true }' in rules, 'New rule hidden in the tutorial'
+new_rule = declaration(rules, '.safeAreaInset(edge: .bottom)')
+assert 'Button { showChooser = true } label:' in new_rule
+assert 'Label(tr("New rule"), systemImage: "plus")' in new_rule
+assert 'if ' not in new_rule and '.disabled(' not in new_rule, 'New rule is always available'
+assert 'inTutorial' not in rules
 assert 'RuleCatalog.sections(state: state, now: now)' in rules and 'RulePending.index(state.pending)' in rules
 ledger = (ROOT / 'Latch/ChangesLedgerView.swift').read_text()
 assert 'var scrollTo: PendingChange.ID? = nil' in ledger and 'proxy.scrollTo(scrollTo, anchor: .center)' in ledger
@@ -662,14 +670,18 @@ for name in ('struct WakeBlockEditor: View {', 'struct SleepBlockEditor: View {'
 print('Editor guards passed: receipt-only, lifted validity, store-free day & night editor, no inline delays')
 
 # --- Step 5: remaining removals behind the receipt, "Cancel it in Changes" --
-for name in ('Latch/AppModel.swift', 'Latch/ChangeReceiptSheet.swift', 'Latch/SchedulesView.swift'):
+for name in ('Latch/AppModel.swift', 'Latch/ChangeReceiptSheet.swift'):
     text = (ROOT / name).read_text()
     assert 'Cancel it on the Home tab first' not in text, name
     assert 'Cancel it in Changes first if you want something different.' in text, name
-sessions_list = section((ROOT / 'Latch/SchedulesView.swift').read_text(), 'struct SessionsListView: View {',
-                        '\nstruct PlannedListView')
-assert 'receipt = ChangeReceiptRequest(action: .endSessionEarly(id: session.id))' in sessions_list
-assert 'model.queue(' not in sessions_list and '.changeReceipt($receipt)' in sessions_list
+schedules = (ROOT / 'Latch/SchedulesView.swift').read_text()
+for retired in ('SessionsListView', 'PlannedListView', 'RecurringListView', 'ScheduledItemDetailView'):
+    assert f'struct {retired}:' not in schedules, retired
+assert 'model.queue(' not in schedules and 'inTutorial' not in schedules
+assert 'receipt = ChangeReceiptRequest(action: .endSessionEarly(id: id))' in sheet
+assert '.changeReceipt($receipt)' in sheet, 'session ending still uses the normal receipt'
+assert 'Button { summary = RuleSummaryRequest(ref: e.ref) }' in schedules
+assert '.ruleSummary($summary)' in schedules, 'Calendar opens the same live rule actions'
 day_night_page = section(day_night, 'struct DayNightSchedulesView: View {', '\nprivate struct DayNightLiveWakeStatus')
 assert 'receipt = ChangeReceiptRequest(action: .removeDayNightGroup(id: group.id))' in day_night_page
 assert 'model.queue(' not in day_night_page and 'takes effect in' not in day_night_page

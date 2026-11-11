@@ -1030,9 +1030,6 @@ struct AddContactView: View {
     var onAdd: ((TrustedContact) -> Void)? = nil
     var existingContacts: [TrustedContact] = []
     var isDemo = false
-    /// In the guided tutorial: prefill a sample, skip the relay code check,
-    /// and show the "normally this takes a delay" note.
-    var tutorialMode = false
 
     enum ContactType: String, CaseIterable, Identifiable {
         case email, latchUser
@@ -1069,7 +1066,6 @@ struct AddContactView: View {
                             .font(.system(.title3, design: .serif))
                     }
                     .demoraSurface()
-                    .disabled(tutorialMode)
                     VStack(alignment: .leading, spacing: 14) {
                     DemoraSectionTitle(title: tr("Type"))
                     Picker(tr("Type"), selection: $type) {
@@ -1099,19 +1095,12 @@ struct AddContactView: View {
                     .font(.footnote).foregroundStyle(Ink.faint)
                 }
                     .demoraSurface()
-                    .disabled(tutorialMode)
                 if !isDemo, type == .email, EmailCodeService.isConfigured, let u = emailUsage {
                     VStack(alignment: .leading, spacing: 12) {
                         DemoraSectionTitle(title: tr("Email limit"))
                         EmailUsageBars(usage: u)
                     }
                     .demoraSurface()
-                }
-                if tutorialMode {
-                        Label(tr("Adding a trusted contact normally waits out a delay. In this tutorial it's instant."),
-                              systemImage: "info.circle")
-                            .font(.footnote).foregroundStyle(Ink.faint)
-                            .demoraSurface()
                 }
                 if let error {
                     Text(error).font(.footnote).foregroundStyle(Ink.danger)
@@ -1149,23 +1138,14 @@ struct AddContactView: View {
             }
             .background(Ink.paper.ignoresSafeArea())
             .casedNavigationTitle(tr("Add contact"))
-            .onAppear {
-                if tutorialMode {
-                    type = .latchUser
-                    if name.isEmpty { name = "Alex" }
-                    if buddyCode.isEmpty { buddyCode = "DEMO12" }
-                }
-            }
             .task {
-                if !isDemo && !tutorialMode && EmailCodeService.isConfigured {
+                if !isDemo && EmailCodeService.isConfigured {
                     emailUsage = try? await EmailCodeService.usage()
                 }
             }
             .toolbar {
-                if !tutorialMode {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(tr("Cancel")) { dismiss() }
-                    }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(tr("Cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(checking ? tr("Checking…")
@@ -1173,7 +1153,6 @@ struct AddContactView: View {
                         Task { await submit() }
                     }
                     .disabled(!isValid || checking)
-                    .tutorialHighlight(tutorialMode)
                 }
             }
         }
@@ -1226,7 +1205,7 @@ struct AddContactView: View {
                 error = tr("That's your own code — add someone else.")
                 return
             }
-            if !tutorialMode && !isDemo {
+            if !isDemo {
                 checking = true
                 defer { checking = false }
                 let exists = (try? await ContactsRelay.codeExists(code)) ?? false

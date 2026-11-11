@@ -20,12 +20,11 @@ store = (ROOT / "Shared/SharedStore.swift").read_text()
 pure_types = intro[intro.index("enum RedesignIntroVariant"):
                    intro.index("/// The same short opening")]
 checks = []
-for unavailable, tutorial, welcome, seen in itertools.product([False, True], repeat=4):
-    values = [str(v).lower() for v in (unavailable, tutorial, welcome, seen)]
-    expected = str(not any((unavailable, tutorial, welcome, seen))).lower()
+for unavailable, welcome, seen in itertools.product([False, True], repeat=3):
+    values = [str(v).lower() for v in (unavailable, welcome, seen)]
+    expected = str(not any((unavailable, welcome, seen))).lower()
     checks.append("precondition(RedesignIntroGate.shouldShow(storageUnavailable: "
-                  + values[0] + ", tutorialActive: " + values[1]
-                  + ", welcomeSeen: " + values[2] + ", introSeen: " + values[3]
+                  + values[0] + ", welcomeSeen: " + values[1] + ", introSeen: " + values[2]
                   + ") == " + expected + ")")
 program = "import Foundation\n" + pure_types + "\n" + "\n".join(checks) + """
 precondition(RedesignIntroPhase.allCases == [.logo, .wordmark, .version, .tagline])
@@ -41,8 +40,8 @@ for phase in RedesignIntroPhase.allCases {
 }
 // Completing only the intro must not complete either setup or the welcome.
 precondition(!RedesignIntroGate.shouldShow(storageUnavailable: false,
-    tutorialActive: false, welcomeSeen: false, introSeen: true))
-print("Intro gate and ordered timing: all 16 combinations passed")
+    welcomeSeen: false, introSeen: true))
+print("Intro gate and ordered timing: all eight storage/welcome/intro combinations passed; retired tutorial flag removed")
 """
 with tempfile.TemporaryDirectory(prefix="demora-intro-tests-") as temporary:
     source = Path(temporary) / "main.swift"

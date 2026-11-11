@@ -1,7 +1,7 @@
 //
 //  SettingsView.swift
 //  Pages that outlived the Settings tab: limitations, the Guide, the
-//  language picker, the Delays tab and the website list. You
+//  language picker, setup password editor and the website list. You
 //  (YouView.swift) replaced the Settings root; every rule change is still
 //  queued through the change engine.
 //
@@ -229,49 +229,6 @@ struct LanguagePickerView: View {
         model.language = selectedLanguage
         if selectedLanguage.isBetaTranslation {
             showLanguageBetaNotice = true
-        }
-    }
-}
-
-// MARK: - Delays tab (until the four-tab switch)
-
-/// First-class destination from the redesigned bottom navigation. Existing
-/// delay and contact editors keep their queued-change semantics unchanged.
-struct DelaysOverridesTabView: View {
-    @EnvironmentObject var model: AppModel
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        DemoraPageTitle(title: tr("Delays & overrides"))
-                        Text(tr("Your rules can change—just not in the moment."))
-                            .font(.subheadline).foregroundStyle(Ink.faint)
-                    }
-                    VStack(alignment: .leading, spacing: 12) {
-                        DemoraSectionTitle(title: tr("Delays"), symbol: "hourglass")
-                        DelayPolicyNavigationRows()
-                    }
-                    VStack(alignment: .leading, spacing: 12) {
-                        DemoraSectionTitle(title: tr("Overrides"), symbol: "person.2")
-                        // Overrides live once, in You → Ways to skip a wait
-                        // (docs/you-redesign.md §8). This tab goes at the
-                        // four-tab switch.
-                        Button { model.selectedTab = 3 } label: {
-                            GridCard(symbol: "person.2", title: tr("Ways to skip a wait"),
-                                     subtitle: tr("Open You"))
-                        }
-                    }
-                }
-                .padding(.horizontal, 26)
-                .padding(.vertical, 24)
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.plain)
-            .background(Ink.paper.ignoresSafeArea())
-            .toolbar(.hidden, for: .navigationBar)
         }
     }
 }
