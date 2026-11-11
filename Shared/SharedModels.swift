@@ -1322,9 +1322,16 @@ struct ConditionalDay: Codable, Equatable, Hashable, Comparable {
         let c = calendar.dateComponents([.year, .month, .day], from: date)
         return c.year == year && c.month == month && c.day == day
     }
-    static func of(_ date: Date, in zone: TimeZone) -> ConditionalDay {
+    /// Every When & where day, weekday and time is read in this calendar, not
+    /// the device's: Settings → Calendar (Buddhist, Japanese …) must not give
+    /// a different day key and so reopen a spent day.
+    static func gregorian(in zone: TimeZone) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = zone
+        return calendar
+    }
+    static func of(_ date: Date, in zone: TimeZone) -> ConditionalDay {
+        let calendar = gregorian(in: zone)
         let c = calendar.dateComponents([.year, .month, .day], from: date)
         return ConditionalDay(year: c.year ?? 0, month: c.month ?? 0, day: c.day ?? 0)
     }
@@ -1483,10 +1490,16 @@ struct ConditionalRule: Codable, Equatable, Identifiable {
             || !selection.webDomainTokens.isEmpty
     }
 
-    /// Stable per rule and condition position, so an unchanged edit keeps the
-    /// same window activity names (no monitor restart).
-    static func ownedScheduleID(ruleID: UUID, index: Int) -> UUID {
+    /// Stable per rule, condition position and window times: an edit that
+    /// keeps them keeps the activity names (no monitor restart); one that
+    /// moves a time gets new names, so the window is re-registered and the
+    /// name-based monitor repair notices a stale registration.
+    static func ownedScheduleID(ruleID: UUID, index: Int, start: Int, end: Int) -> UUID {
         var bytes = ruleID.uuid
+        bytes.10 ^= UInt8(truncatingIfNeeded: start >> 8)
+        bytes.11 ^= UInt8(truncatingIfNeeded: start)
+        bytes.12 ^= UInt8(truncatingIfNeeded: end >> 8)
+        bytes.13 ^= UInt8(truncatingIfNeeded: end)
         bytes.14 ^= 0xC5
         bytes.15 ^= UInt8(truncatingIfNeeded: index + 1)
         return UUID(uuid: bytes)
@@ -1502,7 +1515,7 @@ struct ConditionalRule: Codable, Equatable, Identifiable {
             var schedule = BlockSchedule(name: name, mode: mode, selection: selection,
                                          startMinutes: start, endMinutes: end,
                                          recurrence: .daily, addedAt: addedAt)
-            schedule.id = Self.ownedScheduleID(ruleID: id, index: index)
+            schedule.id = Self.ownedScheduleID(ruleID: id, index: index, start: start, end: end)
             schedule.ownerRuleID = id
             return schedule
         }
@@ -1525,9 +1538,11 @@ enum ConditionalUses {
     /// a use; keep records comfortably longer than that.
     static let retention: TimeInterval = 72 * 60 * 60
 
-    /// Same "yyyy-M-d" shape as `SharedStore.dayKey`, in the given calendar.
+    /// Same "yyyy-M-d" shape as `SharedStore.dayKey`, always Gregorian, in
+    /// the given calendar's time zone.
     static func dayKey(for date: Date, calendar: Calendar) -> String {
-        let c = calendar.dateComponents([.year, .month, .day], from: date)
+        let c = ConditionalDay.gregorian(in: calendar.timeZone)
+            .dateComponents([.year, .month, .day], from: date)
         return "\(c.year ?? 0)-\(c.month ?? 0)-\(c.day ?? 0)"
     }
 
@@ -1554,6 +1569,27 @@ enum ConditionalUses {
             } else {
                 result.append(ConditionalUseRecord(ruleID: ruleID, day: key, count: 1,
                                                    lastUsedAt: now, checkInIDs: [checkInID]))
+            }
+        }
+        return result
+    }
+
+    /// Never lower a saved count: the highest count per rule and day wins and
+    /// check-in IDs are combined. A record missing from `proposed` survives
+    /// unless it is older than `retention` on the wall clock (so pruning still
+    /// works; keeping an old day's record only ever errs on the strict side).
+    static func merged(previous: [ConditionalUseRecord], proposed: [ConditionalUseRecord],
+                       wallNow: Date = Date()) -> [ConditionalUseRecord] {
+        var result = proposed
+        for old in previous {
+            if let index = result.firstIndex(where: { $0.ruleID == old.ruleID && $0.day == old.day }) {
+                result[index].count = max(result[index].count, old.count)
+                result[index].lastUsedAt = max(result[index].lastUsedAt, old.lastUsedAt)
+                for id in old.checkInIDs where !result[index].checkInIDs.contains(id) {
+                    result[index].checkInIDs.append(id)
+                }
+            } else if wallNow.timeIntervalSince(old.lastUsedAt) < retention {
+                result.append(old)
             }
         }
         return result
@@ -1790,9 +1826,7 @@ enum ConditionEvaluator {
         guard clock.clockAgrees else { return .unknown(.clockChanged) }
         guard let zones = clock.zones, !zones.isEmpty else { return .unknown(.timeZoneUnknown) }
         let perZone = zones.map { zone -> ConditionResult in
-            var calendar = clock.calendar
-            calendar.timeZone = zone
-            return singleZoneResult(condition, now: clock.guardedNow, calendar: calendar)
+            singleZoneResult(condition, now: clock.guardedNow, calendar: ConditionalDay.gregorian(in: zone))
         }
         guard perZone[0].status == .met else { return perZone[0] }
         guard perZone.allSatisfy({ $0.status == .met }) else { return .unknown(.timeZoneChanged) }
@@ -1860,7 +1894,7 @@ enum ConditionEvaluator {
     /// A window's end on a given day. A skipped (spring) minute moves to the
     /// next valid time; a repeated (fall) hour uses its first occurrence
     /// unless that has already passed.
-    private static func windowBoundary(_ minute: Int, on day: Date, after now: Date,
+    static func windowBoundary(_ minute: Int, on day: Date, after now: Date,
                                        calendar: Calendar) -> Date? {
         for policy in [Calendar.RepeatedTimePolicy.first, .last] {
             if let date = calendar.date(bySettingHour: minute / 60, minute: minute % 60, second: 0,
@@ -2043,15 +2077,15 @@ enum ConditionalStart {
             case .duration(let minutes):
                 untilLength = TimeInterval(minutes) * 60
             case .time(let minute):
-                // Wall clock, like the session it ends.
-                let today = clock.calendar.startOfDay(for: clock.wallNow)
-                let tomorrow = clock.calendar.date(byAdding: .day, value: 1, to: today)
+                // Wall clock, like the session it ends. A repeated fall hour
+                // uses its second occurrence once the first has passed.
+                let calendar = ConditionalDay.gregorian(in: clock.calendar.timeZone)
+                let today = calendar.startOfDay(for: clock.wallNow)
+                let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)
                 let candidates = ([today] + (tomorrow.map { [$0] } ?? [])).compactMap {
-                        clock.calendar.date(bySettingHour: minute / 60, minute: minute % 60, second: 0,
-                                            of: $0, matchingPolicy: .nextTime,
-                                            repeatedTimePolicy: .first, direction: .forward)
-                    }
-                guard let end = candidates.first(where: { $0 > clock.wallNow }) else {
+                    ConditionEvaluator.windowBoundary(minute, on: $0, after: clock.wallNow, calendar: calendar)
+                }
+                guard let end = candidates.first else {
                     return .failure(.windowEnded)
                 }
                 untilLength = end.timeIntervalSince(clock.wallNow)

@@ -255,6 +255,13 @@ struct SharedStore {
             NSLog("Demora: refusing stale state that would undo a completed phrase replacement.")
             return false
         }
+        // When & where uses never go down within a day: a writer holding an
+        // older snapshot (app vs extension) cannot refund a check-in use.
+        var state = state
+        if let previous = previousState?.conditionalUses, !previous.isEmpty {
+            state.conditionalUses = ConditionalUses.merged(previous: previous,
+                                                           proposed: state.conditionalUses)
+        }
         do {
             let data = try JSONEncoder().encode(state)
             defaults.set(data, forKey: LatchConstants.stateKey)

@@ -77,6 +77,9 @@ assert "MonitorRegistration.admit(state: state, running: running)" in dispatch
 assert engine.count("appliesAt: now,") == 1
 apply_body = block(engine, "private static func apply(")
 assert "phase: .apply" in apply_body
+# Review fix: the real save merges uses so a stale writer can't refund one.
+store_save = block((ROOT / "Shared/SharedStore.swift").read_text(), "private static func saveCoordinated(")
+assert store_save.index("ConditionalUses.merged(previous: previous") < store_save.index("JSONEncoder().encode(state)")
 
 # --- Translations: every new key, all seven tables, matching placeholders --
 STRING = r'"((?:[^"\\]|\\.)*)"'
@@ -1059,6 +1062,82 @@ scenario("rollover prune: old use records only") {
     SharedStore.state.conditionalUses = [recent, old]
     ChangeEngine.pruneConditionalUses()
     expect(SharedStore.state.conditionalUses == [recent], "prune wrong")
+}
+
+// Review fixes ---------------------------------------------------------------
+scenario("review fix: the device calendar setting can't reopen a spent day") {
+    let r = rule([.place(home)], outcome: free(30, uses: 1))
+    func zoned(_ identifier: Calendar.Identifier) -> ConditionalClockInput {
+        var value = clock("2026-11-15T12:00:00+01:00")
+        var other = Calendar(identifier: identifier); other.timeZone = value.calendar.timeZone
+        value.calendar = other; return value
+    }
+    let gregorianKey = ConditionalUses.dayKey(for: date("2026-11-15T12:00:00+01:00"), calendar: calendar("Europe/Madrid"))
+    for identifier in [Calendar.Identifier.buddhist, .japanese, .hebrew, .islamic, .persian] {
+        expect(ConditionalUses.dayKey(for: date("2026-11-15T12:00:00+01:00"), calendar: zoned(identifier).calendar) == gregorianKey,
+               "\(identifier) calendar gave another day key")
+    }
+    var state = planState(r)
+    let first = zoned(.gregorian)
+    guard case .success(let plan) = ConditionalStart.plan(request(r, first, minutes: 30, location: fix(north: 0)),
+                                                           state: state, clock: first) else { expect(false, "first use"); return }
+    state.conditionalUses = plan.uses
+    for identifier in [Calendar.Identifier.buddhist, .japanese, .hebrew] {
+        let other = zoned(identifier)
+        expect(refusal(ConditionalStart.plan(request(r, other, minutes: 30, location: fix(north: 0)),
+                                             state: state, clock: other)) == .noUsesLeft,
+               "switching to the \(identifier) calendar reopened the day")
+    }
+    let japaneseSunday = ConditionEvaluator.evaluate(rule([sunday, .time(start: 11 * 60, end: 13 * 60)]),
+                                                     clock: zoned(.japanese), location: .notRead)
+    expect(japaneseSunday.isMet && japaneseSunday.windowEnd == date("2026-11-15T13:00:00+01:00"),
+           "days/time differ under another calendar")
+}
+scenario("review fix: moving an owned window's time re-registers it") {
+    let r = rule([.place(home), night], .any, outcome: blockUntilSeven)
+    var moved = r; moved.conditions = [.place(home), .time(start: 21 * 60, end: 6 * 60)]
+    expect(moved.ownedSchedules()[0].id != r.ownedSchedules()[0].id, "time edit kept the same window ID")
+    var sameTimes = r; sameTimes.name = "Renamed"
+    expect(sameTimes.ownedSchedules()[0].id == r.ownedSchedules()[0].id, "rename changed the window ID")
+    SharedStore.state = engineState(strict: 300, lenient: 900)
+    SharedStore.state.conditionalRules = [r]
+    SharedStore.state.schedules = r.ownedSchedules()
+    _ = ChangeEngine.queue(.updateConditionalRule(moved))!
+    TimeGuard.offset = 901; ChangeEngine.applyDueChanges(); TimeGuard.offset = 0
+    expect(ChangeEngine.windowReconfigurations == 1, "moved window not re-registered")
+    expect(SharedStore.state.schedules.count == 1 && SharedStore.state.schedules[0].startMinutes == 21 * 60
+           && SharedStore.state.schedules[0].ownerRuleID == r.id, "moved window not replaced")
+    expect(MonitoringBudget.windowNames(state: SharedStore.state).allSatisfy {
+        $0.hasPrefix("sched-\(moved.ownedSchedules()[0].id.uuidString)")
+    }, "stale window names kept")
+}
+scenario("review fix: a stale writer can't lower a use count") {
+    let id = UUID(), check = UUID(), later = UUID()
+    let now = Date()
+    let saved = [ConditionalUseRecord(ruleID: id, day: "2026-11-15", count: 2, lastUsedAt: now, checkInIDs: [check, later])]
+    let stale = [ConditionalUseRecord(ruleID: id, day: "2026-11-15", count: 1, lastUsedAt: now.addingTimeInterval(-60),
+                                      checkInIDs: [check])]
+    let merged = ConditionalUses.merged(previous: saved, proposed: stale, wallNow: now)
+    expect(merged.count == 1 && merged[0].count == 2 && Set(merged[0].checkInIDs) == [check, later]
+           && merged[0].lastUsedAt == now, "stale save refunded a use: \(merged)")
+    expect(ConditionalUses.merged(previous: saved, proposed: [], wallNow: now) == saved, "missing record dropped")
+    let old = [ConditionalUseRecord(ruleID: id, day: "2026-11-10", count: 1, lastUsedAt: now.addingTimeInterval(-80 * 3600))]
+    expect(ConditionalUses.merged(previous: old, proposed: [], wallNow: now).isEmpty, "pruned record resurrected")
+    expect(ConditionalUses.merged(previous: [], proposed: stale, wallNow: now) == stale, "merge changed a fresh save")
+}
+scenario("review fix: block 'until' on the repeated fall hour") {
+    let r = rule([.place(home)], outcome: .block(mode: .blockSelected, selection: apps, until: .time(150)))
+    // Madrid 2026-10-25: the second 02:10 (CET) comes after the first 02:30.
+    let c = clock("2026-10-25T02:10:00+01:00")
+    guard case .success(let plan) = ConditionalStart.plan(request(r, c, location: fix(north: 0)), state: planState(r), clock: c) else {
+        expect(false, "block refused"); return
+    }
+    expect(plan.session.endsAt == date("2026-10-25T02:30:00+01:00"), "until 02:30 ran a day: \(plan.session.endsAt)")
+    let first = clock("2026-10-25T02:10:00+02:00")
+    guard case .success(let early) = ConditionalStart.plan(request(r, first, location: fix(north: 0)), state: planState(r), clock: first) else {
+        return
+    }
+    expect(early.session.endsAt == date("2026-10-25T02:30:00+02:00"), "first occurrence not used")
 }
 
 for failure in failures { print("FAIL: \(failure)") }
