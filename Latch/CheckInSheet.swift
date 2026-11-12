@@ -315,6 +315,12 @@ struct CheckInSheet: View {
             let result = CheckInResult.make(rule: rule, state: state, clock: clock,
                                             location: LocationTrust.checkInInput(outcome, wallNow: clock.wallNow,
                                                                                  country: Self.countryLookup(for: rule)))
+            // Approximate Location left a country too close to tell: the same
+            // tap reads once more, letting iOS ask for precise location.
+            if !precise, ConditionalCheckIn.wantsPreciseRetry(result, outcome: outcome) {
+                readLocation(announce: announce, precise: true)
+                return
+            }
             check = result
             if announce { announceVerdict(result, rule: rule, sessions: state.sessions) }
         }

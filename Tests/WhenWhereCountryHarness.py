@@ -128,6 +128,70 @@ PROBES = {  # name: (lat, lon) — also used by the Swift driver below
     'pristina': (42.6629, 21.1655), 'gibraltar': (36.14, -5.35), 'madrid': (40.4168, -3.7038),
 }
 python_inside = {name: python_contains(*point) for name, point in PROBES.items()}
+
+# Review fix: enclaves Natural Earth leaves out are "can't tell" zones.
+enclaves = [(name[1:-1], lat, lon, radius) for name, lat, lon, radius in re.findall(
+    r"""\(("[^"]+"|'[^']+'), (-?[\d.]+), (-?[\d.]+), ([\d_]+)\)""",
+    generator.split('MISSING_ENCLAVES = (', 1)[1].split('\n)', 1)[0])]
+assert len(enclaves) == 10, enclaves
+assert any('Baarle' in name for name, *_ in enclaves) and any('Büsingen' in name for name, *_ in enclaves)
+assert 'ten small enclaves the dataset leaves out' in attribution
+
+# Review fix: an independent distance for sampled points near land borders.
+# Python measures each edge on a plane local to the point; Swift's lower
+# bound must never report more than that (a wrong country with a "clear"
+# distance), and not grossly less.
+import math
+import random
+METRES = math.pi / 180 * 6_371_000
+ring_boxes = [(code, ring, min(x for x, _ in ring), max(x for x, _ in ring), min(y for _, y in ring), max(y for _, y in ring))
+              for code, rings in entries.items() for ring in rings]
+shared = {}
+for code, rings in entries.items():
+    for ring in rings:
+        for point in ring:
+            shared.setdefault(point, set()).add(code)
+border_points = sorted(p for p, owners in shared.items() if len(owners) > 1 and '~~' not in owners)
+rng = random.Random(5)
+samples = []
+for lon, lat in rng.sample(border_points, 160):
+    angle, r = rng.random() * 2 * math.pi, 1_000 + 4_000 * rng.random()
+    samples.append((lat + r * math.sin(angle) / METRES, lon + r * math.cos(angle) / (METRES * math.cos(math.radians(lat)))))
+
+
+def python_distances(lat, lon, window=60_000):
+    inside, near = {}, {}
+    pad = window / METRES
+    scale = math.cos(math.radians(lat))
+    for code, ring, x0, x1, y0, y1 in ring_boxes:
+        if not (y0 - pad <= lat <= y1 + pad and x0 - pad / max(scale, 0.01) <= lon <= x1 + pad / max(scale, 0.01)):
+            continue
+        j = len(ring) - 1
+        best = near.get(code, math.inf)
+        crossing = False
+        for i in range(len(ring)):
+            (xi, yi), (xj, yj) = ring[i], ring[j]
+            if (yi > lat) != (yj > lat) and lon < xi + (lat - yi) * (xj - xi) / (yj - yi):
+                crossing = not crossing
+            ax, ay, bx, by = (xj - lon) * scale, yj - lat, (xi - lon) * scale, yi - lat
+            dx, dy = bx - ax, by - ay
+            t = 0 if dx == dy == 0 else max(0, min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy)))
+            best = min(best, math.hypot(ax + t * dx, ay + t * dy) * METRES)
+            j = i
+        near[code] = best
+        if crossing:
+            inside[code] = not inside.get(code, False)
+    return [c for c, v in inside.items() if v], near
+
+
+python_samples = []
+for lat, lon in samples:
+    inside, near = python_distances(lat, lon)
+    if len(inside) == 1 and inside[0] != '~~':
+        others = [v for c, v in near.items() if c != inside[0]]
+        if others and min(others) < 50_000:
+            python_samples.append((lat, lon, inside[0], min(others)))
+assert len(python_samples) > 100, len(python_samples)
 expected_inside = {'mexicoCity': ['MX'], 'tijuanaSouth': ['MX'], 'tijuanaCentre': ['MX'], 'sanYsidroSouth': ['MX'],
                    'sanYsidroNorth': ['US'], 'sanDiego': ['US'], 'suva': ['FJ'], 'chukotkaWest': ['RU'],
                    'chukotkaEast': ['RU'], 'lesotho': ['LS'], 'bloemfontein': ['ZA'], 'maseru': ['LS'],
@@ -183,6 +247,7 @@ func check(_ ok: @autoclosure () -> Bool, _ message: @autoclosure () -> String) 
 }
 ''' + probes + r'''
 let data = try! Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))
+let sampleLines = try! String(contentsOfFile: CommandLine.arguments[2], encoding: .utf8).split(separator: "\n")
 let loadStart = Date()
 guard let borders = CountryBorders(data: data) else { print("FAIL: the bundled borders don't decode"); exit(1) }
 let loadSeconds = Date().timeIntervalSince(loadStart)
@@ -391,6 +456,53 @@ check(syn(0.5, 30 + 1 + off3).regionCode == nil && abs(syn(0.5, 30 + 1 + off3).b
 check(synthetic.rawLookup(latitude: 0.5, longitude: 30.5)!.borderDistanceMeters == CountryBorders.distanceCapMeters,
       "3,000 km from any other: capped at 1,000 km")
 
+// Review fix: enclaves the dataset leaves out read as "can't tell" (generator's MISSING_ENCLAVES).
+ENCLAVE_CHECKS
+check(countryRow(free("Netherlands", .all, [.country("NL")]), sample((51.4419, 4.9285))) == .unknown(.nearBorder),
+      "Baarle-Hertog (BE) is never ✓ Netherlands")
+check(at((51.5555, 5.0913)).regionCode == "NL" && at((51.5555, 5.0913)).borderDistanceMeters > 5_000, "Tilburg still clearly NL")
+check(at((47.5596, 7.5886)).regionCode == "CH", "Basel still Switzerland")
+
+// Review fix: approximate Location near a border asks once more, with precise.
+func outcome(_ p: (Double, Double), precise: Bool, accuracy: Double = 1_500) -> LocationReadOutcome {
+    .sample(sample(p, accuracy: accuracy), precise: precise)
+}
+func viaApproximate(_ rule: ConditionalRule, _ p: (Double, Double), precise: Bool) -> Bool {
+    let o = outcome(p, precise: precise)
+    let r = CheckInResult.make(rule: rule, state: stateWith(rule), clock: clock(sundayNoon),
+                               location: LocationTrust.checkInInput(o, wallNow: sundayNoon, country: realLookup))
+    return ConditionalCheckIn.wantsPreciseRetry(r, outcome: o)
+}
+check(viaApproximate(mexicoSunday, tijuanaSouth, precise: false), "approximate, too close: read again with precise")
+check(!viaApproximate(mexicoSunday, tijuanaSouth, precise: true), "precise already: no second read")
+check(!viaApproximate(mexicoSunday, mexicoCity, precise: false), "approximate but clear: no second read")
+check(!viaApproximate(mexicoSunday, (0, -140), precise: false), "at sea, clearly not Mexico: no second read")
+let homeInMexico = free("Home in Mexico", .all, [.country("MX"), .place(ConditionalPlace(name: "Home", latitude: 32.49,
+                        longitude: -117.03, radiusMeters: 250))])
+check(!viaApproximate(homeInMexico, tijuanaSouth, precise: false), "a place already asked for precise: no second read")
+check(LocationTrust.countryHereWantsPrecise(outcome(tijuanaSouth, precise: false),
+      result: LocationTrust.countryHere(outcome(tijuanaSouth, precise: false), wallNow: sundayNoon, country: realLookup)),
+      "the country I'm in: approximate and too close → once more with precise")
+check(!LocationTrust.countryHereWantsPrecise(outcome(tijuanaSouth, precise: true),
+      result: LocationTrust.countryHere(outcome(tijuanaSouth, precise: true), wallNow: sundayNoon, country: realLookup)),
+      "…not when precise")
+check(!LocationTrust.countryHereWantsPrecise(outcome(mexicoCity, precise: false), result: .success("MX")), "…not when found")
+
+// Review fix: Swift's distances never exceed an independent measurement.
+var compared = 0, worstOver = -Double.infinity, worstUnder = 0.0
+for line in sampleLines {
+    let f = line.split(separator: " ")
+    let lat = Double(f[0])!, lon = Double(f[1])!, code = String(f[2]), python = Double(f[3])!
+    let r = borders.rawLookup(latitude: lat, longitude: lon)!
+    check(r.regionCode == code, "same country as Python at \(lat), \(lon): \(r)")
+    worstOver = max(worstOver, r.borderDistanceMeters - python)
+    worstUnder = max(worstUnder, python - r.borderDistanceMeters)
+    compared += 1
+}
+check(worstOver <= 1, "Swift never reports more than the independent distance (worst +\(worstOver) m)")
+check(worstUnder <= 1_000, "…nor grossly less (worst −\(worstUnder) m)")
+print("Independent distances compared at \(compared) points near land borders: worst +\(Int(worstOver.rounded())) m, −\(Int(worstUnder.rounded())) m")
+
 // Damaged data is refused, never half-read.
 check(CountryBorders(data: data.prefix(data.count - 1)) == nil, "truncated")
 check(CountryBorders(data: data + Data([0])) == nil, "trailing byte")
@@ -418,14 +530,18 @@ with tempfile.TemporaryDirectory(prefix='demora-whenwhere-country-') as director
     (folder / 'SchedulePrecedence.swift').write_text(precedence)
     (folder / 'RulesPresentation.swift').write_text(portable(presentation))
     (folder / 'CountryLookup.swift').write_text(lookup_source)
-    (folder / 'main.swift').write_text(driver)
+    enclave_checks = '\n'.join(
+        f'check(at(({lat}, {lon})) == ConditionalCountryLookup(regionCode: nil, borderDistanceMeters: 0), '
+        f'"{name}: can\'t tell")' for name, lat, lon, _ in enclaves)
+    (folder / 'main.swift').write_text(driver.replace('ENCLAVE_CHECKS', enclave_checks))
+    (folder / 'samples.txt').write_text(''.join(f'{lat} {lon} {code} {d}\n' for lat, lon, code, d in python_samples))
     binary = folder / 'whenwhere-country'
     subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-O',
                     *(str(folder / name) for name in ('Infrastructure.swift', 'SharedModels.swift',
                                                       'SchedulePrecedence.swift', 'RulesPresentation.swift',
                                                       'CountryLookup.swift', 'main.swift')),
                     '-o', str(binary)], check=True)
-    run = subprocess.run([str(binary), str(DATA)], capture_output=True, text=True,
+    run = subprocess.run([str(binary), str(DATA), str(folder / 'samples.txt')], capture_output=True, text=True,
                          env={**os.environ, 'TZ': 'America/Mexico_City'})
     if run.returncode:
         print(run.stdout + run.stderr)
@@ -464,11 +580,21 @@ for name, text in (('CountryPicker.swift', picker), ('CheckInSheet.swift', sheet
     for word in ('URLSession', 'URLRequest', 'CLGeocoder', 'reverseGeocode', 'MKLocalSearch', 'import MapKit',
                  'import Network', 'NWConnection', 'print(', 'NSLog'):
         assert word not in code, ('no network, geocoder or logging', name, word)
-assert 'locator.readOnce(wantsPrecise: false)' in picker, "the country I'm in never asks for precise"
+assert 'private func read(precise: Bool = false)' in picker and 'locator.readOnce(wantsPrecise: precise)' in picker \
+    and picker.count('read(precise: true)') == 1, "the country I'm in asks for precise only on its one retry"
 assert picker.count('locator.readOnce(') == 1, 'one read per tap'
-read_src = declaration(picker, 'private func read()')
+read_src = declaration(picker, 'private func read(precise: Bool = false)')
 assert 'LocationTrust.countryHere(outcome, wallNow: Date(), country: lookup)' in read_src
 assert 'selected = code' in read_src and 'latitude' not in read_src.replace('lookup(latitude:', ''), 'only the code is kept'
+row_src = declaration(picker, 'private func row(_ choice: CountryChoices.Choice)')
+assert row_src.index('generation += 1') < row_src.index('locator.cancel()') < row_src.index('selected = choice.code'), \
+    'a pick by hand cancels a read on its way (review fix)'
+assert read_src.index('LocationTrust.countryHereWantsPrecise(outcome, result: result)') < read_src.index('read(precise: true)') \
+    < read_src.index('switch result {'), 'one more read with precise before showing "too close"'
+sheet_read = declaration(sheet, 'private func readLocation(announce: Bool, precise: Bool)')
+assert sheet_read.index('if !precise, ConditionalCheckIn.wantsPreciseRetry(result, outcome: outcome) {') \
+    < sheet_read.index('readLocation(announce: announce, precise: true)') < sheet_read.index('check = result'), \
+    'the sheet retries once with precise before showing the result'
 for state_line in re.findall(r'@State private var [^\n]+', picker):
     for word in ('LocationSample', 'LocationReadOutcome', 'latitude', 'ConditionalCountryLookup'):
         assert word not in state_line, ('no fix or lookup kept in view state', state_line)

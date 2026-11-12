@@ -1776,6 +1776,18 @@ enum ConditionalCheckIn {
         rule.conditions.contains { if case .place = $0 { return true }; return false }
     }
 
+    /// One more read, asking iOS for temporary precise location, when an
+    /// approximate fix left a country "too close to tell" and no place had
+    /// asked for precise already (review fix): the same tap, at most once.
+    static func wantsPreciseRetry(_ result: CheckInResult, outcome: LocationReadOutcome) -> Bool {
+        guard case .sample(_, precise: false) = outcome, !wantsPrecise(result.rule), !result.evaluation.isMet,
+              result.evaluation.results.count == result.rule.conditions.count else { return false }
+        return zip(result.rule.conditions, result.evaluation.results).contains { condition, row in
+            if case .country = condition { return row.reason == .unknown(.nearBorder) }
+            return false
+        }
+    }
+
     /// Whole minutes a session started now may last: the rule's maximum,
     /// never past the window end. Nil when less than a minute is left (the
     /// engine refuses those starts rather than spend a use).
@@ -2105,6 +2117,14 @@ enum LocationTrust {
         let clear = found.borderDistanceMeters > accuracy + ConditionEvaluator.borderMargin
         guard let code = found.regionCode else { return refuse(clear ? .countryUnavailable : .nearBorder) }
         return clear ? .success(code) : refuse(.nearBorder)
+    }
+
+    /// "Use the country I'm in" reads once more with precise location when
+    /// an approximate fix was too close to a border to tell (review fix).
+    static func countryHereWantsPrecise(_ outcome: LocationReadOutcome,
+                                        result: Result<String, CountryHereProblem>) -> Bool {
+        guard case .sample(_, precise: false) = outcome, case .failure(let problem) = result else { return false }
+        return problem.reason == .nearBorder
     }
 
     /// A place's centre from "Set to where I am now" (C12): a fresh, precise,

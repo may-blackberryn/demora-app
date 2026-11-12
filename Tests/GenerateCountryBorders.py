@@ -32,6 +32,11 @@ What it does, deterministically:
   country). Junctions and border/coast transitions are never removed. Rings
   whose simplification would collapse keep their source points. Coordinates
   are then rounded to 1e-4 degrees (at most 8 m), the same on both sides.
+- Enclaves Natural Earth 5.1.2 leaves out (MISSING_ENCLAVES, found in
+  review: e.g. Baarle-Hertog reads as the Netherlands) get a "~~" zone, a
+  24-sided circle wider than the enclave, so a point there is "too close to a
+  border to tell" instead of the surrounding country. Hand-checked
+  positions; the radii include a margin for that.
 - Rings are written as zigzag varint deltas (format below), little-endian.
 
 Format (version 1):
@@ -64,6 +69,20 @@ COAST_TOLERANCE_M = 1000.0
 UNITS = 10_000
 UNIDENTIFIED = '~~'
 EARTH_M = 6_371_008.8
+# (name, latitude, longitude, radius in metres): enclaves missing from the
+# source, each read as "can't tell" (the radius covers the whole enclave).
+MISSING_ENCLAVES = (
+    ('Baarle-Hertog / Baarle-Nassau (BE/NL)', 51.4419, 4.9285, 4_000),
+    ('Büsingen am Hochrhein (DE in CH)', 47.6966, 8.6900, 3_000),
+    ("Campione d'Italia (IT in CH)", 45.9690, 8.9707, 2_000),
+    ('Dahagram-Angarpota (BD in IN)', 26.2758, 88.9437, 4_000),
+    ('Nahwa (AE in OM)', 25.2690, 56.2890, 3_000),
+    ('Shakhimardan (UZ in KG)', 39.9833, 71.8000, 6_000),
+    ('Yukhari Askipara / Barkhudarly (AZ in AM)', 41.1000, 45.0500, 6_000),
+    ('Karki (AZ in AM)', 39.7880, 45.0070, 4_000),
+    ('Sankovo-Medvezhye (RU in BY)', 52.4700, 31.5700, 3_000),
+    ('Sastavci (BA in RS)', 43.4100, 19.4200, 4_000),
+)
 MAGIC = b'DMCB'
 VERSION = 1
 
@@ -195,6 +214,12 @@ def build(source_bytes):
                 simplified = quantize(simplify_ring(ring, code, owners))
                 if len(simplified) >= 3:
                     rings.append(simplified)
+    zones = countries.setdefault(UNIDENTIFIED, [])
+    for _, lat, lon, radius in MISSING_ENCLAVES:
+        dlat = radius / EARTH_M * 180 / math.pi
+        dlon = dlat / math.cos(math.radians(lat))
+        zones.append(quantize([(lon + dlon * math.cos(2 * math.pi * k / 24), lat + dlat * math.sin(2 * math.pi * k / 24))
+                               for k in range(24)]))
     out = bytearray(MAGIC)
     out += struct.pack('<BIH', VERSION, UNITS, len(countries))
     points = 0

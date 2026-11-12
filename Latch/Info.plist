@@ -31,7 +31,7 @@
 	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
 	<dict>
 		<key>CheckIn</key>
-		<string>Demora needs your precise location for this check, to tell whether you're inside a rule's place.</string>
+		<string>Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.</string>
 	</dict>
 	<key>UIBackgroundModes</key>
 	<array>

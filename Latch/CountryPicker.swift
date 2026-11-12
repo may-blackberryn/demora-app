@@ -151,6 +151,11 @@ struct CountryPicker: View {
 
     private func row(_ choice: CountryChoices.Choice) -> some View {
         Button {
+            // A pick by hand wins over a "country I'm in" read still on its way.
+            generation += 1
+            locator.cancel()
+            reading = false
+            asking = false
             selected = choice.code
             problemKey = nil
         } label: {
@@ -244,17 +249,23 @@ struct CountryPicker: View {
 
     /// One fix (precise not needed); only the country's code is kept, and
     /// only if the point is clearly inside it (accuracy + 2 km from any border).
-    private func read() {
+    /// An approximate fix too close to a border reads once more with precise.
+    private func read(precise: Bool = false) {
         generation += 1
         let token = generation
         reading = true
         Task { @MainActor in
-            let outcome = await locator.readOnce(wantsPrecise: false)
+            let outcome = await locator.readOnce(wantsPrecise: precise)
             guard token == generation else { return }
             reading = false
             let borders = CountryBorders.bundled
             let lookup: LocationTrust.CountryAt? = borders.map { b in { b.lookup(latitude: $0, longitude: $1) } }
-            switch LocationTrust.countryHere(outcome, wallNow: Date(), country: lookup) {
+            let result = LocationTrust.countryHere(outcome, wallNow: Date(), country: lookup)
+            if !precise, LocationTrust.countryHereWantsPrecise(outcome, result: result) {
+                read(precise: true)
+                return
+            }
+            switch result {
             case .success(let code):
                 selected = code
                 query = ""
