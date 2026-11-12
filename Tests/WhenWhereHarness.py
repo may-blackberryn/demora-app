@@ -448,6 +448,18 @@ scenario("place geometry: whole circle inside for free time, touching for a bloc
     expect(status(freeRule, fix(north: 400, accuracy: 100)) == .notMet, "clearly outside")
     expect(status(blockRule, fix(north: 300, accuracy: 60)) == .met, "touching circle did not start block")
     expect(status(blockRule, fix(north: 400, accuracy: 100)) == .notMet, "far circle started block")
+    // Step 6 (§5.6): a block takes an approximate fix too; only a precise
+    // fix whose point is inside reads "You're at …", the rest "close enough".
+    func reason(_ r: ConditionalRule, _ input: ConditionalLocationInput) -> ConditionReason {
+        ConditionEvaluator.evaluate(r, clock: noon, location: input).results[0].reason
+    }
+    expect(status(freeRule, fix(north: 0, precise: false)) == .unknown, "approximate fix accepted for free time")
+    expect(reason(blockRule, fix(north: 0, accuracy: 10_000, precise: false)) == .nearPlace,
+           "approximate fix refused for a block")
+    expect(status(blockRule, fix(north: 12_000, accuracy: 10_000, precise: false)) == .notMet,
+           "a far approximate fix started a block")
+    expect(reason(blockRule, fix(north: 100, accuracy: 30)) == .atPlace, "precise inside: at the place")
+    expect(reason(blockRule, fix(north: 300, accuracy: 60)) == .nearPlace, "touching only: close enough")
     expect(status(freeRule, fix(north: 0, simulated: true)) == .unknown, "simulated fix accepted")
     expect(status(blockRule, fix(north: 0, simulated: true)) == .unknown, "simulated fix accepted for block")
     expect(status(freeRule, fix(north: 0, accessory: true)) == .unknown, "accessory fix accepted for free time")
@@ -481,7 +493,20 @@ scenario("country: border margin for free time, inside is enough for a block") {
     expect(status(free(), ConditionalCountryLookup(regionCode: "US", borderDistanceMeters: 900_000)) == .notMet, "far outside met")
     let block = ConditionalOutcome.block(mode: .blockSelected, selection: apps, until: .duration(minutes: 60))
     expect(status(block, tijuana) == .met, "inside near border refused a block")
-    expect(status(block, sanDiego) == .notMet, "outside started a block")
+    // Step 6 (§5.6, doubt favours the stricter result): a block also counts
+    // a country the fix and the borders can't rule out, never a far one.
+    var nearMexico = sanDiego; nearMexico.nearbyMeters = ["US": 0, "MX": 1_000]
+    var nearCanada = sanDiego; nearCanada.nearbyMeters = ["US": 0, "CA": 1_000]
+    expect(status(block, nearMexico) == .met, "a block refused a country it can't rule out")
+    expect(status(block, nearCanada) == .notMet, "a block counted a country that isn't near")
+    expect(status(block, sanDiego) == .met, "no nearby list: any border this close leaves doubt")
+    expect(status(block, ConditionalCountryLookup(regionCode: "US", borderDistanceMeters: 900_000)) == .notMet,
+           "far outside started a block")
+    var farMexico = sanDiego; farMexico.nearbyMeters = ["US": 0, "MX": 2_100]
+    expect(status(block, farMexico, accuracy: 50) == .notMet && status(block, farMexico, accuracy: 200) == .met,
+           "a block's reach is accuracy + 2 km")
+    expect(status(free(), nearMexico) == .unknown && status(free(), farMexico) == .unknown,
+           "free time ignores the nearby list")
     expect(status(free(), nil) == .unknown, "missing lookup passed")
     expect(status(free(), ConditionalCountryLookup(regionCode: "MX", borderDistanceMeters: .nan)) == .unknown, "NaN border")
 }

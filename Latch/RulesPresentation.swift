@@ -134,8 +134,8 @@ enum RulePending {
         case .startConditionalSession:
             // A check-in start is not a change to the rule: free time starts
             // at once, and its conflict key differs from the rule's, so it must
-            // not lock the rule's Edit and Remove. A waiting check-in block
-            // (step 6) shows in Changes.
+            // not lock the rule's Edit and Remove. A check-in block waiting
+            // its stricter delay shows on the rule's card (`cardChange`).
             return nil
         }
     }
@@ -155,13 +155,25 @@ enum RulePending {
     enum Label: Equatable { case loosens, tightens, removed, added, starts }
 
     /// The change a card shows: its own, else (a When & where rule) a waiting
-    /// End early of its running check-in session, which has no card of its own.
+    /// End early of its running check-in session, which has no card of its own,
+    /// else a check-in block waiting its stricter delay ("Starts in").
     static func cardChange(for ref: RuleRef, in index: [RuleRef: PendingChange],
                            state: LatchState, now: Date) -> PendingChange? {
         if let own = index[ref] { return own }
         guard case .conditional(let id) = ref else { return nil }
-        return state.sessions.filter { $0.conditionalRuleID == id && $0.endsAt > now }
-            .compactMap { index[.session($0.id)] }.min { $0.appliesAt < $1.appliesAt }
+        if let ending = state.sessions.filter({ $0.conditionalRuleID == id && $0.endsAt > now })
+            .compactMap({ index[.session($0.id)] }).min(by: { $0.appliesAt < $1.appliesAt }) {
+            return ending
+        }
+        return waitingStart(of: id, in: state.pending)
+    }
+
+    /// A check-in start of this rule that waits (only a block's can).
+    static func waitingStart(of ruleID: UUID, in pending: [PendingChange]) -> PendingChange? {
+        pending.filter {
+            if case .startConditionalSession(let request) = $0.action { return request.ruleID == ruleID }
+            return false
+        }.min { $0.appliesAt < $1.appliesAt }
     }
 
     /// "Removed in", "Added in", "Starts in", otherwise by direction.
@@ -170,7 +182,7 @@ enum RulePending {
         case .removeLimit, .removeSchedule, .removeExemption, .removePlanned,
              .removeDayNightGroup, .endSessionEarly, .removeConditionalRule:
             return .removed
-        case .startSession:
+        case .startSession, .startConditionalSession:
             return .starts
         case .addLimit, .addSchedule, .addExemption, .addPlanned, .addConditionalRule:
             return .added
@@ -1164,8 +1176,6 @@ enum EditorProblem: Equatable {
     /// When & where (`EditorValidation.conditional`).
     case nameTooLong, noConditions, tooManyConditions, datesOrder
     case blockNeedsPlace, blockAnyOfDays, invalid
-    /// A block rule with a place: its check-in start arrives in C15 step 6.
-    case blockLater
     /// Not a problem to explain: the draft equals the saved rule.
     case unchanged
 
@@ -1186,7 +1196,6 @@ enum EditorProblem: Equatable {
         case .blockNeedsPlace: return "Use a repeating block for rules without a place."
         case .blockAnyOfDays: return "With “any of”, a block can use times, places and countries, not days or dates."
         case .invalid: return "Check this rule's settings."
-        case .blockLater: return "Blocks that start when you check in arrive in a later update. For now, use a repeating block or Block now."
         case .unchanged: return nil
         }
     }
@@ -1282,7 +1291,7 @@ enum EditorValidation {
         switch draft.outcome {
         case .freeTime(let kind, let selection, _, _):
             if kind == .unblock && !hasSelection(selection) { return .apps }
-        case .block:
+        case .block(_, let selection, _):
             // Say first what no choice of apps can fix (v1 limits).
             if !draft.hasLocationCondition { return .blockNeedsPlace }
             if draft.match == .any && draft.conditions.contains(where: {
@@ -1291,9 +1300,7 @@ enum EditorValidation {
                 case .place, .country, .time: return false
                 }
             }) { return .blockAnyOfDays }
-            // Check-in blocks are C15 step 6: until then a block rule can't
-            // be saved, so no saved rule has a check-in that can't run.
-            return .blockLater
+            if !hasSelection(selection) { return .apps }
         }
         if !draft.isValid { return .invalid }
         if let existing, draft.sameConfiguration(as: existing) { return .unchanged }
@@ -1603,6 +1610,13 @@ struct CheckInResult: Equatable {
     /// True when this check used a location read (a fix or "unavailable").
     /// Such a check is never refreshed without reading again (C8, C9).
     var readLocation = false
+    /// A met block check (step 6): when the block would end if it started
+    /// now, from the engine's own `ConditionalStart.plan` on this check's
+    /// clock and stamp, or why the engine would refuse it.
+    var blockEnd: Date? = nil
+    var blockRefusal: ConditionalStartRefusal? = nil
+    /// The block runs for the rule's whole duration (not cut by a window end).
+    var blockRunsFullDuration = false
 
     /// `location` is what this check read: `.notRead` unless the sheet read
     /// one fix in the foreground for it (C8). The stamp comes from this very
@@ -1617,11 +1631,25 @@ struct CheckInResult: Equatable {
         }
         var readLocation = true
         if case .notRead = location { readLocation = false }
-        return CheckInResult(rule: rule, evaluation: evaluation,
-                             stamp: ConditionalCheckInStamp.make(evaluation, clock: clock, checkInID: checkInID),
-                             clockAgrees: clock.clockAgrees, used: used,
-                             guardedOffset: clock.guardedNow.timeIntervalSince(clock.wallNow),
-                             readLocation: readLocation)
+        let stamp = ConditionalCheckInStamp.make(evaluation, clock: clock, checkInID: checkInID)
+        var result = CheckInResult(rule: rule, evaluation: evaluation, stamp: stamp,
+                                   clockAgrees: clock.clockAgrees, used: used,
+                                   guardedOffset: clock.guardedNow.timeIntervalSince(clock.wallNow),
+                                   readLocation: readLocation)
+        if case .block(_, _, let until) = rule.outcome, evaluation.isMet {
+            let request = ConditionalStartRequest(ruleID: rule.id, revision: rule.revision, minutes: 1, stamp: stamp)
+            switch ConditionalStart.plan(request, state: state, clock: clock) {
+            case .success(let plan):
+                result.blockEnd = plan.session.endsAt
+                if case .duration(let minutes) = until {
+                    result.blockRunsFullDuration = plan.session.endsAt.timeIntervalSince(plan.session.startedAt)
+                        >= TimeInterval(minutes) * 60 - 1
+                }
+            case .failure(let refusal):
+                result.blockRefusal = refusal
+            }
+        }
+        return result
     }
 
     /// The window end on the wall clock; nil = only the length caps it.
@@ -1650,8 +1678,6 @@ enum CheckInScreen: Equatable {
     case askPermission
     /// Reading one fix ("Checking where you are").
     case locating
-    /// Only something a later build checks could decide it.
-    case arrivesLater(CheckInLater)
     case clockChanged
     case notMet
     case unknownUses
@@ -1662,12 +1688,23 @@ enum CheckInScreen: Equatable {
     case met(cap: Int)
     case refused(ConditionalStartRefusal)
     case queued
+    /// Blocks (step 6; spec §5.2, C3, C4). A block can start: Review → the
+    /// receipt with its stricter wait. `endsAt` is the end if it started now.
+    case blockMet(endsAt: Date)
+    case blockRunning(until: Date)
+    /// Under "any of", the rule's own time window blocks now on its own and
+    /// no place or country is met: nothing to start.
+    case blockOnItsOwn(until: Date)
+    /// A check-in block of this rule waits its stricter delay.
+    case blockWaiting(startsAt: Date)
 
-    var canStart: Bool { if case .met = self { return true }; return false }
+    var canStart: Bool {
+        switch self {
+        case .met, .blockMet: return true
+        default: return false
+        }
+    }
 }
-
-/// What a later build step adds (C15 step 6).
-enum CheckInLater: Equatable { case block }
 
 /// Where the sheet is in its one location read; held by the view, never saved.
 enum CheckInLocationPhase: Equatable { case idle, asking, reading }
@@ -1696,23 +1733,32 @@ enum ConditionalCheckIn {
     /// `now` the wall clock (sessions end on it).
     static func screen(check: CheckInResult?, live: ConditionalRule?, sessions: [BlockSession],
                        attempt: CheckInAttempt?, now: Date,
-                       location: CheckInLocationPhase = .idle) -> CheckInScreen {
+                       location: CheckInLocationPhase = .idle,
+                       pending: [PendingChange] = []) -> CheckInScreen {
         guard let live else { return .gone }
         // Only saved state says free time is on: a start that was ended
         // elsewhere (housekeeping, another process) no longer reads as running.
         if let running = sessions.filter({ $0.conditionalRuleID == live.id && $0.endsAt > now })
             .map(\.endsAt).max() {
-            return .running(until: running)
+            return live.isFreeTime ? .running(until: running) : .blockRunning(until: running)
+        }
+        // A check-in block waiting its stricter delay: one at a time (C4).
+        if !live.isFreeTime, let waiting = RulePending.waitingStart(of: live.id, in: pending) {
+            return .blockWaiting(startsAt: waiting.appliesAt)
         }
         switch attempt {
         case .refused(let refusal)?: return .refused(refusal)
-        case .waiting?: return .queued
+        // A block that waits shows from saved state (above); otherwise the
+        // fresh check after the attempt decides.
+        case .waiting?: if live.isFreeTime { return .queued }
         case .started?, nil: break
         }
         guard let check else { return .checking }
         guard check.rule.revision == live.revision, check.rule.sameConfiguration(as: live)
         else { return .changed }
-        guard case .freeTime(_, _, let maxMinutes, let usesPerDay) = live.outcome else { return .arrivesLater(.block) }
+        guard case .freeTime(_, _, let maxMinutes, let usesPerDay) = live.outcome else {
+            return blockScreen(check, location: location)
+        }
         guard check.clockAgrees else { return .clockChanged }
         let evaluation = check.evaluation
         if !evaluation.isMet {
@@ -1735,11 +1781,51 @@ enum ConditionalCheckIn {
         return .met(cap: cap)
     }
 
+    /// A block's check-in (spec §5.2, C3): met when every condition holds
+    /// under "all of", or a place/country does under "any of" (a time alone
+    /// already blocks on its own, as the rule's own window). The end shown
+    /// is the engine's own plan for a start now.
+    private static func blockScreen(_ check: CheckInResult, location: CheckInLocationPhase) -> CheckInScreen {
+        guard check.clockAgrees else { return .clockChanged }
+        let rule = check.rule, evaluation = check.evaluation
+        guard evaluation.results.count == rule.conditions.count else { return .notMet }
+        let pairs = Array(zip(rule.conditions, evaluation.results))
+        let placeMet = pairs.contains { $0.0.usesLocation && $0.1.status == .met }
+        if evaluation.isMet && (rule.match == .all || placeMet) {
+            if let end = check.blockEnd { return .blockMet(endsAt: end) }
+            return check.blockRefusal == .windowEnded ? .windowEnding : .notMet
+        }
+        if !check.readLocation, fixCouldDecide(rule, evaluation: evaluation) {
+            switch location {
+            case .asking: return .askPermission
+            case .reading: return .locating
+            case .idle: return .needsLocation
+            }
+        }
+        if rule.match == .any, let end = pairs.compactMap({ pair -> Date? in
+            guard case .time = pair.0, pair.1.status == .met else { return nil }
+            return pair.1.windowEnd
+        }).max() {
+            return .blockOnItsOwn(until: end.addingTimeInterval(-check.guardedOffset))
+        }
+        return .notMet
+    }
+
     /// Could one fix make this unread check met? Places and countries decide
-    /// with a fix (countries through the offline lookup); block check-ins are
-    /// step 6. Day/time/date results stay as they are.
+    /// with a fix (countries through the offline lookup). Day/time/date
+    /// results stay as they are. A block's check-in is for its place or
+    /// country, so under "any of" a fix can decide it even while a time
+    /// branch already blocks on its own.
     static func fixCouldDecide(_ rule: ConditionalRule, evaluation: ConditionalEvaluation,
                                countryLookupAvailable: Bool = countryLookupAvailable) -> Bool {
+        if !rule.isFreeTime {
+            guard rule.hasLocationCondition, evaluation.results.count == rule.conditions.count else { return false }
+            let best: [ConditionStatus] = zip(rule.conditions, evaluation.results).map { condition, result in
+                condition.usesLocation ? .met : result.status
+            }
+            return ConditionEvaluator.verdict(rule, statuses: best,
+                                              windowEnds: evaluation.results.map(\.windowEnd)).isMet
+        }
         guard rule.isFreeTime, evaluation.locationCouldChangeVerdict,
               evaluation.results.count == rule.conditions.count else { return false }
         let best: [ConditionStatus] = zip(rule.conditions, evaluation.results).map { condition, result in
@@ -1757,12 +1843,26 @@ enum ConditionalCheckIn {
     /// Never when a fix couldn't change what the sheet says: today's uses
     /// are spent or unknown, or this rule's free time is already on (C8).
     static func locationStep(_ check: CheckInResult, permission: LocationPermission,
-                             sessions: [BlockSession], now: Date) -> CheckInLocationStep {
+                             sessions: [BlockSession], now: Date,
+                             pending: [PendingChange] = []) -> CheckInLocationStep {
+        if !check.rule.isFreeTime {
+            // A block: not while one of this rule runs or waits, nor while
+            // the clock is off (the sheet says so first).
+            guard !check.readLocation, check.clockAgrees, fixCouldDecide(check.rule, evaluation: check.evaluation),
+                  !sessions.contains(where: { $0.conditionalRuleID == check.rule.id && $0.endsAt > now }),
+                  RulePending.waitingStart(of: check.rule.id, in: pending) == nil
+            else { return .none }
+            return permissionStep(permission)
+        }
         guard !check.readLocation, fixCouldDecide(check.rule, evaluation: check.evaluation),
               case .freeTime(_, _, _, let usesPerDay) = check.rule.outcome,
               let used = check.used, used < usesPerDay,
               !sessions.contains(where: { $0.conditionalRuleID == check.rule.id && $0.endsAt > now })
         else { return .none }
+        return permissionStep(permission)
+    }
+
+    private static func permissionStep(_ permission: LocationPermission) -> CheckInLocationStep {
         switch permission {
         case .notAsked: return .ask
         case .denied, .restricted: return .off
@@ -1770,10 +1870,12 @@ enum ConditionalCheckIn {
         }
     }
 
-    /// Only a place needs precise location: a country check never asks iOS
-    /// for temporary precise location unless a place in the same rule does.
+    /// Only a free-time place needs precise location: a country check never
+    /// asks iOS for temporary precise location unless a place in the same
+    /// rule does, and a block never does (an approximate fix decides it:
+    /// doubt favours the stricter result, spec §5.6).
     static func wantsPrecise(_ rule: ConditionalRule) -> Bool {
-        rule.conditions.contains { if case .place = $0 { return true }; return false }
+        rule.isFreeTime && rule.conditions.contains { if case .place = $0 { return true }; return false }
     }
 
     /// One more read, asking iOS for temporary precise location, when an
@@ -1783,7 +1885,7 @@ enum ConditionalCheckIn {
     /// country and more than the 2 km margin from any other).
     static func wantsPreciseRetry(_ result: CheckInResult, outcome: LocationReadOutcome,
                                   country: LocationTrust.CountryAt?) -> Bool {
-        guard case .sample(let sample, precise: false) = outcome, !wantsPrecise(result.rule),
+        guard result.rule.isFreeTime, case .sample(let sample, precise: false) = outcome, !wantsPrecise(result.rule),
               !result.evaluation.isMet, result.evaluation.results.count == result.rule.conditions.count,
               LocationTrust.preciseCouldDecide(sample, country: country) else { return false }
         return zip(result.rule.conditions, result.evaluation.results).contains { condition, row in
@@ -1832,10 +1934,30 @@ enum ConditionalCheckIn {
     /// again now. Anything else (midnight, a zone change, an edit) is shown
     /// and needs a new hold.
     static func mayStartAfterRecheck(old: CheckInResult, fresh: CheckInResult, live: ConditionalRule?,
-                                     sessions: [BlockSession], now: Date) -> Bool {
+                                     sessions: [BlockSession], now: Date,
+                                     pending: [PendingChange] = []) -> Bool {
         fresh.rule.revision == old.rule.revision && fresh.rule.sameConfiguration(as: old.rule)
             && fresh.stamp.dayKey == old.stamp.dayKey && fresh.stamp.timeZoneID == old.stamp.timeZoneID
-            && screen(check: fresh, live: live, sessions: sessions, attempt: nil, now: now).canStart
+            && screen(check: fresh, live: live, sessions: sessions, attempt: nil, now: now,
+                      pending: pending).canStart
+    }
+
+    /// The row a condition shows. A block's place or country is never "not
+    /// needed": its check-in is for them, even while a time already holds.
+    static func shown(_ result: ConditionResult, condition: ConditionalCondition,
+                      rule: ConditionalRule) -> ConditionResult {
+        guard !rule.isFreeTime, condition.usesLocation, result.status == .notNeeded else { return result }
+        return .unknown(.notChecked)
+    }
+
+    /// The length cap a start sends for a screen that can start: free time's
+    /// chosen-length cap; 1 for a block (its length is the rule's end).
+    static func startCap(_ screen: CheckInScreen) -> Int? {
+        switch screen {
+        case .met(let cap): return cap
+        case .blockMet: return 1
+        default: return nil
+        }
     }
 
     // MARK: Words (translation keys and formatted lines)
@@ -1850,7 +1972,8 @@ enum ConditionalCheckIn {
     }
 
     /// The sentence at the top of the sheet; `until` is already formatted.
-    static func heroKey(_ screen: CheckInScreen) -> String {
+    /// `block`: the rule's outcome is a block (refusals say "The block …").
+    static func heroKey(_ screen: CheckInScreen, block: Bool = false) -> String {
         switch screen {
         case .checking: return "Checking…"
         case .gone: return "This rule has been removed."
@@ -1858,47 +1981,77 @@ enum ConditionalCheckIn {
         case .running: return "Free time is on until %@."
         case .needsLocation, .askPermission: return "This rule needs your location."
         case .locating: return "Checking…"
-        case .arrivesLater: return "This rule can't be checked yet."
         case .met: return "You can have free time now."
         case .usedUp: return "You've used today's free time."
-        case .refused, .queued: return "Free time didn't start."
+        case .refused, .queued: return block ? "The block didn't start." : "Free time didn't start."
         case .clockChanged, .notMet, .unknownUses, .windowEnding: return "Not right now."
+        case .blockMet: return "Block %@ until %@?"
+        case .blockRunning: return "The block is on until %@."
+        case .blockOnItsOwn: return "This block is on until %@."
+        case .blockWaiting: return "The block starts at %@."
         }
     }
 
+    /// The met block's question: "Block 1 app until 07:00?" or, when it runs
+    /// its whole length, "Block 1 app for 3 hr?" (true whenever its stricter
+    /// wait ends). `endsAt` is already formatted.
+    static func blockQuestion(_ check: CheckInResult, endsAt: String, translate: RuleText.Translate,
+                              locale: Locale) -> String {
+        guard case .block(_, let selection, let until) = check.rule.outcome else { return String() }
+        let what = RuleText.counts(RuleCounts(selection), translate: translate)
+        if case .duration(let minutes) = until, check.blockRunsFullDuration {
+            return String(format: translate("Block %@ for %@?"), what, RuleText.minutes(minutes, locale: locale))
+        }
+        return String(format: translate("Block %@ until %@?"), what, endsAt)
+    }
+
+    /// Under the sheet's sentence after a hold or Confirm landed on a check
+    /// that had to be run again.
+    static func checkedAgainKey(block: Bool) -> String {
+        block ? "Checked again. Review it again to start." : "Checked again. Hold again to start."
+    }
+
     /// One line under the sentence, when the rows don't already say why.
-    static func detailKey(_ screen: CheckInScreen) -> String? {
+    static func detailKey(_ screen: CheckInScreen, block: Bool = false) -> String? {
         switch screen {
         case .needsLocation: return "Check in again to check where you are."
         case .askPermission: return "Demora checks where you are once, when you tap Check in. It doesn't save or send your location."
-        case .arrivesLater(.block): return "Starting a block when you check in arrives in a later update."
-        case .clockChanged: return "Your clock was changed recently. Free time can start once it's set right again."
+        case .clockChanged:
+            return block ? "Your clock was changed recently. The block can start once it's set right again."
+                : "Your clock was changed recently. Free time can start once it's set right again."
         case .unknownUses: return "Couldn't count today's uses. Try again."
         case .usedUp: return "Resets at midnight"
         case .windowEnding: return "Less than a minute is left in this window."
-        case .refused(let refusal): return refusalKey(refusal)
+        case .refused(let refusal): return refusalKey(refusal, block: block)
         case .queued: return "It's waiting in Changes instead."
+        case .blockMet, .blockRunning: return "Leaving doesn't end it. Ending it early waits like any looser change."
+        case .blockOnItsOwn: return "Its time blocks on its own, without a check-in."
+        case .blockWaiting: return "It waits your stricter delay, like Block now. It's in Changes."
         case .checking, .gone, .changed, .running, .met, .notMet, .locating: return nil
         }
     }
 
     /// Plain copy for every engine refusal (nothing ever reads as success).
-    static func refusalKey(_ refusal: ConditionalStartRefusal) -> String {
+    static func refusalKey(_ refusal: ConditionalStartRefusal, block: Bool = false) -> String {
         switch refusal {
         case .ruleMissing: return "This rule has been removed."
         case .ruleChanged: return "This rule changed. Check in again."
-        case .clockChanged: return "Your clock was changed recently. Free time can start once it's set right again."
+        case .clockChanged:
+            return block ? "Your clock was changed recently. The block can start once it's set right again."
+                : "Your clock was changed recently. Free time can start once it's set right again."
         case .stampStale: return "This check is more than two minutes old. Check in again."
         case .wrongDay: return "A new day started. Check in again."
         case .timeZoneMoved: return "Your time zone changed. Check in again."
         case .conditionsNotMet: return "The conditions aren't met any more."
         case .invalidLength: return "Choose a length this rule allows."
-        case .alreadyRunning: return "Free time from this rule is already on."
+        case .alreadyRunning: return block ? "A block from this rule is already on." : "Free time from this rule is already on."
         case .checkInUsed: return "This check-in was already used. Check in again."
         case .noUsesLeft: return "You've used today's free time."
         case .windowEnded: return "Less than a minute is left in this window."
         case .dueChanges: return "A change is still being applied. Try again in a moment."
-        case .unavailable: return "Free time couldn't start safely. iOS may not be able to track another session right now. Nothing changed."
+        case .unavailable:
+            return block ? "The block couldn't start safely. iOS may not be able to track another session right now. Nothing changed."
+                : "Free time couldn't start safely. iOS may not be able to track another session right now. Nothing changed."
         }
     }
 
@@ -1928,6 +2081,13 @@ enum ConditionalCheckIn {
             guard case .time(let start, _) = condition else { return String() }
             return String(format: translate("It's %@; this starts at %@"),
                           RuleText.clock(minute, locale: locale), RuleText.clock(start, locale: locale))
+        case .nearPlace:
+            guard case .place(let place) = condition else { return String() }
+            return String(format: translate("Close enough to %@ to count for a block"), place.name)
+        case .nearCountry:
+            guard case .country(let code) = condition else { return String() }
+            return String(format: translate("Close enough to %@ to count for a block"),
+                          ConditionalText.countryName(code, locale: locale))
         case .inDates: return translate("Today is one of these dates")
         case .outsideDates: return translate("Today isn't one of these dates")
         case .notNeeded: return translate("Not needed")
@@ -1982,7 +2142,10 @@ enum ConditionalAvailability {
     struct Row: Equatable {
         let ruleID: UUID
         let name: String
+        /// Free time: uses left today. 0 for a block (it has no uses).
         let left: Int
+        /// A block rule's row: checking in starts its block (step 6).
+        var startsBlock = false
     }
 
     static let maximumRows = 3
@@ -1991,12 +2154,22 @@ enum ConditionalAvailability {
     /// count in `used`; unknown → no row), nothing of theirs running, and
     /// either met on day/time/dates alone or a place that one fix could
     /// make true (nothing is read here: the row only opens the check-in), a
-    /// country included. Block rules get rows with their check-in (step 6).
-    /// Rules order; at most three, with how many more.
+    /// country included. Block rules with a place or country get a row when
+    /// a fix could start their block now and nothing of theirs runs or waits
+    /// (step 6). Rules order; at most three, with how many more.
     static func todayRows(state: LatchState, used: [UUID: Int], clock: ConditionalClockInput,
                           countryLookupAvailable: Bool = ConditionalCheckIn.countryLookupAvailable)
         -> (rows: [Row], more: Int) {
         let rows = state.conditionalRules.compactMap { rule -> Row? in
+            if !rule.isFreeTime {
+                guard rule.isValid,
+                      !state.sessions.contains(where: { $0.conditionalRuleID == rule.id && $0.endsAt > clock.wallNow }),
+                      RulePending.waitingStart(of: rule.id, in: state.pending) == nil,
+                      ConditionalCheckIn.fixCouldDecide(
+                          rule, evaluation: ConditionEvaluator.evaluate(rule, clock: clock, location: .notRead))
+                else { return nil }
+                return Row(ruleID: rule.id, name: rule.name, left: 0, startsBlock: true)
+            }
             guard case .freeTime(_, _, _, let usesPerDay) = rule.outcome, rule.isValid,
                   let count = used[rule.id], count < usesPerDay,
                   !state.sessions.contains(where: { $0.conditionalRuleID == rule.id && $0.endsAt > clock.wallNow })

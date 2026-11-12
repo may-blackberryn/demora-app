@@ -172,7 +172,9 @@ check(ConditionalCheckIn.reason(mexicoMonday.evaluation.results[0], condition: .
       locale: gb, calendar: mxText) == "Not needed", "not needed")
 check(screen(mexicoOrSunday, sundayNoon) == .met(cap: 60), "any of: the day is enough")
 check(screen(mexicoOrSunday, mondayNoon) == .needsLocation, "any of: only the country could make it true: one fix")
-check(screen(block, at(11, 15, 23)) == .arrivesLater(.block), "a block's check-in arrives later, even inside its window")
+// Step 6 (Tests/WhenWhereBlockHarness.py has the block check-in in depth): inside its own
+// window an any-of block's place still needs one fix; nothing starts without it.
+check(screen(block, at(11, 15, 23)) == .needsLocation, "a block's place needs a fix, even inside its window")
 check(ConditionalCheckIn.countryLookupAvailable, "countries decided by the offline lookup (step 5)")
 check(screen(sundays, sundayNoon, guarded: sundayNoon.addingTimeInterval(-400)) == .clockChanged, "clock changed")
 if case .failure(let refusal) = ConditionalStart.plan(
@@ -226,7 +228,7 @@ for refusal in refusals {
     check(ConditionalCheckIn.detailKey(s) == ConditionalCheckIn.refusalKey(refusal) && !ConditionalCheckIn.refusalKey(refusal).isEmpty,
           "detail for \(refusal)")
 }
-check(Set(refusals.map(ConditionalCheckIn.refusalKey)).count >= 12, "refusals read differently")
+check(Set(refusals.map { ConditionalCheckIn.refusalKey($0) }).count >= 12, "refusals read differently")
 check(ConditionalCheckIn.screen(check: met, live: sundays, sessions: [], attempt: .waiting, now: sundayNoon) == .queued,
       "an unexpected queued start isn't shown as free time")
 check(ConditionalCheckIn.heroKey(.queued) == "Free time didn't start.", "queued wording")
@@ -319,11 +321,12 @@ for s in [ConditionStatus.met, .notMet, .unknown, .notNeeded] { check(!Condition
 check(ConditionalCheckIn.needsLine(sundays) == "Free time needs all of these."
       && ConditionalCheckIn.needsLine(mexicoOrSunday) == "Free time needs any of these.", "needs lines")
 let screens: [CheckInScreen] = [.checking, .gone, .changed, .running(until: until), .needsLocation, .askPermission,
-    .locating, .arrivesLater(.block), .clockChanged, .notMet,
-    .unknownUses, .usedUp, .windowEnding, .met(cap: 5), .refused(.wrongDay), .queued]
+    .locating, .clockChanged, .notMet,
+    .unknownUses, .usedUp, .windowEnding, .met(cap: 5), .refused(.wrongDay), .queued,
+    .blockMet(endsAt: until), .blockRunning(until: until), .blockOnItsOwn(until: until), .blockWaiting(startsAt: until)]
 for s in screens {
     check(!ConditionalCheckIn.heroKey(s).isEmpty, "hero \(s)")
-    check(s.canStart == (s == .met(cap: 5)), "only met can start: \(s)")
+    check(s.canStart == (s == .met(cap: 5) || s == .blockMet(endsAt: until)), "only met can start: \(s)")
 }
 check(ConditionalCheckIn.heroKey(.met(cap: 5)) == "You can have free time now." && ConditionalCheckIn.heroKey(.notMet) == "Not right now.", "verdicts")
 
@@ -349,7 +352,7 @@ let homeSunday = free("Sunday at home", .all, [.place(home), .days([1])])
 check(rows(stateWith([homeSunday]), sundayNoon).rows.count == 1, "a place one fix could make true: a row (step 4)")
 check(rows(stateWith([homeSunday]), mondayNoon).rows.isEmpty, "…but not on a day that already fails")
 check(rows(stateWith([mexicoOrSunday]), sundayNoon).rows.count == 1, "any of: the day alone")
-check(rows(stateWith([block]), at(11, 15, 23)).rows.isEmpty, "block rows arrive with their check-in")
+check(rows(stateWith([block]), at(11, 15, 23)).rows.map(\.startsBlock) == [true], "a block with a place gets a row (step 6)")
 check(rows(stateWith([lateSunday]), at(11, 15, 23, 59, 30)).rows.isEmpty, "under a minute left: no row")
 check(rows(stateWith([lateSunday]), at(11, 15, 22, 30)).rows.count == 1, "inside the window")
 let read = ConditionalClockRead(guardedOffset: 90, recentTimeZoneIDs: ["America/Mexico_City"])

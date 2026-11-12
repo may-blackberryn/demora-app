@@ -255,6 +255,12 @@ let loadSeconds = Date().timeIntervalSince(loadStart)
 check(borders.pointCount == ''' + str(points) + r''', "same point count as the Python decode")
 check(borders.regionCodes == [''' + ', '.join(f'"{c}"' for c in codes) + r'''], "same codes, no unidentified entry")
 func at(_ p: (Double, Double)) -> ConditionalCountryLookup { borders.lookup(latitude: p.0, longitude: p.1)! }
+// The answer free time reads (region and border distance); the nearby list is
+// for block check-ins (step 6) and is checked in Tests/WhenWhereBlockHarness.py.
+infix operator ==~: ComparisonPrecedence
+func ==~ (l: ConditionalCountryLookup, r: ConditionalCountryLookup) -> Bool {
+    l.regionCode == r.regionCode && l.borderDistanceMeters == r.borderDistanceMeters
+}
 func raw(_ p: (Double, Double)) -> ConditionalCountryLookup { borders.rawLookup(latitude: p.0, longitude: p.1)! }
 let allowance = CountryBorders.datasetAllowanceMeters
 check(allowance == 1_000 && CountryBorders.coastBandMeters == 2_000, "1 km dataset allowance, 2 km coast band")
@@ -364,7 +370,7 @@ check(at(vatican).regionCode == "VA" && countryRow(free("Vatican", .all, [.count
       "the Vatican is never clear of Italy")
 check(at(gibraltar).regionCode == "GI" && countryRow(free("Spain", .all, [.country("ES")]), sample(gibraltar)) == .unknown(.nearBorder),
       "Gibraltar: can't tell")
-check(at(northCyprus) == ConditionalCountryLookup(regionCode: nil, borderDistanceMeters: 0), "disputed area: no name, on a border")
+check(at(northCyprus) ==~ ConditionalCountryLookup(regionCode: nil, borderDistanceMeters: 0), "disputed area: no name, on a border")
 check(countryRow(free("Cyprus", .all, [.country("CY")]), sample(northCyprus)) == .unknown(.nearBorder), "Q4: can't tell, never ✗")
 check(at(paphos).regionCode == "CY" && countryRow(free("Cyprus", .all, [.country("CY")]), sample(paphos)).status == .met, "Paphos")
 check(at(pristina).regionCode == "XK", "Kosovo (iOS names it)")
@@ -445,11 +451,11 @@ let synthetic = CountryBorders(data: encode([
 func syn(_ lat: Double, _ lon: Double) -> ConditionalCountryLookup { synthetic.lookup(latitude: lat, longitude: lon)! }
 let km = Double.pi / 180 * ConditionEvaluator.earthRadius / 1000
 check(synthetic.regionCodes == ["AA", "BB", "CC", "DD", "EE"], "synthetic codes")
-check(syn(0.75, 0.75) == ConditionalCountryLookup(regionCode: nil, borderDistanceMeters: 0), "overlap: no name, on a border")
+check(syn(0.75, 0.75) ==~ ConditionalCountryLookup(regionCode: nil, borderDistanceMeters: 0), "overlap: no name, on a border")
 check(syn(0.5, 0.25).regionCode == "AA" && abs(syn(0.5, 0.25).borderDistanceMeters - (0.25 * km * 1000 - allowance)) < 50,
       "inside one: distance to the other, less the allowance: \(syn(0.5, 0.25))")
 check(syn(11, 11).regionCode == "DD" && syn(10.2, 10.2).regionCode == "CC", "a hole belongs to the entry that fills it")
-check(syn(20.5, 20.5) == ConditionalCountryLookup(regionCode: nil, borderDistanceMeters: 0), "unnamed area: on a border")
+check(syn(20.5, 20.5) ==~ ConditionalCountryLookup(regionCode: nil, borderDistanceMeters: 0), "unnamed area: on a border")
 let off1 = 1.0 / km, off3 = 3.0 / km
 check(syn(0.5, 30 + 1 + off1).regionCode == "EE", "1 km off EE's coast: EE (coast band)")
 check(syn(0.5, 30 + 1 + off3).regionCode == nil && abs(syn(0.5, 30 + 1 + off3).borderDistanceMeters - 2_000) < 20,
@@ -542,7 +548,7 @@ with tempfile.TemporaryDirectory(prefix='demora-whenwhere-country-') as director
     (folder / 'RulesPresentation.swift').write_text(portable(presentation))
     (folder / 'CountryLookup.swift').write_text(lookup_source)
     enclave_checks = '\n'.join(
-        f'check(at(({lat}, {lon})) == ConditionalCountryLookup(regionCode: nil, borderDistanceMeters: 0), '
+        f'check(at(({lat}, {lon})) ==~ ConditionalCountryLookup(regionCode: nil, borderDistanceMeters: 0), '
         f'"{name}: can\'t tell")' for name, lat, lon, _ in enclaves)
     (folder / 'main.swift').write_text(driver.replace('ENCLAVE_CHECKS', enclave_checks))
     (folder / 'samples.txt').write_text(''.join(f'{lat} {lon} {code} {d}\n' for lat, lon, code, d in python_samples))

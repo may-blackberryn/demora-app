@@ -26,6 +26,12 @@
 //    Netherlands/Germany/Belgium tripoint sits ~1.9 km from Vaalserberg), so
 //    with the engine's 2 km margin a country is told only beyond about
 //    3 km + the fix's accuracy from a border. Doubt favours "can't tell".
+//  - For block check-ins only (step 6), the answer also lists each country
+//    within `nearbyLimitMeters` and how far it is, with the same allowance
+//    (0 for a country the point may be in: one whose area contains it, or,
+//    in a spot the dataset can't name, one whose outline box comes within
+//    `unnamedReachMeters` of that unnamed area's), so a block can count a
+//    country the fix can't rule out (spec §5.6). Free time never reads it.
 //
 
 import Foundation
@@ -39,6 +45,13 @@ struct CountryBorders {
     static let distanceCapMeters: Double = 1_000_000
     /// Taken off every reported distance for the dataset's own error.
     static let datasetAllowanceMeters: Double = 1_000
+    /// Countries farther than this aren't listed as nearby.
+    static let nearbyLimitMeters: Double = 100_000
+    /// In a spot the dataset can't name (a disputed area such as North
+    /// Cyprus, an enclave zone such as Baarle-Hertog), every country whose
+    /// outline box comes this close to the unnamed area's box may be the
+    /// answer: doubt favours the stricter result for a block.
+    static let unnamedReachMeters: Double = 5_000
     static let resourceName = "CountryBorders"
     static let resourceExtension = "bin"
 
@@ -151,27 +164,73 @@ struct CountryBorders {
     /// The country at this point and how far it is from any other country
     /// (or, at sea, from the nearest land). Invalid coordinates → no answer.
     func lookup(latitude: Double, longitude: Double) -> ConditionalCountryLookup? {
-        guard let raw = rawLookup(latitude: latitude, longitude: longitude) else { return nil }
+        guard let scan = scan(latitude: latitude, longitude: longitude) else { return nil }
+        let raw = answer(scan)
+        // The unnamed areas (rings of the unidentified entry) the point is
+        // in, or, at sea, the one whose coast band it's in.
+        var unnamed = scan.unnamedRingsContaining
+        if scan.containing.isEmpty,
+           let nearest = scan.distances.indices.min(by: { scan.distances[$0] < scan.distances[$1] }),
+           scan.distances[nearest] <= Self.coastBandMeters, entries[nearest].code == Self.unidentifiedCode,
+           let ring = scan.nearestUnnamedRing {
+            unnamed = [ring]
+        }
+        var nearby: [String: Double] = [:]
+        for (index, entry) in entries.enumerated() where entry.code != Self.unidentifiedCode {
+            let possible = scan.containing.contains(index)
+                || unnamed.contains { boxMeets($0, entry, within: Self.unnamedReachMeters) }
+            let distance = possible ? 0 : max(0, scan.distances[index] - Self.datasetAllowanceMeters)
+            guard distance <= Self.nearbyLimitMeters else { continue }
+            nearby[entry.code] = min(nearby[entry.code] ?? distance, distance)
+        }
         return ConditionalCountryLookup(regionCode: raw.regionCode,
-                                        borderDistanceMeters: max(0, raw.borderDistanceMeters - Self.datasetAllowanceMeters))
+                                        borderDistanceMeters: max(0, raw.borderDistanceMeters - Self.datasetAllowanceMeters),
+                                        nearbyMeters: nearby)
     }
 
-    /// The same answer with the dataset's own distances (no allowance).
+    /// The same answer with the dataset's own distances (no allowance, no nearby list).
     func rawLookup(latitude: Double, longitude: Double) -> ConditionalCountryLookup? {
+        scan(latitude: latitude, longitude: longitude).map(answer)
+    }
+
+    private struct Scan {
+        /// Entries whose rings contain the point.
+        var containing: [Int]
+        /// Metres from the point to each entry's edges (capped).
+        var distances: [Double]
+        /// Rings of the unidentified entry that contain the point, and the
+        /// one nearest to it (each is one unnamed area).
+        var unnamedRingsContaining: [Ring] = []
+        var nearestUnnamedRing: Ring? = nil
+    }
+
+    private func scan(latitude: Double, longitude: Double) -> Scan? {
         guard latitude.isFinite, longitude.isFinite, (-90...90).contains(latitude),
               (-180...180).contains(longitude) else { return nil }
         var containing: [Int] = []
         var distances = [Double](repeating: Self.distanceCapMeters, count: entries.count)
+        var unnamedRings: [Ring] = [], nearestUnnamed: Ring? = nil
         for (index, entry) in entries.enumerated() {
             var inside = false
+            let unnamed = entry.code == Self.unidentifiedCode
             for ring in entry.rings {
-                if contains(ring, latitude: latitude, longitude: longitude) { inside.toggle() }
+                let inRing = contains(ring, latitude: latitude, longitude: longitude)
+                if inRing { inside.toggle() }
+                if unnamed && inRing { unnamedRings.append(ring) }
+                let before = distances[index]
                 distances[index] = min(distances[index],
                                        distance(to: ring, latitude: latitude, longitude: longitude,
                                                 below: distances[index]))
+                if unnamed && (distances[index] < before || nearestUnnamed == nil) { nearestUnnamed = ring }
             }
             if inside { containing.append(index) }
         }
+        return Scan(containing: containing, distances: distances,
+                    unnamedRingsContaining: unnamedRings, nearestUnnamedRing: nearestUnnamed)
+    }
+
+    private func answer(_ scan: Scan) -> ConditionalCountryLookup {
+        let containing = scan.containing, distances = scan.distances
         func nearestOther(than own: Int) -> Double {
             distances.indices.filter { $0 != own }.map { distances[$0] }.min() ?? Self.distanceCapMeters
         }
@@ -194,6 +253,18 @@ struct CountryBorders {
         }
         return ConditionalCountryLookup(regionCode: entries[nearest].code,
                                         borderDistanceMeters: nearestOther(than: nearest))
+    }
+
+    /// The unnamed area's box, widened by `meters`, overlaps one of `b`'s
+    /// ring boxes (a cheap, generous "next to": only ever used to add doubt).
+    private func boxMeets(_ r: Ring, _ b: Entry, within meters: Double) -> Bool {
+        let degrees = meters / (Double.pi / 180 * ConditionEvaluator.earthRadius)
+        let poleward = min(89, max(abs(r.minLat), abs(r.maxLat)) + degrees)
+        let lonPad = degrees / cos(poleward * .pi / 180)
+        return b.rings.contains { o in
+            o.minLat <= r.maxLat + degrees && o.maxLat >= r.minLat - degrees
+                && o.minLon <= r.maxLon + lonPad && o.maxLon >= r.minLon - lonPad
+        }
     }
 
     /// Even-odd crossing test in longitude/latitude, the plane the dataset's

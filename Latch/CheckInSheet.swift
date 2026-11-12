@@ -9,7 +9,12 @@
 //  again. The stamp comes from the check that read the fix; the fix itself is
 //  never kept (only ✓/✗ results), and checks refreshed on their own never
 //  read location. A country is told by the bundled offline borders
-//  (`CountryBorders`, no network, no geocoder); block check-ins are step 6.
+//  (`CountryBorders`, no network, no geocoder).
+//  A met block (step 6; spec §5.2, C3, C4) goes Review → the change receipt
+//  (stricter, its stricter wait like Block now) → the same engine start
+//  path; a block counts what the fix can't rule out (doubt favours the
+//  stricter result, §5.6) and never asks for precise location. Checking in
+//  never ends a block early (Q1).
 //  A condition has no way around it here: no skip, no Apply now, no password,
 //  phrase or contact.
 //
@@ -49,6 +54,10 @@ struct CheckInSheet: View {
     @State private var generation = 0
     /// iOS's prompt is up: a second tap on Allow location does nothing.
     @State private var requestingPermission = false
+    /// A met block's receipt (stricter, with its wait). While it's open the
+    /// check isn't refreshed on its own, so Confirm sends what was reviewed
+    /// (or re-checks it first, like a hold on an aged check).
+    @State private var receipt: ChangeReceiptRequest?
 
     private var live: ConditionalRule? { model.state.conditionalRules.first { $0.id == ruleID } }
 
@@ -69,7 +78,7 @@ struct CheckInSheet: View {
             // A check past its freshness, or from before midnight, is run
             // again on its own so the sheet never shows a stale verdict.
             .onChange(of: context.date) { _ in
-                if let check, !starting, locationPhase == .idle,
+                if let check, !starting, receipt == nil, locationPhase == .idle,
                    ConditionalCheckIn.needsRecheck(check, live: live,
                                                    clock: ConditionalClockInput.current(for: model.state)) {
                     runCheck(model.state, announce: false)
@@ -91,16 +100,21 @@ struct CheckInSheet: View {
             // An edit that landed (or a removal) makes this check stale.
             if rule.map({ $0.revision != check.rule.revision || !$0.sameConfiguration(as: check.rule) }) ?? true {
                 attempt = nil
+                receipt = nil
                 runCheck(state, announce: false)
             }
         }
+        .changeReceipt($receipt)
     }
+
+    private var isBlock: Bool { !(live?.isFreeTime ?? check?.rule.isFreeTime ?? true) }
 
     // MARK: Content
 
     @ViewBuilder private func content(now: Date) -> some View {
         let screen = ConditionalCheckIn.screen(check: check, live: live, sessions: model.state.sessions,
-                                               attempt: attempt, now: now, location: locationPhase)
+                                               attempt: attempt, now: now, location: locationPhase,
+                                               pending: model.state.pending)
         VStack(alignment: .leading, spacing: DemoraSpace.m) {
             VStack(alignment: .leading, spacing: DemoraSpace.xs) {
                 Text(live?.name ?? check?.rule.name ?? "")
@@ -112,12 +126,12 @@ struct CheckInSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
                 if checkedAgain, screen.canStart {
-                    Text(tr("Checked again. Hold again to start."))
+                    Text(tr(ConditionalCheckIn.checkedAgainKey(block: isBlock)))
                         .demoraType(.meta)
                         .foregroundStyle(Ink.inkSoft)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if let detail = ConditionalCheckIn.detailKey(screen) {
+                if let detail = ConditionalCheckIn.detailKey(screen, block: isBlock) {
                     Text(tr(detail))
                         .demoraType(.meta)
                         .foregroundStyle(Ink.inkSoft)
@@ -136,8 +150,9 @@ struct CheckInSheet: View {
                         if screen == .locating, pair.0.usesLocation {
                             ConditionRow(condition: pair.0, checking: true, reason: tr("Checking where you are"))
                         } else {
-                            ConditionRow(condition: pair.0, status: pair.1.status,
-                                         reason: ConditionalCheckIn.reason(pair.1, condition: pair.0, translate: tr,
+                            let row = ConditionalCheckIn.shown(pair.1, condition: pair.0, rule: check.rule)
+                            ConditionRow(condition: pair.0, status: row.status,
+                                         reason: ConditionalCheckIn.reason(row, condition: pair.0, translate: tr,
                                                                            locale: locale, calendar: calendar))
                         }
                     }
@@ -151,11 +166,19 @@ struct CheckInSheet: View {
     }
 
     private func hero(_ screen: CheckInScreen, now: Date) -> Text {
-        let key = ConditionalCheckIn.heroKey(screen)
-        if case .running(let until) = screen {
+        let key = ConditionalCheckIn.heroKey(screen, block: isBlock)
+        switch screen {
+        case .running(let until):
             return TodaySentence.text(tr(key), [.init(text: time(until, now: now), color: Ink.free)])
+        case .blockRunning(let until), .blockOnItsOwn(let until), .blockWaiting(let until):
+            return TodaySentence.text(tr(key), [.init(text: time(until, now: now), color: accent)])
+        case .blockMet(let endsAt):
+            guard let check else { return Text(tr(key)) }
+            return Text(ConditionalCheckIn.blockQuestion(check, endsAt: time(endsAt, now: now),
+                                                         translate: tr, locale: locale))
+        default:
+            return Text(tr(key))
         }
-        return Text(tr(key))
     }
 
     private func heroColor(_ screen: CheckInScreen) -> Color {
@@ -167,7 +190,7 @@ struct CheckInSheet: View {
 
     private func showsRows(_ screen: CheckInScreen) -> Bool {
         switch screen {
-        case .gone, .changed, .running, .checking, .refused, .queued, .arrivesLater(.block): return false
+        case .gone, .changed, .running, .checking, .refused, .queued, .blockRunning, .blockWaiting: return false
         default: return true
         }
     }
@@ -206,7 +229,13 @@ struct CheckInSheet: View {
                     .disabled(starting)
                 if starting { ProgressView().frame(maxWidth: .infinity) }
                 quiet(tr("Not now")) { dismiss() }
-            case .running, .gone, .queued:
+            case .blockMet(let endsAt):
+                // Stricter, so one tap on the receipt (or its stricter wait, C4).
+                primary(tr("Review")) { review(endsAt: endsAt, now: now) }
+                    .disabled(starting || receipt != nil)
+                if starting { ProgressView().frame(maxWidth: .infinity) }
+                quiet(tr("Not now")) { dismiss() }
+            case .running, .gone, .queued, .blockRunning, .blockWaiting:
                 primary(tr("Done")) { dismiss() }
             case .checking, .locating:
                 ProgressView().frame(maxWidth: .infinity, minHeight: 44)
@@ -275,7 +304,7 @@ struct CheckInSheet: View {
         check = result
         if userAsked {
             switch ConditionalCheckIn.locationStep(result, permission: locator.permission,
-                                                   sessions: state.sessions, now: Date()) {
+                                                   sessions: state.sessions, now: Date(), pending: state.pending) {
             case .read:
                 readLocation(announce: announce, precise: ConditionalCheckIn.wantsPrecise(rule))
                 return
@@ -343,10 +372,12 @@ struct CheckInSheet: View {
 
     private func announceVerdict(_ result: CheckInResult, rule: ConditionalRule, sessions: [BlockSession]) {
         let screen = ConditionalCheckIn.screen(check: result, live: rule, sessions: sessions,
-                                               attempt: attempt, now: Date())
+                                               attempt: attempt, now: Date(), pending: model.state.pending)
         if screen.canStart {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } else if case .running = screen {
+        } else if case .blockRunning = screen {
+        } else if case .blockWaiting = screen {
         } else {
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
         }
@@ -360,7 +391,7 @@ struct CheckInSheet: View {
         let live = state.conditionalRules.first { $0.id == ruleID }
         var cap = cap
         guard ConditionalCheckIn.screen(check: check, live: live, sessions: state.sessions,
-                                        attempt: attempt, now: Date()).canStart else { return }
+                                        attempt: attempt, now: Date(), pending: state.pending).canStart else { return }
         let clock = ConditionalClockInput.current(for: state)
         if ConditionalCheckIn.needsRecheck(check, live: live, clock: clock) {
             // The hold was the deliberate act: a check that only aged is run
@@ -374,9 +405,10 @@ struct CheckInSheet: View {
             }
             let fresh = CheckInResult.make(rule: rule, state: state, clock: clock, location: .notRead)
             guard ConditionalCheckIn.mayStartAfterRecheck(old: check, fresh: fresh, live: live,
-                                                          sessions: state.sessions, now: Date()),
-                  case .met(let freshCap) = ConditionalCheckIn.screen(check: fresh, live: live,
-                      sessions: state.sessions, attempt: nil, now: Date()) else {
+                                                          sessions: state.sessions, now: Date(),
+                                                          pending: state.pending),
+                  let freshCap = ConditionalCheckIn.startCap(ConditionalCheckIn.screen(check: fresh, live: live,
+                      sessions: state.sessions, attempt: nil, now: Date(), pending: state.pending)) else {
                 self.check = fresh
                 checkedAgain = true
                 return
@@ -414,9 +446,10 @@ struct CheckInSheet: View {
                                                                                 country: Self.countryLookup(for: rule)))
             check = fresh
             guard ConditionalCheckIn.mayStartAfterRecheck(old: old, fresh: fresh, live: live,
-                                                          sessions: state.sessions, now: Date()),
-                  case .met(let freshCap) = ConditionalCheckIn.screen(check: fresh, live: live,
-                      sessions: state.sessions, attempt: nil, now: Date()) else {
+                                                          sessions: state.sessions, now: Date(),
+                                                          pending: state.pending),
+                  let freshCap = ConditionalCheckIn.startCap(ConditionalCheckIn.screen(check: fresh, live: live,
+                      sessions: state.sessions, attempt: nil, now: Date(), pending: state.pending)) else {
                 checkedAgain = true
                 starting = false
                 return
@@ -443,6 +476,23 @@ struct CheckInSheet: View {
     private static func preloadCountries(for rule: ConditionalRule?) {
         guard hasCountry(rule) else { return }
         Task.detached(priority: .userInitiated) { _ = CountryBorders.bundled }
+    }
+
+    /// A met block: the receipt shows the start's direction, wait and summary
+    /// (`.startConditionalSession` is stricter, C4). Its Confirm comes back
+    /// here and goes through `start`, which re-checks an aged check first and
+    /// sends only one request; the engine validates it again and queues it
+    /// with the stricter delay, exactly like Block now.
+    private func review(endsAt: Date, now: Date) {
+        guard let check, receipt == nil, !starting else { return }
+        let request = ConditionalStartRequest(ruleID: check.rule.id, revision: check.rule.revision,
+                                              minutes: 1, stamp: check.stamp)
+        var note = String(format: tr("Then runs until %@."), time(endsAt, now: now))
+        if case .block(_, _, .duration(let minutes)) = check.rule.outcome, check.blockRunsFullDuration {
+            note = String(format: tr("Then runs for %d min."), minutes)
+        }
+        receipt = ChangeReceiptRequest(action: .startConditionalSession(request), note: note,
+                                       perform: { start(cap: 1) })
     }
 
     /// The one place a start request is made, for the check on screen.

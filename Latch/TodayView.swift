@@ -368,8 +368,9 @@ struct ExtraTimeRows: View {
 
 // MARK: - Check in
 
-/// When & where rules a check-in could start now, under extra time, in the
-/// same row style (docs/conditional-sessions-redesign.md §5.3). The rows come
+/// When & where rules a check-in could start now (free time, or a block
+/// with a place or country), under extra time, in the same row style
+/// (docs/conditional-sessions-redesign.md §5.3). The rows come
 /// from `ConditionalAvailability.todayRows`; each opens the check-in sheet,
 /// which decides for real.
 struct CheckInRows: View {
@@ -387,8 +388,10 @@ struct CheckInRows: View {
                     if index > 0 { divider }
                     Button { onCheckIn(row.ruleID) } label: {
                         HStack {
+                            // A block rule has no uses: its row only says what checking in does.
                             Text(row.name).bold().foregroundColor(Ink.ink)
-                                + Text(" · ") + Text(String(format: tr("%d left today"), row.left))
+                                + Text(" · ") + Text(row.startsBlock ? tr("starts a block")
+                                                     : String(format: tr("%d left today"), row.left))
                                     .foregroundColor(Ink.inkSoft)
                                 + Text(" · ") + Text(tr("Check in")).foregroundColor(accent)
                             Spacer(minLength: 0)

@@ -291,10 +291,11 @@ check(problem(with(sunday) { $0.conditions = [.dates(first: ConditionalDay(year:
                                                      last: ConditionalDay(year: 2026, month: 3, day: 2))] }) == .invalid, "impossible day")
 check(problem(with(sunday) { $0.conditions = [.time(start: -5, end: 60)] }) == .invalid, "out-of-range time")
 check(problem(with(sunday) { $0.outcome = .freeTime(kind: .unblock, selection: FamilyActivitySelection(), maxMinutes: 60, usesPerDay: 1) }) == .apps, "only these apps needs apps")
-// Step 4: places exist, but a block's check-in start is step 6, so a block rule can't be saved yet.
-check(problem(instagram) == .blockLater, "a block with a place waits for step 6")
-check(problem(with(instagram) { $0.outcome = .block(mode: .blockSelected, selection: FamilyActivitySelection(), until: .time(420)) }) == .blockLater,
-      "…with or without apps")
+// Step 6: block rules save within the v1 limits (chosen apps; a place or
+// country; under any-of only times run on their own).
+check(problem(instagram) == nil && instagram.isValid, "a block with a place saves (step 6)")
+check(problem(with(instagram) { $0.outcome = .block(mode: .blockSelected, selection: FamilyActivitySelection(), until: .time(420)) }) == .apps,
+      "…once it has apps")
 let dayBlock = with(instagram) { $0.conditions = [.time(start: 1320, end: 360)] }
 check(problem(dayBlock) == .blockNeedsPlace, "v1: a block needs a place or country")
 // Review fix: what no choice of apps can fix is said first.
@@ -304,15 +305,14 @@ check(problem(with(instagram) { $0.conditions.append(.days([1]))
     $0.outcome = .block(mode: .blockSelected, selection: FamilyActivitySelection(), until: .time(420)) }) == .blockAnyOfDays,
       "any-of days before no apps")
 check(problem(with(instagram) { $0.conditions.append(.days([1])) }) == .blockAnyOfDays, "v1: any-of block, no days")
-check(problem(with(instagram) { $0.match = .all; $0.conditions.append(.days([1])) }) == .blockLater, "all-of block may use days (step 6)")
-check(problem(with(instagram) { $0.outcome = .block(mode: .blockAllExcept, selection: apps("a"), until: .time(420)) }) == .blockLater,
-      "v1: no all-except block (step 6 says why)")
+check(problem(with(instagram) { $0.match = .all; $0.conditions.append(.days([1])) }) == nil, "all-of block may use days")
+check(problem(with(instagram) { $0.outcome = .block(mode: .blockAllExcept, selection: apps("a"), until: .time(420)) }) == .invalid,
+      "v1: no all-except block (the editor can't make one)")
 check(EditorProblem.blockNeedsPlace.messageKey == "Use a repeating block for rules without a place.", "spec §5.10 wording")
 check(problem(edited, existing: sunday) == nil, "a real edit")
 check(problem(with(sunday) { $0.revision = 4; $0.addedAt = at(1, 1) }, existing: sunday) == .unchanged, "no-op edit")
 check(EditorProblem.unchanged.messageKey == nil, "unchanged is not explained")
-for p in [EditorProblem.nameTooLong, .noConditions, .tooManyConditions, .datesOrder, .blockNeedsPlace, .blockAnyOfDays, .invalid,
-          .blockLater] {
+for p in [EditorProblem.nameTooLong, .noConditions, .tooManyConditions, .datesOrder, .blockNeedsPlace, .blockAnyOfDays, .invalid] {
     check(p.messageKey != nil, "message for \(p)")
 }
 
@@ -343,23 +343,24 @@ let outcomes: [ConditionalOutcome] = [
     .block(mode: .blockSelected, selection: apps("a"), until: .duration(minutes: 180)),
     .block(mode: .blockSelected, selection: apps("a"), until: .time(1440)),
 ]
-var table = 0, accepted = 0
+var table = 0, accepted = 0, blockAccepted = 0
 for name in ["", "Sunday", String(repeating: "n", count: 81)] {
     for match in [ConditionalMatch.all, .any] {
         for conditions in lists {
             for outcome in outcomes {
                 let draft = ConditionalRule(name: name, match: match, conditions: conditions, outcome: outcome, addedAt: at(11, 1))
                 let p = problem(draft)
-                // Step 4: block rules can't be saved until their check-in (step 6).
-                if (p == nil) != (draft.isValid && draft.isFreeTime) { print("FAIL: mismatch \(name.count) \(match) \(conditions) \(outcome) → \(String(describing: p))"); exit(1) }
-                if p == nil { accepted += 1 }
+                // Step 6: free time and block rules alike, exactly the engine's isValid.
+                if (p == nil) != draft.isValid { print("FAIL: mismatch \(name.count) \(match) \(conditions) \(outcome) → \(String(describing: p))"); exit(1) }
+                if p == nil { accepted += 1; if !draft.isFreeTime { blockAccepted += 1 } }
                 table += 1
             }
         }
     }
 }
-check(table > 20_000 && accepted > 200, "table \(table), accepted \(accepted) (free time only in step 4)")
-print("When & where Rules presentation passed: \(checks) checks; validation table \(table) drafts (\(accepted) accepted) matches ConditionalRule.isValid")
+check(table > 20_000 && accepted > 200 && blockAccepted > 0,
+      "table \(table), accepted \(accepted), blocks \(blockAccepted) (step 6 saves block rules)")
+print("When & where Rules presentation passed: \(checks) checks; validation table \(table) drafts (\(accepted) accepted, \(blockAccepted) blocks) matches ConditionalRule.isValid")
 '''
 
 with tempfile.TemporaryDirectory(prefix='demora-whenwhere-rules-') as directory:

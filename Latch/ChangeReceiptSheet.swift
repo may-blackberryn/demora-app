@@ -17,6 +17,12 @@ struct ChangeReceiptRequest: Identifiable {
     /// Checked again just before queueing (the day & night editor re-runs its
     /// collection guards); false keeps the receipt open with a notice.
     var canQueue: (() -> Bool)? = nil
+    /// A When & where check-in block (step 6): Confirm closes the receipt and
+    /// hands the start to the check-in's own engine path
+    /// (`ChangeEngine.startConditionalSessionOffMain`, which validates it
+    /// again and queues it with the stricter delay, C4) instead of queueing
+    /// `action` here. The direction, wait and summary shown are `action`'s.
+    var perform: (() -> Void)? = nil
 }
 
 extension View {
@@ -38,7 +44,7 @@ private struct ChangeReceiptPresenter: ViewModifier {
             if queued { queued = false; onQueued() }
         }) { request in
             ChangeReceiptSheet(action: request.action, note: request.note,
-                               canQueue: request.canQueue) { queued = true }
+                               canQueue: request.canQueue, perform: request.perform) { queued = true }
         }
     }
 }
@@ -51,8 +57,11 @@ struct ChangeReceiptSheet: View {
     let action: ChangeAction
     var note: String? = nil
     var canQueue: (() -> Bool)? = nil
+    var perform: (() -> Void)? = nil
     let onQueued: () -> Void
     @State private var notice: String?
+    /// One Confirm: a second tap while the sheet closes does nothing.
+    @State private var handedOff = false
 
     var body: some View {
         // The preview follows the current clock while the sheet is open; the
@@ -145,6 +154,13 @@ struct ChangeReceiptSheet: View {
     private func commit() {
         if let canQueue, !canQueue() {
             notice = tr("This change could not be saved. Review it and try again.")
+            return
+        }
+        if let perform {
+            guard !handedOff else { return }
+            handedOff = true
+            dismiss()
+            perform()
             return
         }
         if model.queue(action) != nil {

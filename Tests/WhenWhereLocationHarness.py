@@ -203,7 +203,9 @@ check(step(notRead(mexicoAndHome, sundayNoon), permission: allowed) == .read,
 let allThree = free("Mexico home Sunday", .all, [.country("MX"), .place(home), .days([1])])
 check(step(notRead(allThree, sundayNoon), permission: allowed) == .read,
       "all of with a country and a place: one fix decides both")
-check(step(notRead(block, sundayNoon), permission: allowed) == .none, "block check-ins: step 6")
+// Step 6: a block reads one fix for its place, but never asks for precise location.
+check(step(notRead(block, sundayNoon), permission: allowed) == .read && !ConditionalCheckIn.wantsPrecise(block),
+      "a block check-in reads once, approximate is enough")
 let alreadyRead = CheckInResult.make(rule: homeSunday, state: stateWith([homeSunday]), clock: clock(sundayNoon),
                                      location: .unavailable(.noFix))
 check(alreadyRead.readLocation && !notRead(homeSunday, sundayNoon).readLocation, "a check knows whether it read")
@@ -234,7 +236,7 @@ func screen(_ r: CheckInResult, phase: CheckInLocationPhase = .idle, now: Date =
 check(screen(notRead(homeSunday, sundayNoon), phase: .asking) == .askPermission, "the card before iOS asks")
 check(screen(notRead(homeSunday, sundayNoon), phase: .reading) == .locating, "Checking where you are")
 check(screen(notRead(homeSunday, sundayNoon)) == .needsLocation, "a check refreshed on its own: check in again")
-for s in [CheckInScreen.askPermission, .locating, .needsLocation, .arrivesLater(.block)] {
+for s in [CheckInScreen.askPermission, .locating, .needsLocation, .blockOnItsOwn(until: sundayNoon)] {
     check(!s.canStart, "\(s) never starts")
 }
 check(ConditionalCheckIn.detailKey(.askPermission)
@@ -471,7 +473,8 @@ sheet = readers['CheckInSheet.swift']
 run_src = declaration(sheet, 'private func runCheck(_ state: LatchState, announce: Bool, userAsked: Bool = false)')
 assert run_src.index('if userAsked {') < run_src.index('readLocation(announce: announce, precise: ConditionalCheckIn.wantsPrecise(rule))'), \
     'a read only when the user asked; precise only for a place'
-assert 'sessions: state.sessions, now: Date())' in run_src, 'running sessions and uses decide too'
+assert 'sessions: state.sessions, now: Date(), pending: state.pending)' in run_src, \
+    'running sessions, uses and (for a block) a waiting start decide too'
 assert 'locationPhase = .asking' in run_src and "location: .unavailable(.locationOff))" in run_src
 assert sheet.count('userAsked: true') == 3, 'opening the sheet, Try again, and the card'
 assert '.onAppear { runCheck(model.state, announce: true, userAsked: true) }' in sheet

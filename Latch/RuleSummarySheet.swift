@@ -561,6 +561,10 @@ struct RuleSummarySheet: View {
                     primary(tr("Check in")) { editor = .checkIn(id) }
                     secondary(tr("Edit")) { editor = .conditional(rule) }.disabled(blocked)
                     runningSession(of: id, state: state, now: now)
+                    // A check-in block waiting its stricter delay (step 6).
+                    if let waiting = RulePending.waitingStart(of: id, in: state.pending) {
+                        pendingBlock(waiting, now: now)
+                    }
                     quiet(tr("Remove rule")) { receipt = ChangeReceiptRequest(action: .removeConditionalRule(id: id)) }
                         .disabled(blocked)
                 }

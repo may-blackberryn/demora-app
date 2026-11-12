@@ -1662,6 +1662,11 @@ struct ConditionalCountryLookup: Equatable {
     /// Nil when the point is in no country (open sea).
     var regionCode: String?
     var borderDistanceMeters: Double
+    /// Block check-ins only (spec §5.6, "doubt favours the stricter result"):
+    /// how far the point is from each country the lookup found nearby, with
+    /// the dataset's allowance already taken off (0 for a country the point
+    /// may be in). Nil when the lookup didn't say; free time never reads it.
+    var nearbyMeters: [String: Double]? = nil
 }
 
 enum ConditionalUnknownReason: Equatable {
@@ -1688,6 +1693,9 @@ enum ConditionReason: Equatable {
     case inDates, outsideDates
     case notNeeded
     case unknown(ConditionalUnknownReason)
+    /// Block check-ins only: the fix can't rule the place or country out,
+    /// so it counts as met (doubt favours the stricter result, spec §5.6).
+    case nearPlace, nearCountry
 }
 
 struct ConditionResult: Equatable {
@@ -1922,7 +1930,9 @@ enum ConditionEvaluator {
         if free && fix.isFromAccessory { return .unknown(.accessory) }
         switch condition {
         case .place(let place):
-            guard fix.isPrecise else { return .unknown(.needsPrecise) }
+            // A block also takes an approximate fix (the host already treats
+            // it as at least 10 km vague): doubt favours the stricter result.
+            guard fix.isPrecise || !free else { return .unknown(.needsPrecise) }
             let distance = distanceMeters(fix.latitude, fix.longitude, place.latitude, place.longitude)
             let radius = Double(place.radiusMeters)
             if free {
@@ -1931,16 +1941,30 @@ enum ConditionEvaluator {
                 if distance - accuracy > radius { return ConditionResult(status: .notMet, reason: .notAtPlace) }
                 return .unknown(.imprecise)
             }
-            // A block starts if the circle touches the place.
-            return distance - accuracy <= radius
-                ? ConditionResult(status: .met, reason: .atPlace)
-                : ConditionResult(status: .notMet, reason: .notAtPlace)
+            // A block starts if the circle touches the place; only a precise
+            // fix whose point is inside reads "You're at …".
+            if distance - accuracy > radius { return ConditionResult(status: .notMet, reason: .notAtPlace) }
+            return ConditionResult(status: .met,
+                                   reason: fix.isPrecise && distance <= radius ? .atPlace : .nearPlace)
         case .country(let code):
             guard let country, country.borderDistanceMeters.isFinite,
                   country.borderDistanceMeters >= 0 else { return .unknown(.countryUnavailable) }
             let inside = country.regionCode?.uppercased() == code.uppercased()
             if !free {
-                return inside ? ConditionResult(status: .met, reason: .inCountry)
+                // Inside is enough; so is a point the fix and the borders
+                // can't rule out (near the country, or a spot the dataset
+                // can't name next to it). Doubt favours the stricter result.
+                if inside { return ConditionResult(status: .met, reason: .inCountry) }
+                let reach = accuracy + borderMargin
+                let near: Bool
+                if let nearby = country.nearbyMeters {
+                    near = nearby[code.uppercased()].map { $0.isFinite && $0 <= reach } ?? false
+                } else {
+                    // The lookup didn't say which country is near: any border
+                    // this close leaves the answer in doubt.
+                    near = country.borderDistanceMeters <= reach
+                }
+                return near ? ConditionResult(status: .met, reason: .nearCountry)
                     : ConditionResult(status: .notMet, reason: .notInCountry)
             }
             let clear = country.borderDistanceMeters > accuracy + borderMargin
