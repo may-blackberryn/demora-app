@@ -1,6 +1,15 @@
 # Demora iOS full redesign — review
 
 ## Start here
+- **When & where step 4 (2026-11-12):** places and the one-shot location
+  check (`f4aa920` + review fixes `ab2c566`, `3387a4d`): Add condition → Place opens a
+  place sheet (centre from where you are now, 100 m–2 km, copy from another
+  rule); Check in reads one foreground fix only when a place could change the
+  answer (`3387a4d` adds: and uses are left), after an in-app card the first time; the iOS prompts are translated
+  in all eight languages. Countries (step 5) and block check-ins (step 6) are
+  still later; block rules can't be saved yet. Nothing seen on a screen or
+  tried with a real location. See "When & where step 4" at the end for
+  decisions, phone checks, privacy notes and what step 5 needs.
 - **When & where step 3 (2026-11-12):** check-in and Today rows (`bf2d2ed` +
   review fixes `4784fe8`): Check in is on; the check-in sheet checks day,
   time and dates (no location yet), shows ✓/✗/? with reasons and starts free
@@ -1170,3 +1179,157 @@ simulator runtime on this Mac.
 - Update the "no CoreLocation / NSLocation" source guards in
   `Tests/WhenWhereRulesHarness.py` and `Tests/WhenWhereCheckInHarness.py`.
 - Block check-ins (Review → receipt, Today rows for block rules) stay step 6.
+
+## When & where step 4 (2026-11-12)
+Step 4 of the approved `docs/conditional-sessions-redesign.md` (C15: places +
+location permission + Info.plist strings in 8 languages). Engine, saved-data
+model and capacity untouched (`git diff 8c0447c -- Shared/ChangeEngine.swift
+Shared/SharedModels.swift Shared/MonitoringBudget.swift` is empty). Commit
+`f4aa920` + review fixes `ab2c566` and `3387a4d` (below). Evidence: new
+`Tests/WhenWhereLocationHarness.py` compiles the real `RulesPresentation.swift`
+with the real models and runs CoreLocation-shaped samples through the trust
+rules into the engine's own evaluator and `ConditionalStart.plan`, plus source
+guards on the only CoreLocation file and on the permission strings; the step 2
+and 3 harnesses' "no CoreLocation / NSLocation" guards now state the new
+intent (location only in `Latch/LocationCheck.swift`, used only by the
+check-in and place sheets; While Using only). CoreLocation itself is not
+compiled by any harness, so **no real fix, prompt or timing was seen**: no
+simulator runtime on this Mac, and the phone wasn't used.
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| **`LocationCheck`** (`Latch/LocationCheck.swift`, host only, `@MainActor`): `requestWhenInUseAuthorization` only when never asked, one `requestLocation()` per read with `kCLLocationAccuracyBest` and a 15 s timeout, `stopUpdatingLocation()` the moment it resolves or is cancelled; one reader per sheet (`@StateObject`), cancelled on dismiss. No updates, monitoring, regions, visits, background modes, geocoder or map; nothing printed, logged or saved | C8; spec §5.5 step 4 and §11 | Yes — harness source guards |
+| The sheet always checks day/time/dates first (`location: .notRead`), then reads **only if one fix could make the rule true** (`ConditionalCheckIn.fixCouldDecide`): a place could; a country can't until its lookup (step 5); block check-ins are step 6. All of with a failed day → no read, no prompt; any of with a met day → no read | C8: read only when it changes the answer | Yes |
+| A read only on the user's tap: opening the sheet (it opens only from **Check in** / a Today **Check in ›** row), **Try again**, **Allow location**, or a hold on an aged check. The 10 s freshness timer and state publishes **never read**: a location check refreshed on its own shows "This rule needs your location." / "Check in again to check where you are." | No background-ish reads while a sheet sits open | Yes |
+| `CheckInResult.make` now takes the location input (no default) and keeps only `readLocation` and per-condition results; the **stamp comes from the evaluation that used the fix**, on a clock read after the fix arrives. Coordinates never leave the read's local scope | Step-3 note; C8 "never stored" | Yes |
+| The **aged-only resend** in `start`: a check that read location is never re-run from the clock alone; the hold reads one new fix, re-evaluates, and sends only if `mayStartAfterRecheck` (same rule version, day, zone, still met). Walked away meanwhile → shown with "Checked again. Hold again to start." | Step-3 "What step 4 needs" | Yes — worth your eye (alternative: always a second hold) |
+| Permission: **never asked** → in-sheet card ("Demora checks where you are once, when you tap Check in. It doesn't save or send your location.") with **Allow location** / **Not now**; iOS's prompt only after that tap. **Denied/restricted** → the place row reads "?" "Location is off for Demora. You can turn it on in Settings." — text only, no button, no redirect, no re-prompt | Spec §5.5 step 3; the 5.1.1(iv) history in CLAUDE.md | Yes — restricted uses the same words (Settings can't change it there); engine has one reason |
+| Trust (C9), host side `LocationTrust.checkInInput`: denial → location off; timeout/no fix/cancel → "Couldn't get your location…"; `sourceInformation.isSimulatedBySoftware` / `isProducedByAccessory` carried to the engine (simulated → "?"; accessory → "?" for free time); Approximate Location → iOS is asked once for temporary precise (purpose key `CheckIn`), declined → "Needs precise location". The engine then requires age ≤ 15 s, accuracy > 0 and the **whole circle inside** (distance + accuracy ≤ radius); a fix vaguer than the place is never met | C9 | Yes — harness: centre, 200 + 40 m in, 200 + 60 m "?", 320 − 60 m out, 3 km accuracy, simulated, accessory, approximate, 20 s old, invalid, denied, timeout |
+| **`sourceInformation == nil` is treated as a real fix** | Unknown whether iOS fills it for every ordinary fix; failing closed on nil could make every check-in read "looks simulated" | Limit — check on the phone (step 4 below) |
+| Countries in step 4: Add condition still says "Arrives in a later update."; a rule that only a country could decide shows "This rule can't be checked yet." / "Checking which country you're in arrives in a later update." and gets no Today row; a fix gives `country: nil` → "Couldn't tell which country you're in" | Brief: countries are step 5 | Limit until step 5 |
+| **Block rules stay unsaveable** (new editor problem "Blocks that start when you check in arrive in a later update. For now, use a repeating block or Block now."), now that places would make them valid; a day/time-only block still reads "Use a repeating block for rules without a place." (spec §5.10 wording) | Otherwise a saved block rule would have a check-in that can't run; block outcome is step 6 | Limit until step 6 |
+| **Place editor** (`Latch/PlaceEditor.swift`, its own sheet): Name, **Centre** ("Set to where I am now": card before iOS's prompt, then one fix), **Size** as five rows "100 m · About a house and its street" … "2 km · A small town centre" (C10, no free entry), **Use a place from another rule** (saved or waiting rules, de-duplicated, never this rule's own; a value copy, C11), **Use this place**. Choosing Place in Add condition opens it; a place card has **Change place** | Spec §5.7 | Yes |
+| A centre needs a fresh, precise, real fix **good to 100 m** (the smallest place); rounded to 5 decimals (~1 m). Simulated, accessory, approximate, stale or vaguer fixes are refused with the check-in's words ("Location from an accessory can't set a place" is new) | C12; a centre off by more than the place is useless | Yes |
+| **Show on map: deferred** | iOS 16 SwiftUI `Map` has no circle overlay or draggable pin; it needs an `MKMapView` wrapper, and it is the first Apple Maps network use to disclose. Not cheap; the spec makes it optional | Logged as deferred |
+| `NSLocationWhenInUseUsageDescription` as `INFOPLIST_KEY_…` in the host's Debug **and** Release settings (identical); `NSLocationTemporaryUsageDescriptionDictionary` → `CheckIn` in `Latch/Info.plist` (shared by both). No Always, no location background mode; extensions get nothing | Brief; spec §8 | Yes — harness compares both configurations; both built apps' Info.plist checked |
+| New `Latch/InfoPlist.xcstrings` with exactly those two keys in all 8 languages (English equal to the plist values, so no raw key ever shows). Never `CFBundleDisplayName` (Debug "dev demora" vs Release "demora" would collide). The camera string stays English | Brief; display names must stay per configuration | Yes — both builds emit 8 `.lproj/InfoPlist.strings`; display names still "dev demora"/"demora". Camera translation: possible follow-up |
+| The temporary-precise string is localized under its purpose key (`CheckIn`), as Apple's `requestTemporaryFullAccuracyAuthorization` docs describe | Apple's documented route | Check on the phone in another language |
+| `PrivacyInfo.xcprivacy` **unchanged**: CoreLocation is not a required-reason API, and location never leaves the device, so it isn't a collected data type | Brief: confirm and log. The spec's optional comment line was not added | Yes — harness asserts no location data type |
+| No network: no geocoder, no address search, no map | C5/C12 defaults | Yes |
+| Hero/row wording: spinner row "Checking where you are"; unread place "Not checked yet"; step-3 placeholders "Needs your location — arrives in a later update." and "Location checks arrive in a later update." removed from code and all tables | Brief | Yes |
+
+## When & where step 4 review fixes
+A fresh reviewer read `f4aa920` and the spec with none of the lead's
+conclusions. It found **no high-severity bug**: no read at launch, in the
+background or on a timer; one `requestLocation()` stopped on resolve; the
+creation callback ignored; nothing kept, logged or sent; spoofed, approximate,
+stale and invalid fixes fail closed; the stamp comes from the fix's own
+evaluation; no re-prompt after denial; Debug = Release; the catalog never
+touches the display name. Fixed in `ab2c566`, each with a source guard in
+`Tests/WhenWhereLocationHarness.py` that fails without the fix
+(mutation-checked):
+
+| Finding | Fix | Check |
+| --- | --- | --- |
+| **Medium:** **Try again** never read location, so after a timeout ("Couldn't get your location") or an aged check it only ever showed "Check in again to check where you are." — a dead end until the sheet was reopened | Try again is the user's tap: it runs the full check (one new fix when a place could decide; denied stays "off", never re-prompted) | Try again passes `userAsked: true`; three user-asked entry points |
+| Low: a read waiting on iOS's temporary-precise prompt couldn't be cancelled; after the sheet closed it still started a fix (≤ 15 s, no screen) | A read token bumped by every cancel; checked after the prompt, before `requestLocation()`; an older waiter is always ended | Order guard: token → prompt → check → request |
+| Low: a fix arriving after "Use a place from another rule" replaced the copied centre | The copy cancels the read in flight | Copy menu cancels before setting the centre |
+| Low: a double tap on **Allow location** left the card up after permission was granted | One permission request at a time; the button is disabled while iOS's prompt is up (both sheets) | Guard + `.disabled(requestingPermission)` |
+| Low: with Location Services off for the whole iPhone, iOS shows no prompt and never answers, so the wait never ended | Checked first (off the main thread); counts as "location off"; closing a sheet also ends any permission wait (`stop()`) | Guards on `requestPermission` and `stop()` |
+
+The same reviewer rechecked `ab2c566`: all five fixes correct, nothing new
+of high severity. Fixed in `3387a4d`:
+
+| Finding | Fix | Check |
+| --- | --- | --- |
+| **Medium (from `f4aa920`, more frequent after Try again):** a rule whose uses were spent, or whose free time was already on, still showed the card or read a fix before saying "You've used today's free time" — a read that can't change the answer (C8) | `locationStep` returns none when uses are spent or unknown or this rule's session runs; the screen says "used up" / "couldn't count" before asking | Table: spent, running, other rule's session, unknown count |
+| Low: a sheet closed during the Location Services check could still show iOS's prompt | The read token is checked after that check | Order guard |
+
+Left as limits (low): "Location services off for the whole iPhone" is only
+re-checked when the sheet is reopened, and reads with the same words as
+"off for Demora" (the engine has one reason; text only, as before);
+restricted (parental controls) also says "You can turn it on in Settings".
+
+Verification on `3387a4d`: all 38 `Tests/*Harness.py` (new
+`WhenWhereLocationHarness`: 106 checks, source guards, permission strings
+2 × 8 languages, 37 strings × 7 tables; `WhenWhereCheckInHarness` 202 and
+`WhenWhereRulesHarness` 116 checks with their location guards updated), both
+Swift harnesses, both localization checks, `git diff --check`, then
+sequential unsigned arm64 Debug and Release builds with stable Xcode 27.0
+(27A266a), DerivedData outside the repo, no compiler warnings; both built
+apps carry the location purpose string, the `CheckIn` purpose and eight
+`.lproj/InfoPlist.strings`, with display names "dev demora" / "demora".
+`f4aa920` and `ab2c566` passed the same verify. Every review fix was
+mutation-checked against its guard. Not installed; no simulator runtime.
+
+### When & where step 4: what to try on the phone
+1. Make a rule "Home": **Add condition → Place** opens the place sheet. Name
+   it Home, tap **Set to where I am now**: the card "Demora reads where you
+   are once…" appears with **Allow location**; tap it → iOS asks (While Using
+   / Once / Don't Allow). Allow: "Checking where you are", then "Centre set…".
+   Pick **250 m**. **Use this place**. Add **Days** = today. Free time, 30 min.
+   Let it land (or **Skip delay (dev)**).
+2. At home, **Check in** (Today row or the rule's sheet): spinner row
+   "Checking where you are", then ✓ "You're at Home" and **You can have free
+   time now.** Hold to start.
+3. Walk ~400 m away and check in again: ✗ "You're not at Home". Near the edge
+   (~230 m): "?" "Location isn't precise enough here" (doubt fails).
+4. Indoors with poor signal: either ✓, "?" imprecise, or after ≤ 15 s
+   "Couldn't get your location…". **If every check reads "This location looks
+   simulated", tell me** (the nil-source decision above).
+5. Settings → Demora → Location → **Never**: Check in shows "?" "Location is
+   off for Demora…" with Try again / Done; no prompt, no jump to Settings.
+   Set **Precise Location** off: Check in asks once for precise ("Demora needs
+   your precise location for this check…"); decline → "Needs precise location".
+6. Open a check-in, wait 2 minutes without holding: the rows turn into "This
+   rule needs your location. Check in again…" (no new read on its own). Hold
+   right after a met check that is 1:50–2:00 old: it reads once more, then starts.
+7. Close the sheet while "Checking where you are" spins: the location arrow
+   in the status bar should go away right after.
+8. Make a second rule and **Use a place from another rule** → Home: same
+   centre and size; change its size there and check the first rule is still
+   250 m.
+9. Monday (or any day the Days condition fails): no read at all — the place
+   row says "Not needed"; no prompt if you never allowed location.
+10. iPhone language Spanish/German/Hindi: both iOS prompts are translated.
+    Rules → New rule → Block with a place: the problem line says blocks that
+    start on check-in come later.
+11. Fresh install: nothing about location at launch or in onboarding.
+
+### Privacy notes for the owner (step 4)
+- New permission: **Location While Using**, asked only from Check in or Set
+  to where I am now, after an in-app card. Never Always, never background.
+- Read once per tap, in the foreground, checked on the device. Coordinates
+  are never saved, logged or sent; only ✓/✗ results reach the start request.
+- Saved places keep only name, centre (rounded to ~1 m) and size, in the App
+  Group state; they are in the device backup like other app data.
+- Place **names** appear in change summaries, so a trusted contact approving
+  a rule change sees "at Home" (CloudKit, or the email relay, which can read
+  the email). Never coordinates or sizes.
+- No new network traffic: no map, geocoder or address search in this build.
+- `PrivacyInfo.xcprivacy` and the App Store privacy label: no change expected
+  (nothing leaves the device). Confirm before submission.
+- **Website (still to write, separate repo, your deploy):** keep "We do not
+  collect … location data" and add a short "Location (optional)" section —
+  draft: "If you use a When & where rule with a place, Demora asks for your
+  location while you use the app. It reads it once when you tap Check in or
+  set a place, checks it on your iPhone, and never sends it to us. A saved
+  place keeps only its name, centre and size on your device (and in your
+  device backup). If a trusted contact approves a change, they see the
+  place's name." Add one line about Apple Maps only if a map ships later.
+
+### What step 5 needs (countries)
+- Flip `ConditionalCheckIn.countryLookupAvailable` (Add condition opens
+  Country; `fixCouldDecide` then lets a fix decide countries; Today rows
+  follow) and pass the bundled lookup's `ConditionalCountryLookup` instead of
+  `country: nil` in `LocationTrust.checkInInput` (one place).
+- The reason override for an unread country ("Arrives in a later update." in
+  `ConditionalCheckIn.reason`) and `.arrivesLater(.country)` then disappear;
+  update the guards in `WhenWhereCheckInHarness` / `WhenWhereLocationHarness`
+  that pin them.
+- "Use the country I'm in" can reuse `LocationCheck.readOnce` (it doesn't
+  need precise: pass `wantsPrecise: false`); a country check shouldn't ask for
+  temporary precise unless a place also needs it.
+- Step 6: remove `EditorProblem.blockLater` (and the harness's
+  `draft.isFreeTime` exception in the validation table), then add block
+  check-ins.
