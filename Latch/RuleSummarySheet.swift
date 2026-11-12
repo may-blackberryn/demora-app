@@ -44,6 +44,7 @@ private enum SummaryEditor: Identifiable {
     case limit(AppLimit)
     case scheduleApps(BlockSchedule)
     case dayNight(DayNightGroup)
+    case conditional(ConditionalRule)
     case legacyWake, legacySleep
 
     var id: String {
@@ -51,6 +52,7 @@ private enum SummaryEditor: Identifiable {
         case .limit(let limit): return "limit-\(limit.id)"
         case .scheduleApps(let schedule): return "schedule-\(schedule.id)"
         case .dayNight(let group): return "day-night-\(group.id)"
+        case .conditional(let rule): return "conditional-\(rule.id)"
         case .legacyWake: return "legacy-wake"
         case .legacySleep: return "legacy-sleep"
         }
@@ -83,6 +85,7 @@ struct RuleSummarySheet: View {
     // Read in events, never while drawing.
     @State private var blockedLimitIDs: Set<UUID> = []
     @State private var wakeOpens: [RuleRef: Date] = [:]
+    @State private var conditionalUsed: [UUID: Int] = [:]
     @State private var extraState: ExtraTimeState = .notConfigured
     /// The queued Block now this sheet opened on, kept after it applies.
     @State private var rememberedStart: PendingChange?
@@ -142,12 +145,14 @@ struct RuleSummarySheet: View {
             }
         case .live:
             let chip = RuleChip.live(ref: ref, state: state, blockedLimitIDs: blockedLimitIDs,
-                                     wakeOpens: wakeOpens, now: now, calendar: calendar)
+                                     wakeOpens: wakeOpens, conditionalUsed: conditionalUsed,
+                                     now: now, calendar: calendar)
             let pending = RulePending.index(state.pending)[ref]
             VStack(alignment: .leading, spacing: DemoraSpace.m) {
                 header(state: state, chip: chip.map {
                     ChipText.make($0, now: now, calendar: calendar, locale: locale) })
-                let rows = RuleSummaryFacts.make(ref: ref, state: state, extraLeft: extraLeft)
+                let rows = RuleSummaryFacts.make(ref: ref, state: state, extraLeft: extraLeft,
+                                                 conditionalUsed: usedToday)
                 if !rows.isEmpty || explanation != nil {
                     dashed
                     if let explanation {
@@ -204,6 +209,7 @@ struct RuleSummarySheet: View {
         case .session: return "Session"
         case .alwaysOn: return "Always on"
         case .waits: return "Your waits"
+        case .conditional: return "When & where"
         }
     }
 
@@ -223,6 +229,8 @@ struct RuleSummarySheet: View {
             return state.dayNightGroups.first { $0.id == id }?.name ?? queuedName(state)
         case .queuedSession:
             return queuedName(state)
+        case .conditional(let id):
+            return ConditionalText.rule(id, state: state)?.name ?? ""
         default:
             return RuleNames.name(ref, saved: "")
         }
@@ -251,7 +259,8 @@ struct RuleSummarySheet: View {
     // MARK: Facts
 
     @ViewBuilder private func facts(state: LatchState) -> some View {
-        let rows = RuleSummaryFacts.make(ref: ref, state: state, extraLeft: extraLeft)
+        let rows = RuleSummaryFacts.make(ref: ref, state: state, extraLeft: extraLeft,
+                                         conditionalUsed: usedToday)
         VStack(alignment: .leading, spacing: DemoraSpace.s) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, fact in
                 factRow(fact)
@@ -321,7 +330,33 @@ struct RuleSummarySheet: View {
             }
         case .sleep(let start):
             FactRow(label: label, value: RuleText.clock(start, locale: locale))
+        case .conditions(_, let conditions):
+            VStack(alignment: .leading, spacing: DemoraSpace.xs) {
+                Text(label).demoraType(.meta).foregroundStyle(Ink.inkSoft)
+                ForEach(Array(conditions.enumerated()), id: \.offset) { _, condition in
+                    ConditionRow(condition: condition)
+                }
+            }
+            .accessibilityElement(children: .combine)
+        case .then(let outcome):
+            let value = ConditionalText.outcomeLines(outcome, translate: tr, locale: locale).joined(separator: "\n")
+            if selection != nil {
+                Button { path.append(.apps) } label: {
+                    FactRow(label: label, value: value, chevron: true)
+                }
+                .buttonStyle(.plain)
+            } else {
+                FactRow(label: label, value: value)
+            }
+        case .usesToday(let left, let total):
+            FactRow(label: label, value: String(format: tr("%d of %d left"), left, total))
         }
+    }
+
+    /// Today's uses of this When & where rule, read in events; nil = unknown.
+    private var usedToday: Int? {
+        guard case .conditional(let id) = ref else { return nil }
+        return conditionalUsed[id]
     }
 
     private func howMuch(daily: Int, perDay: [Int: Int]) -> String {
@@ -391,6 +426,11 @@ struct RuleSummarySheet: View {
         case .planned(let id): found = state.planned.first { $0.id == id && $0.kind != .free }?.selection
         case .session(let id): found = state.sessions.first { $0.id == id && $0.kind != .free }?.selection
         case .dayNight(let id): found = state.dayNightGroups.first { $0.id == id }?.scope.selection
+        case .conditional(let id):
+            switch state.conditionalRules.first(where: { $0.id == id })?.outcome {
+            case .freeTime(.unblock, let apps, _, _)?, .block(_, let apps, _)?: found = apps
+            default: found = nil
+            }
         default: found = nil
         }
         guard let found, RuleCounts(found).total > 0 else { return nil }
@@ -494,6 +534,19 @@ struct RuleSummarySheet: View {
                 .disabled(blocked)
             case .websites:
                 primary(tr("Edit list")) { path.append(.websites) }
+            case .conditional(let id):
+                if let rule = state.conditionalRules.first(where: { $0.id == id }) {
+                    // Check in arrives with C15 step 3; until then it is shown,
+                    // clearly off, so the rule's purpose reads right.
+                    primary(tr("Check in")) {}.disabled(true)
+                    Text(tr("Check in arrives in a later update."))
+                        .demoraType(.meta)
+                        .foregroundStyle(Ink.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                    secondary(tr("Edit")) { editor = .conditional(rule) }.disabled(blocked)
+                    quiet(tr("Remove rule")) { receipt = ChangeReceiptRequest(action: .removeConditionalRule(id: id)) }
+                        .disabled(blocked)
+                }
             case .queuedSession, .waits:
                 EmptyView()
             }
@@ -511,6 +564,15 @@ struct RuleSummarySheet: View {
     private func primary(_ title: String, action: @escaping () -> Void) -> some View {
         Button(title, action: action)
             .buttonStyle(DemoraPrimaryButtonStyle())
+    }
+
+    private func secondary(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .buttonStyle(.plain)
+            .font(DemoraType.button)
+            .foregroundStyle(accent)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(Rectangle())
     }
 
     private func quiet(_ title: String, action: @escaping () -> Void) -> some View {
@@ -548,6 +610,7 @@ struct RuleSummarySheet: View {
         case .limit(let limit): LimitEditorView(existing: limit)
         case .scheduleApps(let schedule): ScheduleSelectionEditorView(schedule: schedule)
         case .dayNight(let group): DayNightQueuedEditor(group: group)
+        case .conditional(let rule): ConditionalRuleEditor(existing: rule)
         case .legacyWake: WakeBlockEditor(presentation: .sheet)
         case .legacySleep: SleepBlockEditor(presentation: .sheet)
         }
@@ -563,6 +626,7 @@ struct RuleSummarySheet: View {
         let reads = RuleLiveReads.read(state: state)
         blockedLimitIDs = reads.blockedLimitIDs
         wakeOpens = reads.wakeOpens
+        conditionalUsed = reads.conditionalUsed
         if case .limit(let id) = ref, let limit = state.limits.first(where: { $0.id == id }) {
             extraState = LimitFeatures.extraTimeState(for: limit)
         } else {

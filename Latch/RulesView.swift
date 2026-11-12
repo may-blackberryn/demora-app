@@ -30,6 +30,7 @@ struct RulesView: View {
     // Read in events (appear, state refresh), never while drawing.
     @State private var blockedLimitIDs: Set<UUID> = []
     @State private var wakeOpens: [RuleRef: Date] = [:]
+    @State private var conditionalUsed: [UUID: Int] = [:]
     @State private var hasConflicts = false
     @State private var outgoing: [ContactsRelay.OutgoingRequest] = []
     @State private var showChooser = false
@@ -203,7 +204,8 @@ struct RulesView: View {
                     ForEach(section.cards) { card in
                         let chip = RuleChip.live(ref: card.ref, state: state,
                                                  blockedLimitIDs: blockedLimitIDs,
-                                                 wakeOpens: wakeOpens, now: now, calendar: calendar)
+                                                 wakeOpens: wakeOpens, conditionalUsed: conditionalUsed,
+                                                 now: now, calendar: calendar)
                         RuleCardView(
                             name: RuleNames.name(card),
                             summary: RuleSummaryLine.text(RuleSummaryLine.parts(for: card.ref, state: state),
@@ -261,6 +263,7 @@ struct RulesView: View {
         case .repeating: ScheduleEditorView()
         case .planned: PlannedEditorView()
         case .dayNight: DayNightQueuedEditor(group: DayNightGroup(name: ""))
+        case .whenWhere: ConditionalRuleEditor(existing: nil)
         case .website: EmptyView()
         }
     }
@@ -283,6 +286,7 @@ struct RulesView: View {
         let reads = RuleLiveReads.read(state: state)
         blockedLimitIDs = reads.blockedLimitIDs
         wakeOpens = reads.wakeOpens
+        conditionalUsed = reads.conditionalUsed
         hasConflicts = reads.hasConflicts
     }
 
@@ -339,6 +343,10 @@ enum RuleLiveReads {
         var blockedLimitIDs: Set<UUID> = []
         var wakeOpens: [RuleRef: Date] = [:]
         var hasConflicts = false
+        /// Today's uses per When & where free-time rule, on the guarded clock
+        /// in every recent time zone (the engine's own count). Empty when the
+        /// zones can't be resolved: the cards then show no count.
+        var conditionalUsed: [UUID: Int] = [:]
     }
 
     @MainActor static func read(state: LatchState) -> Reads {
@@ -362,6 +370,13 @@ enum RuleLiveReads {
             reads.wakeOpens[.legacyWake] = HomeDayProjection.projectedRelease(
                 until: until, wall: now, guarded: guarded,
                 latestMinutes: state.wakeRule.latest(on: now), calendar: .current)
+        }
+        if state.conditionalRules.contains(where: \.isFreeTime),
+           let keys = ConditionalClockInput.current(for: state, guardedNow: guarded, wallNow: now).dayKeys {
+            for rule in state.conditionalRules where rule.isFreeTime {
+                reads.conditionalUsed[rule.id] = ConditionalUses.used(ruleID: rule.id, dayKeys: keys,
+                                                                      in: state.conditionalUses)
+            }
         }
         let week = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
         reads.hasConflicts = !SchedulePrecedence.conflicts(
@@ -409,6 +424,8 @@ struct ChipText: Equatable {
                 RuleText.duration(date.timeIntervalSince(now), locale: locale)))
         case .on: return ChipText(kind: .active, text: tr("On"))
         case .off: return ChipText(kind: .neutral, text: tr("Off"))
+        case .usesLeft(let left): return ChipText(kind: .neutral, text: String(format: tr("%d left today"), left))
+        case .noneLeft: return ChipText(kind: .neutral, text: tr("None left today"))
         }
     }
 }
@@ -576,6 +593,7 @@ struct NewRuleChooser: View {
         case .planned: return ("calendar.badge.clock", "Plan a block", "One time: a trip, an exam, a weekend")
         case .dayNight: return ("sun.horizon", "Day & night", "A wake-up wait and a sleep time")
         case .website: return ("globe", "Website", "Block a site by its address")
+        case .whenWhere: return ("mappin.and.ellipse", "When & where", "Free time or a block that depends on place, day or time")
         }
     }
 }

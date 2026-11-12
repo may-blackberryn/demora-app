@@ -825,7 +825,7 @@ private struct ExtraTimePage: View {
 // MARK: - Shared time rows
 
 /// From and To joined by a dotted thread.
-private struct FromToRows: View {
+struct FromToRows: View {
     @Binding var start: Date
     @Binding var end: Date
     let startTitle: String

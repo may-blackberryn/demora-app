@@ -217,13 +217,15 @@ struct CalendarView: View {
     private func events(on day: Date) -> [DayEvent] {
         var out: [DayEvent] = []
         for s in model.state.schedules where s.recurrence.matches(dayOf: day) {
-            out.append(DayEvent(symbol: "repeat", name: s.name,
+            // A When & where rule's own window opens its rule.
+            out.append(DayEvent(symbol: s.ownerRuleID == nil ? "repeat" : "mappin.and.ellipse", name: s.name,
                 detail: "\(minutesLabel(s.startMinutes))–\(minutesLabel(s.endMinutes)) · \(s.mode.label)",
                 color: accent,
                 summary: s.mode.label,
                 appsTitle: s.mode == .blockAllExcept
                     ? tr("Apps that stay usable") : tr("Apps to block"),
-                selection: s.selection, scheduleID: s.id, ref: .schedule(s.id)))
+                selection: s.selection, scheduleID: s.id,
+                ref: s.ownerRuleID.map { RuleRef.conditional($0) } ?? .schedule(s.id)))
         }
         for e in model.state.exemptions where e.recurrence.matches(dayOf: day) {
             out.append(DayEvent(symbol: "leaf", name: e.name,

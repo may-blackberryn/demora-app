@@ -31,6 +31,8 @@ enum RuleRef: Hashable {
     case appDeletion, adultWebsites, websites
     /// The delay policy (Your waits), so its pending change has a home too.
     case waits
+    /// A When & where rule (docs/conditional-sessions-redesign.md §5.3).
+    case conditional(UUID)
 
     var kind: RuleKind {
         switch self {
@@ -42,6 +44,7 @@ enum RuleRef: Hashable {
         case .dayNight, .legacyWake, .legacySleep: return .dayNight
         case .appDeletion, .adultWebsites, .websites: return .alwaysOn
         case .waits: return .waits
+        case .conditional: return .conditional
         }
     }
 }
@@ -68,6 +71,7 @@ extension RuleRef {
 
 enum RuleKind: Equatable {
     case limit, repeatingBlock, freePeriod, dayNight, planned, session, alwaysOn, waits
+    case conditional
 }
 
 // MARK: - Pending changes per rule
@@ -123,10 +127,15 @@ enum RulePending {
              .setContactsOverride, .addContact, .removeContact, .setContactPermissions,
              .unlockPreventGuide, .unlockPasswordView:
             return nil
-        case .addConditionalRule, .updateConditionalRule, .removeConditionalRule,
-             .startConditionalSession:
-            // When & where step 1 is engine only; the Rules card and its
-            // `RuleRef` arrive with the editor (spec C15 step 2).
+        case .addConditionalRule(let rule), .updateConditionalRule(let rule):
+            return .conditional(rule.id)
+        case .removeConditionalRule(let id):
+            return .conditional(id)
+        case .startConditionalSession:
+            // A check-in start is not a change to the rule: free time starts
+            // at once, and its conflict key differs from the rule's, so it must
+            // not lock the rule's Edit and Remove. A waiting check-in block
+            // (step 6) shows in Changes.
             return nil
         }
     }
@@ -149,11 +158,11 @@ enum RulePending {
     static func label(change: PendingChange, state: LatchState) -> Label {
         switch change.action {
         case .removeLimit, .removeSchedule, .removeExemption, .removePlanned,
-             .removeDayNightGroup, .endSessionEarly:
+             .removeDayNightGroup, .endSessionEarly, .removeConditionalRule:
             return .removed
         case .startSession:
             return .starts
-        case .addLimit, .addSchedule, .addExemption, .addPlanned:
+        case .addLimit, .addSchedule, .addExemption, .addPlanned, .addConditionalRule:
             return .added
         case .upsertDayNightGroup(let group)
             where !state.dayNightGroups.contains(where: { $0.id == group.id }):
@@ -317,14 +326,20 @@ enum RuleChip: Equatable {
     case opens(Date)
     case startsIn(Date)
     case on, off
+    /// When & where free time: uses left today (never "conditions met").
+    case usesLeft(Int)
+    case noneLeft
 
     static let upcomingWindow: TimeInterval = 24 * 3600
 
     /// One chip per card (spec §5.4). `blockedLimitIDs` is the monitor's spent
     /// list and `wakeOpens` the projected wake releases, both read by the view
     /// in event callbacks.
+    /// `conditionalUsed` is today's uses per free-time rule, read by the view in
+    /// events on the guarded clock; a rule missing from it shows no count.
     static func live(ref: RuleRef, state: LatchState, blockedLimitIDs: Set<UUID>,
-                     wakeOpens: [RuleRef: Date] = [:], now: Date, calendar: Calendar) -> RuleChip? {
+                     wakeOpens: [RuleRef: Date] = [:], conditionalUsed: [UUID: Int] = [:],
+                     now: Date, calendar: Calendar) -> RuleChip? {
         func upcoming(_ date: Date?) -> RuleChip? {
             guard let date, date > now, date.timeIntervalSince(now) <= upcomingWindow else { return nil }
             return .startsIn(date)
@@ -387,6 +402,27 @@ enum RuleChip: Equatable {
             return state.blockedDomains.isEmpty ? .off : .on
         case .queuedSession, .waits:
             return nil
+        case .conditional(let id):
+            guard let rule = state.conditionalRules.first(where: { $0.id == id }) else { return nil }
+            if let session = state.sessions.first(where: {
+                $0.conditionalRuleID == id && $0.startedAt <= now && now < $0.endsAt
+            }) {
+                return session.kind == .block ? .onUntil(session.endsAt) : .freeUntil(session.endsAt)
+            }
+            switch rule.outcome {
+            case .block:
+                // A time branch running on its own (an owned repeating block).
+                let ends = state.schedules.filter { $0.ownerRuleID == id }.compactMap {
+                    RuleTimes.current(start: $0.startMinutes, end: $0.endMinutes,
+                                      recurrence: $0.recurrence, at: now, calendar: calendar)?.end
+                }
+                return ends.max().map { .onUntil($0) }
+            case .freeTime(_, _, _, let usesPerDay):
+                if ConditionalText.ruledOutToday(rule, now: now, calendar: calendar) { return nil }
+                guard let used = conditionalUsed[id] else { return nil }
+                let left = max(0, usesPerDay - used)
+                return left > 0 ? .usesLeft(left) : .noneLeft
+            }
         }
     }
 }
@@ -394,12 +430,13 @@ enum RuleChip: Equatable {
 // MARK: - Catalog
 
 enum RuleSection: Equatable, CaseIterable {
-    case limits, schedules, dayNight, planned, alwaysOn
+    case limits, schedules, conditional, dayNight, planned, alwaysOn
 
     var titleKey: String {
         switch self {
         case .limits: return "Limits"
         case .schedules: return "Schedules"
+        case .conditional: return "When & where"
         case .dayNight: return "Day & night"
         case .planned: return "Planned"
         case .alwaysOn: return "Always on"
@@ -440,13 +477,16 @@ enum RuleCatalog {
                 additions[.planned, default: []].append(RuleCard(ref: .planned(window.id), name: window.name, isAddition: true))
             case .startSession(let name, _, _, _):
                 additions[.planned, default: []].append(RuleCard(ref: .queuedSession(change.id), name: name, isAddition: true))
+            case .addConditionalRule(let rule) where !state.conditionalRules.contains(where: { $0.id == rule.id }):
+                additions[.conditional, default: []].append(RuleCard(ref: .conditional(rule.id), name: rule.name, isAddition: true))
             default:
                 continue
             }
         }
 
         let limits = state.limits.map { RuleCard(ref: .limit($0.id), name: $0.name) }
-        let blocks = state.schedules.enumerated()
+        // A When & where rule's own windows show under that rule, not here.
+        let blocks = state.schedules.filter { $0.ownerRuleID == nil }.enumerated()
             .sorted { ($0.element.startMinutes, $0.offset) < ($1.element.startMinutes, $1.offset) }
             .map { RuleCard(ref: .schedule($0.element.id), name: $0.element.name) }
         let free = state.exemptions.enumerated()
@@ -466,6 +506,8 @@ enum RuleCatalog {
         let all: [(RuleSection, [RuleCard])] = [
             (.limits, limits + (additions[.limits] ?? [])),
             (.schedules, blocks + free + (additions[.schedules] ?? [])),
+            (.conditional, state.conditionalRules.map { RuleCard(ref: .conditional($0.id), name: $0.name) }
+                + (additions[.conditional] ?? [])),
             (.dayNight, dayNight),
             (.planned, running + planned + (additions[.planned] ?? [])),
             (.alwaysOn, [RuleCard(ref: .appDeletion, name: ""),
@@ -497,6 +539,11 @@ enum RuleCatalog {
     /// that session (same name, kind and apps, started after it was queued).
     /// Every other ref is itself.
     static func resolve(_ ref: RuleRef, state: LatchState, remembered: PendingChange?) -> RuleRef {
+        // An owned window (Today's thread, the Calendar) opens its rule.
+        if case .schedule(let id) = ref,
+           let owner = state.schedules.first(where: { $0.id == id })?.ownerRuleID {
+            return .conditional(owner)
+        }
         guard case .queuedSession(let changeID) = ref,
               !state.pending.contains(where: { $0.id == changeID }),
               let remembered, remembered.id == changeID,
@@ -543,6 +590,9 @@ enum RuleCatalog {
             return hasLegacySleep(state) ? .live : .gone
         case .appDeletion, .adultWebsites, .websites, .waits:
             return .live
+        case .conditional(let id):
+            if state.conditionalRules.contains(where: { $0.id == id }) { return .live }
+            return queued { if case .addConditionalRule(let r) = $0 { return r.id == id }; return false }
         }
     }
 }
@@ -698,6 +748,8 @@ enum RuleSummaryLine {
         case sites(Int)
         /// Legacy wake-up: from its hour, wait after the tap.
         case legacyWake(hour: Int, wait: Int)
+        case conditions(ConditionalMatch, [ConditionalCondition])
+        case conditionalOutcome(ConditionalOutcome)
     }
 
     /// What one card says under its name (spec §5.4). Queued additions read
@@ -758,6 +810,9 @@ enum RuleSummaryLine {
         case .adultWebsites: return [.appleFilter]
         case .websites: return [.sites(state.blockedDomains.count)]
         case .waits: return []
+        case .conditional(let id):
+            guard let rule = ConditionalText.rule(id, state: state) else { return [] }
+            return [.conditions(rule.match, rule.conditions), .conditionalOutcome(rule.outcome)]
         }
     }
 
@@ -826,6 +881,11 @@ enum RuleSummaryLine {
             case .sites(let count):
                 return count == 0 ? translate("No sites yet")
                     : RuleText.counts(RuleCounts(sites: count), translate: translate)
+            case .conditions(let match, let conditions):
+                return ConditionalText.line(match, conditions, translate: translate,
+                                            locale: locale, calendar: calendar)
+            case .conditionalOutcome(let outcome):
+                return ConditionalText.outcomeShort(outcome, translate: translate, locale: locale)
             }
         }
         .joined(separator: " · ")
@@ -859,6 +919,11 @@ enum RuleFact: Equatable {
     case extraTime([ExtraUse], left: Int?)
     case wakeUp(start: Int, wait: Int, latest: Int?)
     case sleep(Int)
+    /// When & where: "If (all of)" with one line per condition, "Then", and
+    /// today's uses for free time.
+    case conditions(ConditionalMatch, [ConditionalCondition])
+    case then(ConditionalOutcome)
+    case usesToday(left: Int, of: Int)
 
     var labelKey: String {
         switch self {
@@ -870,6 +935,9 @@ enum RuleFact: Equatable {
         case .extraTime: return "Extra time"
         case .wakeUp: return "Wake-up"
         case .sleep: return "Sleep"
+        case .conditions(let match, _): return match == .all ? "If (all of)" : "If (any of)"
+        case .then: return "Then"
+        case .usesToday: return "Today"
         }
     }
 }
@@ -877,7 +945,9 @@ enum RuleFact: Equatable {
 enum RuleSummaryFacts {
     /// The sheet's fact rows, only those that apply (spec §5.6). `extraLeft` is
     /// today's remaining extra-time uses, read by the view in an event callback.
-    static func make(ref: RuleRef, state: LatchState, extraLeft: Int? = nil) -> [RuleFact] {
+    /// `conditionalUsed` is a When & where rule's uses today (nil = unknown).
+    static func make(ref: RuleRef, state: LatchState, extraLeft: Int? = nil,
+                     conditionalUsed: Int? = nil) -> [RuleFact] {
         switch ref {
         case .limit(let id):
             guard let limit = state.limits.first(where: { $0.id == id })
@@ -972,6 +1042,15 @@ enum RuleSummaryFacts {
             return [.sleep(rule.startMinutes), .days(rule.weekdays)]
         case .appDeletion, .adultWebsites, .websites, .waits:
             return []
+        case .conditional(let id):
+            guard let rule = ConditionalText.rule(id, state: state) else { return [] }
+            var facts: [RuleFact] = [.conditions(rule.match, rule.conditions), .then(rule.outcome)]
+            // Today only for a saved free-time rule whose uses could be read.
+            if case .freeTime(_, _, _, let uses) = rule.outcome, let used = conditionalUsed,
+               state.conditionalRules.contains(where: { $0.id == id }) {
+                facts.append(.usesToday(left: max(0, uses - used), of: uses))
+            }
+            return facts
         }
     }
 
@@ -1027,10 +1106,19 @@ enum ExtraUseBuilder {
 // MARK: - New rule chooser
 
 enum NewRuleKind: CaseIterable, Equatable {
-    case dailyLimit, blockNow, repeating, planned, dayNight, website
+    case dailyLimit, blockNow, repeating, planned, dayNight, website, whenWhere
 
     /// Why a row can't be chosen, as a translation key; nil when it can.
     static func disabledReason(_ kind: NewRuleKind, state: LatchState) -> String? {
+        if kind == .whenWhere {
+            // Same count as the engine: saved rules plus queued additions.
+            let queued = state.pending.filter {
+                if case .addConditionalRule = $0.action { return true }
+                return false
+            }.count
+            return state.conditionalRules.count + queued >= ConditionalRule.maximumRules
+                ? "You can have up to five When & where rules." : nil
+        }
         guard kind == .dayNight else { return nil }
         if state.dayNightGroups.count >= 5 { return "You can have up to five day & night groups." }
         let waiting = state.pending.contains {
@@ -1050,6 +1138,9 @@ enum NewRuleKind: CaseIterable, Equatable {
 enum EditorProblem: Equatable {
     case name, apps, noDays, sameTimes, monthlyMidnight, endBeforeStart
     case extraTooLong, extraGate
+    /// When & where (`EditorValidation.conditional`).
+    case nameTooLong, noConditions, tooManyConditions, datesOrder
+    case blockNeedsPlace, blockAnyOfDays, invalid
     /// Not a problem to explain: the draft equals the saved rule.
     case unchanged
 
@@ -1063,6 +1154,13 @@ enum EditorProblem: Equatable {
         case .endBeforeStart: return "End after it starts."
         case .extraTooLong: return "The limit and its extra time must fit in one day."
         case .extraGate: return "Choose a way to unlock each extra-time use that's still available."
+        case .nameTooLong: return "Use a shorter name."
+        case .noConditions: return "Add at least one condition."
+        case .tooManyConditions: return "Use at most four conditions."
+        case .datesOrder: return "The last day can't be before the first."
+        case .blockNeedsPlace: return "A block needs a place or a country, which arrive in a later update. For now, use a repeating block."
+        case .blockAnyOfDays: return "With “any of”, a block can use times, places and countries, not days or dates."
+        case .invalid: return "Check this rule's settings."
         case .unchanged: return nil
         }
     }
@@ -1136,10 +1234,269 @@ enum EditorValidation {
         return nil
     }
 
+    /// When & where (R12, spec §5.10). Names the first problem in the order
+    /// the page reads; `ConditionalRule.isValid` (the engine's own check) is
+    /// the last word, so nil here always means the engine accepts the draft.
+    static func conditional(_ draft: ConditionalRule, existing: ConditionalRule?) -> EditorProblem? {
+        let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty { return .name }
+        if draft.name.count > ConditionalRule.maximumNameLength { return .nameTooLong }
+        if draft.conditions.isEmpty { return .noConditions }
+        if draft.conditions.count > ConditionalRule.maximumConditions { return .tooManyConditions }
+        for condition in draft.conditions {
+            switch condition {
+            case .days(let days) where days.isEmpty: return .noDays
+            case .time(let start, let end) where start == end: return .sameTimes
+            case .dates(let first, let last) where first.isValid && last.isValid && last < first:
+                return .datesOrder
+            default:
+                if !condition.isValid { return .invalid }
+            }
+        }
+        switch draft.outcome {
+        case .freeTime(let kind, let selection, _, _):
+            if kind == .unblock && !hasSelection(selection) { return .apps }
+        case .block(_, let selection, _):
+            if !hasSelection(selection) { return .apps }
+            if !draft.hasLocationCondition { return .blockNeedsPlace }
+            if draft.match == .any && draft.conditions.contains(where: {
+                switch $0 {
+                case .days, .dates: return true
+                case .place, .country, .time: return false
+                }
+            }) { return .blockAnyOfDays }
+        }
+        if !draft.isValid { return .invalid }
+        if let existing, draft.sameConfiguration(as: existing) { return .unchanged }
+        return nil
+    }
+
     /// Block now. A free period needs no apps; block and unblock do.
     static func session(kind: SessionKind, selection: FamilyActivitySelection) -> EditorProblem? {
         kind != .free && selection.applicationTokens.isEmpty && selection.categoryTokens.isEmpty
             ? .apps : nil
+    }
+}
+
+// MARK: - When & where words
+
+/// Card line, summary sheet lines and editor defaults for When & where rules
+/// (docs/conditional-sessions-redesign.md §5.3, §5.4, §5.10). Place and
+/// country names only: never coordinates or distances, except a place's
+/// chosen size on the summary sheet.
+enum ConditionalText {
+    /// The saved rule, or a queued addition's.
+    static func rule(_ id: UUID, state: LatchState) -> ConditionalRule? {
+        if let saved = state.conditionalRules.first(where: { $0.id == id }) { return saved }
+        for change in state.pending {
+            if case .addConditionalRule(let rule) = change.action, rule.id == id { return rule }
+        }
+        return nil
+    }
+
+    /// An "all of" rule whose days or dates exclude today can't hold today, so
+    /// its card shows no uses chip (the summary line carries the days). Day and
+    /// date are read in the Gregorian calendar, as the evaluator reads them.
+    static func ruledOutToday(_ rule: ConditionalRule, now: Date, calendar: Calendar) -> Bool {
+        guard rule.match == .all else { return false }
+        let gregorian = ConditionalDay.gregorian(in: calendar.timeZone)
+        let weekday = gregorian.component(.weekday, from: now)
+        let today = ConditionalDay.of(now, in: calendar.timeZone)
+        return rule.conditions.contains { condition in
+            switch condition {
+            case .days(let days): return !days.contains(weekday)
+            case .dates(let first, let last): return today < first || last < today
+            case .place, .country, .time: return false
+            }
+        }
+    }
+
+    /// "at Home", "in Mexico", "on weekends", "22:00–06:00", "20 Dec to 27 Dec".
+    static func condition(_ condition: ConditionalCondition, translate: RuleText.Translate,
+                          locale: Locale, calendar: Calendar) -> String {
+        switch condition {
+        case .place(let place):
+            return String(format: translate("at %@"), place.name)
+        case .country(let code):
+            return String(format: translate("in %@"), countryName(code, locale: locale))
+        case .days(let days):
+            switch RuleDays(weekdays: days) {
+            case .everyDay: return translate("every day")
+            case .weekdays: return translate("on weekdays")
+            case .weekends: return translate("on weekends")
+            default:
+                return String(format: translate("on %@"),
+                              RuleText.days(.some(days), translate: translate, calendar: calendar))
+            }
+        case .time(let start, let end):
+            return RuleText.clock(start, locale: locale) + "–" + RuleText.clock(end, locale: locale)
+        case .dates(let first, let last):
+            if first == last { return date(first, locale: locale, calendar: calendar) }
+            return String(format: translate("%@ to %@"), date(first, locale: locale, calendar: calendar),
+                          date(last, locale: locale, calendar: calendar))
+        }
+    }
+
+    static func countryName(_ code: String, locale: Locale) -> String {
+        locale.localizedString(forRegionCode: code) ?? code
+    }
+
+    static func date(_ day: ConditionalDay, locale: Locale, calendar: Calendar) -> String {
+        guard let value = ConditionalDay.gregorian(in: calendar.timeZone)
+                .date(from: DateComponents(year: day.year, month: day.month, day: day.day))
+        else { return "\(day.year)-\(day.month)-\(day.day)" }
+        return value.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted, locale: locale,
+                                                calendar: calendar, timeZone: calendar.timeZone))
+    }
+
+    /// Upper-cases only the first letter, in the language's own rules.
+    static func capitalizedFirst(_ text: String, locale: Locale) -> String {
+        guard let first = text.first else { return text }
+        return String(first).uppercased(with: locale) + text.dropFirst()
+    }
+
+    /// The card's condition part: "In Mexico, on Sun" / "At Home, or 22:00–06:00".
+    static func line(_ match: ConditionalMatch, _ conditions: [ConditionalCondition],
+                     translate: RuleText.Translate, locale: Locale, calendar: Calendar) -> String {
+        let parts = conditions.map { condition($0, translate: translate, locale: locale, calendar: calendar) }
+        guard var result = parts.first else { return String() }
+        for part in parts.dropFirst() {
+            result = match == .all ? result + ", " + part
+                : String(format: translate("%@, or %@"), result, part)
+        }
+        return capitalizedFirst(result, locale: locale)
+    }
+
+    /// The card's outcome part: "1 hr free", "2 × 30 min free", "blocks 1 app".
+    static func outcomeShort(_ outcome: ConditionalOutcome, translate: RuleText.Translate,
+                             locale: Locale) -> String {
+        switch outcome {
+        case .freeTime(let kind, _, let minutes, let uses):
+            let length = RuleText.minutes(minutes, locale: locale)
+            if kind == .unblock {
+                return uses == 1 ? String(format: translate("%@ unblocked"), length)
+                    : String(format: translate("%d × %@ unblocked"), uses, length)
+            }
+            return uses == 1 ? String(format: translate("%@ free"), length)
+                : String(format: translate("%d × %@ free"), uses, length)
+        case .block(_, let selection, _):
+            return String(format: translate("blocks %@"),
+                          RuleText.counts(RuleCounts(selection), translate: translate))
+        }
+    }
+
+    /// One summary-sheet line per condition: "At Home · within 250 m".
+    static func sheetLine(_ condition: ConditionalCondition, translate: RuleText.Translate,
+                          locale: Locale, calendar: Calendar) -> String {
+        let text = capitalizedFirst(self.condition(condition, translate: translate, locale: locale,
+                                                   calendar: calendar), locale: locale)
+        if case .place(let place) = condition {
+            return text + " · " + String(format: translate("within %@"), radius(place.radiusMeters, locale: locale))
+        }
+        return text
+    }
+
+    static func radius(_ meters: Int, locale: Locale) -> String {
+        let measurement = meters >= 1000
+            ? Measurement(value: Double(meters) / 1000, unit: UnitLength.kilometers)
+            : Measurement(value: Double(meters), unit: UnitLength.meters)
+        return measurement.formatted(.measurement(width: .abbreviated, usage: .asProvided).locale(locale))
+    }
+
+    /// The summary sheet's "Then" in two lines.
+    static func outcomeLines(_ outcome: ConditionalOutcome, translate: RuleText.Translate,
+                             locale: Locale) -> [String] {
+        switch outcome {
+        case .freeTime(let kind, let selection, let minutes, let uses):
+            let times = uses == 1 ? translate("Once a day") : String(format: translate("%d times a day"), uses)
+            let what = kind == .unblock
+                ? String(format: translate("only %@"), RuleText.counts(RuleCounts(selection), translate: translate))
+                : translate("everything unblocked")
+            return [String(format: translate("Free time, up to %@"), RuleText.minutes(minutes, locale: locale)),
+                    times + " · " + what]
+        case .block(_, let selection, let until):
+            let end: String
+            switch until {
+            case .time(let minute): end = String(format: translate("Until %@"), RuleText.clock(minute, locale: locale))
+            case .duration(let minutes): end = String(format: translate("For %@"), RuleText.minutes(minutes, locale: locale))
+            }
+            return [String(format: translate("Block only %@"),
+                           RuleText.counts(RuleCounts(selection), translate: translate)), end]
+        }
+    }
+
+    static func symbol(_ condition: ConditionalCondition) -> String {
+        ConditionKind.of(condition).symbol
+    }
+}
+
+/// The editor's Add condition chooser (spec §5.10, Google Home).
+enum ConditionKind: CaseIterable, Equatable {
+    case place, country, days, time, dates
+
+    static func of(_ condition: ConditionalCondition) -> ConditionKind {
+        switch condition {
+        case .place: return .place
+        case .country: return .country
+        case .days: return .days
+        case .time: return .time
+        case .dates: return .dates
+        }
+    }
+
+    /// SF Symbols, not words (spec §5.4).
+    var symbol: String { Self.symbols[self] ?? "circle" }
+    private static let symbols: [ConditionKind: String] = [
+        .place: "mappin", .country: "globe", .days: "calendar",
+        .time: "clock", .dates: "calendar.badge.clock",
+    ]
+
+    var titleKey: String {
+        switch self {
+        case .place: return "Place"
+        case .country: return "Country"
+        case .days: return "Days"
+        case .time: return "Time"
+        case .dates: return "Dates"
+        }
+    }
+
+    var exampleKey: String {
+        switch self {
+        case .place: return "Like home or school"
+        case .country: return "Like Mexico"
+        case .days: return "Like weekends"
+        case .time: return "Like after 22:00"
+        case .dates: return "Like a trip"
+        }
+    }
+
+    /// Why a row can't be chosen, as a translation key. Places and countries
+    /// need location, which arrives in its own build step (C15 steps 4–5).
+    static func disabledReason(_ kind: ConditionKind, conditionCount: Int) -> String? {
+        if conditionCount >= ConditionalRule.maximumConditions { return "You can add up to four conditions." }
+        switch kind {
+        case .place, .country: return "Arrives in a later update."
+        case .days, .time, .dates: return nil
+        }
+    }
+
+    /// A new condition's starting value: weekends, 22:00–00:00 ("after
+    /// 22:00"), or the coming seven days. Nil for kinds that can't be added.
+    static func defaultCondition(_ kind: ConditionKind, now: Date, calendar: Calendar) -> ConditionalCondition? {
+        switch kind {
+        case .place, .country:
+            return nil
+        case .days:
+            return .days([1, 7])
+        case .time:
+            return .time(start: 22 * 60, end: 0)
+        case .dates:
+            let gregorian = ConditionalDay.gregorian(in: calendar.timeZone)
+            let last = gregorian.date(byAdding: .day, value: 6, to: now) ?? now
+            return .dates(first: ConditionalDay.of(now, in: calendar.timeZone),
+                          last: ConditionalDay.of(last, in: calendar.timeZone))
+        }
     }
 }
 
