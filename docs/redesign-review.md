@@ -1,6 +1,15 @@
 # Demora iOS full redesign — review
 
 ## Start here
+- **When & where step 5 (2026-11-12):** countries from bundled offline
+  borders (`a525219` + review fixes `53cef19`, `9141b00`): Natural Earth
+  1:10m v5.1.2 (public domain), 946,468 bytes, decided on the iPhone with no network; a
+  country counts only beyond ~3 km + the fix's accuracy from a border
+  (disputed areas and missing enclaves: "can't tell"). Add condition →
+  Country opens a searchable picker with iOS's names and "Use the country
+  I'm in"; You → Credits. Nothing seen on a screen or tried with a real
+  location. See "When & where step 5" at the end for decisions, review
+  fixes, phone checks and what step 6 needs.
 - **When & where step 4 (2026-11-12):** places and the one-shot location
   check (`f4aa920` + review fixes `ab2c566`, `3387a4d`): Add condition → Place opens a
   place sheet (centre from where you are now, 100 m–2 km, copy from another
@@ -1333,3 +1342,144 @@ mutation-checked against its guard. Not installed; no simulator runtime.
 - Step 6: remove `EditorProblem.blockLater` (and the harness's
   `draft.isFreeTime` exception in the validation table), then add block
   check-ins.
+
+## When & where step 5 (2026-11-12)
+Step 5 of the approved `docs/conditional-sessions-redesign.md` (C15:
+countries, bundled offline borders per C5 and Q4). Engine, saved-data model
+and capacity untouched (`git diff 008909b -- Shared/ChangeEngine.swift
+Shared/SharedModels.swift Shared/MonitoringBudget.swift` is empty). Commit
+`a525219` + review fixes `53cef19` and `9141b00` (below). Evidence: new
+`Tests/WhenWhereCountryHarness.py` compiles the real `Latch/CountryLookup.swift`
+with the real models and `RulesPresentation.swift`, loads the real bundled
+file and runs known points through the lookup, the trust rules, the engine's
+evaluator and `ConditionalStart.plan`; an independent Python decode of the
+same file agrees at 22 points and on distances at ~160 points near land
+borders; a synthetic map covers overlaps, holes, the coast band and unnamed
+areas; every lookup and review-fix mutation was caught. No real fix, prompt
+or phone was involved.
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| **Natural Earth 1:10m** admin-0 countries **v5.1.2** (public domain), pinned by URL and SHA-256 `239eec57…f255`, instead of the spec's suggested 1:50m | Same publisher and licence; 1:10m keeps territories 1:50m drops (Gibraltar) and lets the simplification error be bounded. Downloaded once while building, from the official repository; never at runtime | Yes — attribution file, generator constants and harness agree |
+| Simplified by `Tests/GenerateCountryBorders.py`: land borders (vertices two countries share) within **100 m**, simplified once in a canonical direction so both neighbours keep the same vertices (no gaps or overlaps on land borders); coastlines within **1 km**; rounded to 0.0001°; zigzag-varint binary. After the review fixes: **946,468 bytes** (~820 KB gzipped), 240 entries, 252,669 points, SHA-256 `259025bd…0229` | Budget ≤ ~1 MB; 1:10m untouched is 1.86 MB. Coasts matter less than land borders (sea next to one country is that country) | Yes — `--check` mode reproduces the file byte for byte from the pinned source; in verify |
+| Measured against the untouched 1:10m map at 40,000 points sampled around every land border and coast: the bundled map names a different country only within **70 m** of a border, never beyond 2 km; 1.2 % of points the full map calls clear come back "can't tell" (mostly coasts) | Evidence that simplification costs nothing near the margin | Yes (scratch evaluation, not committed) |
+| **1 km dataset allowance**: every distance the lookup reports is 1 km shorter, so with the engine's 2 km margin a country counts only beyond **≈ 3 km + the fix's accuracy** from a border | Natural Earth itself puts the Netherlands/Germany/Belgium tripoint ~1.9 km from Vaalserberg (Basel's tripoint is 70 m off, San Ysidro ~350 m), so the 2 km margin alone barely covers the data's own error. Done in the lookup, not the engine | Yes — **worth your eye**: Tijuana centre (2.6 km from the line) now reads "Too close to a border to tell" |
+| Lookup answer: inside one country → that code and the distance to the nearest **other** country (coasts aren't borders); at sea within 2 km of exactly one country → that country (a beach fix that lands offshore); farther at sea → none, with the distance to land; inside two entries (a coastline overlap) or an area the dataset gives no code (Northern Cyprus, Somaliland, Siachen, Bir Tawil, the Cyprus bases …) → none, **0 m** = "Too close to a border to tell" | Q4: dataset borders for lookup, can't tell where it's disputed; doubt always favours the stricter result | Yes |
+| Distances are lower bounds (east–west scaled at each edge's most poleward latitude), edges unwrapped across ±180°, capped at 1,000 km | A wrapped edge on the far side of the globe made a bogus 5 km "border" in Norway in a mutation test; now guarded | Yes |
+| `LocationTrust.checkInInput(_:wallNow:country:)` takes the lookup as a closure (one place); the sheet passes `CountryBorders.bundled` only for a rule with a country; the file loads off the main thread while iOS gets the fix | Brief; a place-only rule never loads 1 MB. Load ~15 ms, lookup ~0.6 ms (optimized harness) | Yes |
+| Precise location: a country check asks iOS for temporary precise **only if a place in the same rule needs it** (`ConditionalCheckIn.wantsPrecise`), or — review fix — once more on the same tap when an approximate fix left a country too close to tell | Brief; spec §5.5 step 4 | Yes |
+| **Approximate Location**: a country is judged as if the fix were at least **10 km** vague (≈ 12 km + allowance from a border) | iOS moves an approximate point by up to several km and its reported accuracy is not a promise; spoof-resistant default. Simulated / accessory / stale fixes fail as for places (engine) | Yes — worth your eye (an approximate fix in Tijuana or Strasbourg can't pass) |
+| **Country picker** (`Latch/CountryPicker.swift`): searchable list of the codes the borders know, **named by iOS** in the app's language (codes iOS can't name are left out), sorted and matched ignoring case and accents, or by code; **Use the country I'm in** = in-sheet card first time, one fix (`wantsPrecise: false`), the same trust rules and margin as free time; only the code is kept. **Use this country** / Cancel at the bottom | Spec §5.7, Q4 | Yes |
+| Add condition → Country opens the picker; a country card has **Change country** | Like places | Yes |
+| Removed: Add condition's country "Arrives in a later update.", `.arrivesLater(.country)`, the "Checking which country you're in arrives in a later update." line and both keys from all seven tables; `countryLookupAvailable = true`. Countries now get Today rows | Brief | Yes — guards in `WhenWhereCheckInHarness` / `WhenWhereLocationHarness` / `WhenWhereRulesHarness` now pin the new intent |
+| Credits: You's footer **Credits** (was "Word list credits") opens one page with the word list and the country borders attribution files, shown as written (English), with a built-in fallback line each | Brief: follow the word-list pattern; a third footer link would crowd small screens | Yes — "Word list credits" key retired |
+| 11 new strings in all seven tables | CLAUDE.md | Yes — harnesses check presence, placeholders, no duplicates |
+
+### Privacy notes for the owner (step 5)
+- Still **no network traffic**: borders are a file inside the app; the
+  lookup is plain arithmetic on the iPhone. No geocoder, map or search.
+- The fix is turned into a region code and a distance and dropped; only ✓/✗
+  results reach the start request. "Use the country I'm in" keeps only the
+  two-letter code in the rule (like a country picked by name).
+- The App Store privacy label and `PrivacyInfo.xcprivacy` stay unchanged.
+- Natural Earth is public domain; Demora credits it anyway (You → Credits).
+- Website draft for the Location section: add "Countries are checked on
+  your iPhone against map data built into the app; nothing is sent."
+
+## When & where step 5 review fixes
+A fresh reviewer read `a525219` and the spec with none of the lead's
+conclusions, and compared the real lookup with the full-detail source at
+26,000 points within 6 km of every edge: **no answer ever claimed more
+distance from a border than the source supports**; where it named another
+country the reported distance was 0 ("can't tell"). Decoding, holes
+(Lesotho), ±180° (Chukotka, Taveuni, the Diomedes) and the pole were right;
+no network, logging or storage; the data only in the host app. **No
+high-severity bug.** Fixed in `53cef19`, each with a check in
+`Tests/WhenWhereCountryHarness.py` that fails without it (mutation-checked):
+
+| Finding | Fix | Check |
+| --- | --- | --- |
+| **Medium:** Natural Earth 5.1.2 leaves out some enclaves, so a point there reads as the surrounding country with a "clear" distance: Baarle-Hertog (Belgium) → Netherlands, 2.6 km, so a good fix there would pass "In the Netherlands" and fail "In Belgium" | The generator adds a "can't tell" zone (`~~`, a circle a little wider than the enclave) for enclaves the source has no polygon for: Baarle-Hertog/Nassau, Büsingen, Campione, Dahagram–Angarpota, Nahwa, Karki, Sankovo-Medvezhye, Sastavci (eight after the recheck). Positions hand-checked | Every zone reads "no country, 0 m"; Baarle-Hertog is never ✓ Netherlands; Tilburg and Basel unchanged |
+| Low: with Approximate Location a country within ~12 km of a border always said "Too close to a border to tell", with nothing pointing to precise location (the spec asks for temporary precise) | When an approximate fix leaves a country "too close to tell" (and no place already asked), the **same tap reads once more** with `wantsPrecise: true`, so iOS asks for precise for this check; declined → the same "?" as before. Same in "Use the country I'm in". Both iOS purpose strings now say "place or country" in all eight languages (`Info.plist`, both build configurations, `InfoPlist.xcstrings`) | `wantsPreciseRetry` / `countryHereWantsPrecise` table; source order guards |
+| Low: a late "Use the country I'm in" result replaced a country the user had tapped meanwhile | Tapping a row cancels the read in flight (generation bump + `locator.cancel()`) | Order guard in `row(_:)` |
+| Low: the harness compared only which country contains 22 points, never distances | An independent Python distance (edges measured on a plane local to the point) at ~160 points near land borders: Swift's never exceeds it (worst +0 m, −3 m) | In the harness |
+
+The same reviewer rechecked `53cef19`: all four fixes correct (no retry
+loop: one iOS prompt per tap at most; a retry is cancelled with the sheet;
+a row tap cancels a read even during iOS's prompt; catalogs valid and in
+sync), nothing new of high or medium severity. Fixed in `9141b00`:
+
+| Finding | Fix | Check |
+| --- | --- | --- |
+| Low: two zones (Shakhimardan, Yukhari Askipara/Barkhudarly) covered enclaves the source already has (my probe points were just off its polygons) | Removed; the comment says "no polygon in the source" | Eight zones, each "can't tell" |
+| Low: the zones were wider than needed: Lugano centre fell from 3.2 km to 1.2 km from "another country" | Radii now the enclave's extent plus a few hundred metres (Campione 1.3 km, Büsingen 2.5 km, Baarle 3.5 km …) | Lugano reads Switzerland outside the zone (1.85 km: still "can't tell" for free time — the fail-closed choice, since Campione's northern edge isn't known to me better than that) |
+| Low: the precise prompt also showed where precise can't help (Baarle, North Cyprus, < 2 km from a border) | `LocationTrust.preciseCouldDecide`: retry only when the point is in a country and more than the 2 km margin from any other | Table: Tijuana 4 km in → retry; Tijuana centre, North Cyprus, Baarle → none (mutation-checked) |
+| Low: the distance comparison sampled only land borders | Also 80 coastal points (those inside one country are compared): worst +0 m, −86 m | In the harness |
+
+Left as limits: small Fergana enclaves with no polygon in the source
+(Chong-Kara, Jangail, Western Qalacha, Barak) and other tiny ones
+(Medvedje Brdo, the Vennbahn's German enclaves) are not zoned: their real
+positions weren't checked, so the surrounding country may be named there.
+"Use the country I'm in" shares the check-in's precise-location purpose
+text ("for this check"). Disputed areas follow Natural Earth's de-facto borders
+(Q4): Simferopol reads Russia, the Golan Heights Israel, Laâyoune Morocco —
+**worth your eye**.
+
+Verification on `9141b00` (and the same on `53cef19`): all 39 `Tests/*Harness.py` (new
+`WhenWhereCountryHarness`: 290 checks incl. 163 independent distances, data
+checksum/size/source, 15 strings × 7 tables; `WhenWhereLocationHarness` 113,
+`WhenWhereCheckInHarness` 201 and `WhenWhereRulesHarness` 116 checks with
+their country guards rewritten), both Swift harnesses, both localization
+checks, `GenerateCountryBorders.py --check` (byte-identical from the pinned
+source), `git diff --check`, then sequential unsigned arm64 Debug and
+Release builds with stable Xcode 27.0 (27A266a), DerivedData outside the
+repo, no compiler warnings; both built apps carry `CountryBorders.bin`
+(SHA-256 `259025bd…`), both attribution files and the new purpose strings;
+display names unchanged. `a525219` passed the same verify. Not installed;
+no simulator runtime; no real location.
+
+### When & where step 5: what to try on the phone
+1. **Rules → New rule → When & where → Add condition → Country**: a
+   searchable list in your iPhone's language. Search "mex" (and in Spanish
+   "mexico" without the accent) → México. Pick it, **Use this country**; the
+   card shows "In Mexico" with **Change country**.
+2. In the picker tap **Use the country I'm in**: the first time the card
+   "Demora reads where you are once to find your country…" with **Allow
+   location**; then a spinner and your country ticked at the bottom. No
+   precise-location prompt unless you're near a border with Approximate
+   Location on.
+3. Make "Free here" = Country (where you are) AND Days (today), 15 min; let
+   it land (**Skip delay (dev)**). **Check in**: "Checking where you are",
+   then ✓ "You're in …" and **You can have free time now.** A Today row
+   "Free here · 1 left today · Check in ›" appears before you check in.
+4. Change the rule's country to a neighbour: ✗ "You're not in …".
+5. Settings → Demora → Location → Precise off: Check in still passes deep
+   inside a country without any prompt. Within ~12 km of a border iOS asks
+   for precise once; decline → "Too close to a border to tell".
+6. Within ~3 km of a border (or in Baarle, Büsingen, the Vatican, Lugano
+   centre): "Too close to a border to tell", never ✓, and no precise prompt.
+7. Airplane mode on: the check-in and "Use the country I'm in" work the
+   same (no network involved).
+8. You → **Credits**: the word list and "Country borders: made with Natural
+   Earth…", including the bundled file's checksum.
+9. iPhone language German/Hindi: the iOS location prompts mention place or
+   country; the picker's names are German/Hindi.
+
+### Privacy notes for the owner (step 5, after review)
+Unchanged from above: no network traffic, nothing saved but the two-letter
+code, privacy label and manifest unchanged. The iOS permission texts now
+mention countries ("…to see if a rule's place or country applies…").
+
+### What step 6 needs (block outcome)
+- Remove `EditorProblem.blockLater` (and the validation-table exception in
+  `WhenWhereRulesHarness`), then add block check-ins
+  (`CheckInScreen.arrivesLater(.block)` is the last "later" screen).
+- **Countries for blocks:** the engine's block path counts a country as met
+  only when `regionCode` equals it, so every "no country" answer —
+  disputed areas, enclave zones, overlaps, sea near two coasts (all
+  reported as `nil` at 0 m) — reads ✗ for a block. A stricter answer for a
+  block would treat "within the margin" as met; that is an engine decision
+  for step 6 (doubt should favour the stricter result, spec §5.6).
+- `ConditionalCheckIn.wantsPrecise` / `wantsPreciseRetry` are written for
+  free time; a block check-in should decide whether an approximate fix
+  near a border is enough to start a block (it is stricter, so probably yes).
