@@ -639,6 +639,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "dev demora";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take a photo to use as a trusted contact's picture.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Demora reads your location once when you tap Check in or set a place, to see if a rule's place applies. Your location isn't sent anywhere; only the places you save are kept.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -670,6 +671,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = demora;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take a photo to use as a trusted contact's picture.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Demora reads your location once when you tap Check in or set a place, to see if a rule's place applies. Your location isn't sent anywhere; only the places you save are kept.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

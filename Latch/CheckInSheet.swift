@@ -1,12 +1,16 @@
 //
 //  CheckInSheet.swift
 //  The When & where check-in (docs/conditional-sessions-redesign.md §5.5):
-//  checks day, time and dates on the guarded clock, shows ✓ / ✗ / ? per
-//  condition with its reason, and when the rule is met starts free time
-//  through `ChangeEngine.startConditionalSessionOffMain`, which validates
-//  everything again. No location in this build (C15 step 3): a rule that
-//  needs a place or country says so and can't start. A condition has no
-//  way around it here: no skip, no Apply now, no password, phrase or contact.
+//  checks day, time and dates on the guarded clock first, then, only when a
+//  place could still change the answer (C8), reads one foreground fix through
+//  `LocationCheck` and checks again with it. Shows ✓ / ✗ / ? per condition
+//  with its reason, and when the rule is met starts free time through
+//  `ChangeEngine.startConditionalSessionOffMain`, which validates everything
+//  again. The stamp comes from the check that read the fix; the fix itself is
+//  never kept (only ✓/✗ results), and checks refreshed on their own never
+//  read location. Countries arrive in C15 step 5, block check-ins in step 6.
+//  A condition has no way around it here: no skip, no Apply now, no password,
+//  phrase or contact.
 //
 
 import SwiftUI
@@ -22,6 +26,8 @@ struct CheckInSheet: View {
     @AppAccent private var accent
     @AppLoosen private var loosen
     @EnvironmentObject private var model: AppModel
+    /// Made with the sheet and dropped with it; nothing outside reads it.
+    @StateObject private var locator = LocationCheck()
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -36,6 +42,10 @@ struct CheckInSheet: View {
     /// A hold landed on a check that had to be run again (midnight, a zone
     /// change, an edit): the new result is shown and needs a new hold.
     @State private var checkedAgain = false
+    /// The one location read: the card before iOS asks, or the fix in flight.
+    @State private var locationPhase: CheckInLocationPhase = .idle
+    /// Bumped by every check, so a fix that arrives late can't replace a newer one.
+    @State private var generation = 0
 
     private var live: ConditionalRule? { model.state.conditionalRules.first { $0.id == ruleID } }
 
@@ -56,7 +66,7 @@ struct CheckInSheet: View {
             // A check past its freshness, or from before midnight, is run
             // again on its own so the sheet never shows a stale verdict.
             .onChange(of: context.date) { _ in
-                if let check, !starting,
+                if let check, !starting, locationPhase == .idle,
                    ConditionalCheckIn.needsRecheck(check, live: live,
                                                    clock: ConditionalClockInput.current(for: model.state)) {
                     runCheck(model.state, announce: false)
@@ -65,7 +75,12 @@ struct CheckInSheet: View {
         }
         .background(Ink.cardRaised.ignoresSafeArea())
         .presentationDetents([.medium, .large])
-        .onAppear { runCheck(model.state, announce: true) }
+        // Opening the sheet is the user's Check in tap (C8).
+        .onAppear { runCheck(model.state, announce: true, userAsked: true) }
+        .onDisappear {
+            generation += 1
+            locator.cancel()
+        }
         // `$state` publishes before the property changes: read the new value.
         .onReceive(model.$state) { state in
             guard let check, !starting else { return }
@@ -82,7 +97,7 @@ struct CheckInSheet: View {
 
     @ViewBuilder private func content(now: Date) -> some View {
         let screen = ConditionalCheckIn.screen(check: check, live: live, sessions: model.state.sessions,
-                                               attempt: attempt, now: now)
+                                               attempt: attempt, now: now, location: locationPhase)
         VStack(alignment: .leading, spacing: DemoraSpace.m) {
             VStack(alignment: .leading, spacing: DemoraSpace.xs) {
                 Text(live?.name ?? check?.rule.name ?? "")
@@ -115,9 +130,13 @@ struct CheckInSheet: View {
                 VStack(alignment: .leading, spacing: DemoraSpace.s) {
                     ForEach(Array(zip(check.rule.conditions, check.evaluation.results).enumerated()),
                             id: \.offset) { _, pair in
-                        ConditionRow(condition: pair.0, status: pair.1.status,
-                                     reason: ConditionalCheckIn.reason(pair.1, condition: pair.0, translate: tr,
-                                                                       locale: locale, calendar: calendar))
+                        if screen == .locating, pair.0.usesLocation {
+                            ConditionRow(condition: pair.0, checking: true, reason: tr("Checking where you are"))
+                        } else {
+                            ConditionRow(condition: pair.0, status: pair.1.status,
+                                         reason: ConditionalCheckIn.reason(pair.1, condition: pair.0, translate: tr,
+                                                                           locale: locale, calendar: calendar))
+                        }
                     }
                 }
                 .transition(.opacity)
@@ -145,7 +164,7 @@ struct CheckInSheet: View {
 
     private func showsRows(_ screen: CheckInScreen) -> Bool {
         switch screen {
-        case .gone, .changed, .running, .checking, .refused, .queued: return false
+        case .gone, .changed, .running, .checking, .refused, .queued, .arrivesLater(.block): return false
         default: return true
         }
     }
@@ -186,8 +205,12 @@ struct CheckInSheet: View {
                 quiet(tr("Not now")) { dismiss() }
             case .running, .gone, .queued:
                 primary(tr("Done")) { dismiss() }
-            case .checking:
+            case .checking, .locating:
                 ProgressView().frame(maxWidth: .infinity, minHeight: 44)
+            case .askPermission:
+                // The in-sheet card comes first; iOS asks only after this tap.
+                primary(tr("Allow location")) { allowLocation() }
+                quiet(tr("Not now")) { dismiss() }
             default:
                 // Not met, used up, needs location, changed, refused: no way
                 // around a condition, only checking again.
@@ -227,19 +250,78 @@ struct CheckInSheet: View {
 
     // MARK: Events
 
-    /// Day, time and dates on the guarded clock, from saved state. Location is
-    /// never read here. `announce` adds the one verdict haptic (spec §9).
-    private func runCheck(_ state: LatchState, announce: Bool) {
+    /// Day, time and dates on the guarded clock, from saved state. Only when
+    /// the user asked (opening the sheet, Try again, Allow location) and a
+    /// place could still change the answer does it go on to the permission
+    /// card or one fix (C8); checks refreshed on their own never read
+    /// location. `announce` adds the one verdict haptic (spec §9).
+    private func runCheck(_ state: LatchState, announce: Bool, userAsked: Bool = false) {
+        generation += 1
+        locationPhase = .idle
+        locator.cancel()
         guard let rule = state.conditionalRules.first(where: { $0.id == ruleID }) else {
             check = nil
             return
         }
-        let result = CheckInResult.make(rule: rule, state: state,
-                                        clock: ConditionalClockInput.current(for: state))
+        let clock = ConditionalClockInput.current(for: state)
+        var result = CheckInResult.make(rule: rule, state: state, clock: clock, location: .notRead)
         if check == nil, case .freeTime(_, _, let maxMinutes, _) = rule.outcome { minutes = maxMinutes }
         check = result
-        guard announce else { return }
-        let screen = ConditionalCheckIn.screen(check: result, live: rule, sessions: state.sessions,
+        if userAsked {
+            switch ConditionalCheckIn.locationStep(result, permission: locator.permission) {
+            case .read:
+                readLocation(announce: announce)
+                return
+            case .ask:
+                locationPhase = .asking
+                return
+            case .off:
+                // Denied or restricted: say so on the rows; never ask again.
+                result = CheckInResult.make(rule: rule, state: state, clock: clock,
+                                            location: .unavailable(.locationOff))
+                check = result
+            case .none:
+                break
+            }
+        }
+        if announce { announceVerdict(result, rule: rule, sessions: state.sessions) }
+    }
+
+    /// One fix, then the same check again with it, on a fresh clock read so
+    /// the stamp's time matches the fix. The fix goes no further than this.
+    private func readLocation(announce: Bool) {
+        let token = generation
+        locationPhase = .reading
+        Task { @MainActor in
+            let outcome = await locator.readOnce(wantsPrecise: true)
+            guard token == generation else { return }
+            locationPhase = .idle
+            let state = model.state
+            guard let rule = state.conditionalRules.first(where: { $0.id == ruleID }) else {
+                check = nil
+                return
+            }
+            let clock = ConditionalClockInput.current(for: state)
+            let result = CheckInResult.make(rule: rule, state: state, clock: clock,
+                                            location: LocationTrust.checkInInput(outcome, wallNow: clock.wallNow))
+            check = result
+            if announce { announceVerdict(result, rule: rule, sessions: state.sessions) }
+        }
+    }
+
+    /// The card's button: iOS's "While Using" prompt, then the check again.
+    /// After a denial the card never comes back (the rows say location is off).
+    private func allowLocation() {
+        let token = generation
+        Task { @MainActor in
+            await locator.requestPermission()
+            guard token == generation else { return }
+            runCheck(model.state, announce: true, userAsked: true)
+        }
+    }
+
+    private func announceVerdict(_ result: CheckInResult, rule: ConditionalRule, sessions: [BlockSession]) {
+        let screen = ConditionalCheckIn.screen(check: result, live: rule, sessions: sessions,
                                                attempt: attempt, now: Date())
         if screen.canStart {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
@@ -264,7 +346,12 @@ struct CheckInSheet: View {
             // again and, if it still holds on the same day for the same rule,
             // sent in its place. Anything else is shown and needs a new hold.
             guard let rule = live else { runCheck(state, announce: false); return }
-            let fresh = CheckInResult.make(rule: rule, state: state, clock: clock)
+            if check.readLocation {
+                // Its fix is too old to trust: read where you are again first.
+                recheckWithLocation(old: check)
+                return
+            }
+            let fresh = CheckInResult.make(rule: rule, state: state, clock: clock, location: .notRead)
             guard ConditionalCheckIn.mayStartAfterRecheck(old: check, fresh: fresh, live: live,
                                                           sessions: state.sessions, now: Date()),
                   case .met(let freshCap) = ConditionalCheckIn.screen(check: fresh, live: live,
@@ -277,6 +364,48 @@ struct CheckInSheet: View {
             check = fresh
             cap = freshCap
         }
+        send(check, cap: cap)
+    }
+
+    /// A hold on an aged check that had read location: one new fix (the
+    /// hold is the user's tap), then the same rule as `start`: sent only if
+    /// still met for the same rule version, day and zone; otherwise shown.
+    private func recheckWithLocation(old: CheckInResult) {
+        starting = true
+        generation += 1
+        let token = generation
+        locationPhase = .reading
+        Task { @MainActor in
+            let outcome = await locator.readOnce(wantsPrecise: true)
+            guard token == generation else { starting = false; return }
+            locationPhase = .idle
+            let state = model.state
+            let live = state.conditionalRules.first { $0.id == ruleID }
+            guard let rule = live else {
+                starting = false
+                runCheck(state, announce: false)
+                return
+            }
+            let clock = ConditionalClockInput.current(for: state)
+            let fresh = CheckInResult.make(rule: rule, state: state, clock: clock,
+                                           location: LocationTrust.checkInInput(outcome, wallNow: clock.wallNow))
+            check = fresh
+            guard ConditionalCheckIn.mayStartAfterRecheck(old: old, fresh: fresh, live: live,
+                                                          sessions: state.sessions, now: Date()),
+                  case .met(let freshCap) = ConditionalCheckIn.screen(check: fresh, live: live,
+                      sessions: state.sessions, attempt: nil, now: Date()) else {
+                checkedAgain = true
+                starting = false
+                return
+            }
+            starting = false
+            send(fresh, cap: freshCap)
+        }
+    }
+
+    /// The one place a start request is made, for the check on screen.
+    private func send(_ check: CheckInResult, cap: Int) {
+        guard !starting else { return }
         starting = true
         checkedAgain = false
         let request = ConditionalStartRequest(ruleID: check.rule.id, revision: check.rule.revision,

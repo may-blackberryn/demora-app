@@ -1164,6 +1164,8 @@ enum EditorProblem: Equatable {
     /// When & where (`EditorValidation.conditional`).
     case nameTooLong, noConditions, tooManyConditions, datesOrder
     case blockNeedsPlace, blockAnyOfDays, invalid
+    /// A block rule with a place: its check-in start arrives in C15 step 6.
+    case blockLater
     /// Not a problem to explain: the draft equals the saved rule.
     case unchanged
 
@@ -1181,9 +1183,10 @@ enum EditorProblem: Equatable {
         case .noConditions: return "Add at least one condition."
         case .tooManyConditions: return "Use at most four conditions."
         case .datesOrder: return "The last day can't be before the first."
-        case .blockNeedsPlace: return "A block needs a place or a country, which arrive in a later update. For now, use a repeating block."
+        case .blockNeedsPlace: return "Use a repeating block for rules without a place."
         case .blockAnyOfDays: return "With “any of”, a block can use times, places and countries, not days or dates."
         case .invalid: return "Check this rule's settings."
+        case .blockLater: return "Blocks that start when you check in arrive in a later update. For now, use a repeating block or Block now."
         case .unchanged: return nil
         }
     }
@@ -1279,7 +1282,7 @@ enum EditorValidation {
         switch draft.outcome {
         case .freeTime(let kind, let selection, _, _):
             if kind == .unblock && !hasSelection(selection) { return .apps }
-        case .block(_, let selection, _):
+        case .block:
             // Say first what no choice of apps can fix (v1 limits).
             if !draft.hasLocationCondition { return .blockNeedsPlace }
             if draft.match == .any && draft.conditions.contains(where: {
@@ -1288,7 +1291,9 @@ enum EditorValidation {
                 case .place, .country, .time: return false
                 }
             }) { return .blockAnyOfDays }
-            if !hasSelection(selection) { return .apps }
+            // Check-in blocks are C15 step 6: until then a block rule can't
+            // be saved, so no saved rule has a check-in that can't run.
+            return .blockLater
         }
         if !draft.isValid { return .invalid }
         if let existing, draft.sameConfiguration(as: existing) { return .unchanged }
@@ -1509,18 +1514,19 @@ enum ConditionKind: CaseIterable, Equatable {
         }
     }
 
-    /// Why a row can't be chosen, as a translation key. Places and countries
-    /// need location, which arrives in its own build step (C15 steps 4–5).
+    /// Why a row can't be chosen, as a translation key. Countries need the
+    /// offline country lookup, which arrives in its own build step (C15 step 5).
     static func disabledReason(_ kind: ConditionKind, conditionCount: Int) -> String? {
         if conditionCount >= ConditionalRule.maximumConditions { return "You can add up to four conditions." }
         switch kind {
-        case .place, .country: return "Arrives in a later update."
-        case .days, .time, .dates: return nil
+        case .country: return ConditionalCheckIn.countryLookupAvailable ? nil : "Arrives in a later update."
+        case .place, .days, .time, .dates: return nil
         }
     }
 
     /// A new condition's starting value: weekends, 22:00–00:00 ("after
-    /// 22:00"), or the coming seven days. Nil for kinds that can't be added.
+    /// 22:00"), or the coming seven days. Nil for a place (it needs a centre
+    /// from the place editor first) and for kinds that can't be added.
     static func defaultCondition(_ kind: ConditionKind, now: Date, calendar: Calendar) -> ConditionalCondition? {
         switch kind {
         case .place, .country:
@@ -1599,20 +1605,28 @@ struct CheckInResult: Equatable {
     /// Guarded minus wall time at the check, to place the window end on the
     /// wall clock that sessions use.
     var guardedOffset: TimeInterval
+    /// True when this check used a location read (a fix or "unavailable").
+    /// Such a check is never refreshed without reading again (C8, C9).
+    var readLocation = false
 
-    /// Location is never read in this build (C15 step 3): places and countries
-    /// stay unchecked, so a rule that needs them can't start.
+    /// `location` is what this check read: `.notRead` unless the sheet read
+    /// one fix in the foreground for it (C8). The stamp comes from this very
+    /// evaluation, so a start can only claim what this check found. Only the
+    /// per-condition results are kept, never the coordinates.
     static func make(rule: ConditionalRule, state: LatchState, clock: ConditionalClockInput,
-                     checkInID: UUID = UUID()) -> CheckInResult {
-        let evaluation = ConditionEvaluator.evaluate(rule, clock: clock, location: .notRead)
+                     location: ConditionalLocationInput, checkInID: UUID = UUID()) -> CheckInResult {
+        let evaluation = ConditionEvaluator.evaluate(rule, clock: clock, location: location)
         let used = clock.dayKeys.map {
             ConditionalUses.used(ruleID: rule.id, dayKeys: $0,
                                  in: ConditionalUses.pruned(state.conditionalUses, at: clock.guardedNow))
         }
+        var readLocation = true
+        if case .notRead = location { readLocation = false }
         return CheckInResult(rule: rule, evaluation: evaluation,
                              stamp: ConditionalCheckInStamp.make(evaluation, clock: clock, checkInID: checkInID),
                              clockAgrees: clock.clockAgrees, used: used,
-                             guardedOffset: clock.guardedNow.timeIntervalSince(clock.wallNow))
+                             guardedOffset: clock.guardedNow.timeIntervalSince(clock.wallNow),
+                             readLocation: readLocation)
     }
 
     /// The window end on the wall clock; nil = only the length caps it.
@@ -1634,9 +1648,15 @@ enum CheckInScreen: Equatable {
     /// The rule changed after this check (an edit landed): check again.
     case changed
     case running(until: Date)
-    /// A place or country could decide it, and location arrives in a later
-    /// update (C15 steps 4–5); check-in blocks arrive with step 6.
+    /// Only a fix could decide it and this check didn't read one (it was
+    /// refreshed on its own): Check in again reads where you are.
     case needsLocation
+    /// Waiting for the user's yes on the in-sheet card before iOS asks.
+    case askPermission
+    /// Reading one fix ("Checking where you are").
+    case locating
+    /// Only something a later build checks could decide it.
+    case arrivesLater(CheckInLater)
     case clockChanged
     case notMet
     case unknownUses
@@ -1651,9 +1671,27 @@ enum CheckInScreen: Equatable {
     var canStart: Bool { if case .met = self { return true }; return false }
 }
 
+/// What a later build step adds (C15 steps 5 and 6).
+enum CheckInLater: Equatable { case country, block }
+
+/// Where the sheet is in its one location read; held by the view, never saved.
+enum CheckInLocationPhase: Equatable { case idle, asking, reading }
+
+/// What a check needs next, decided before any read (C8: location only when
+/// it can change the answer, the system prompt only after the in-sheet card).
+enum CheckInLocationStep: Equatable {
+    /// The answer doesn't depend on a fix (or no fix could decide it yet).
+    case none
+    /// Never asked: show the card; iOS asks only after "Allow location".
+    case ask
+    /// Denied or restricted: check again with "location off", never re-prompt.
+    case off
+    case read
+}
+
 enum ConditionalCheckIn {
-    /// Flipped by the location step (C15 step 4).
-    static let locationAvailable = false
+    /// Flipped by the countries step (C15 step 5), with its offline lookup.
+    static let countryLookupAvailable = false
     /// A check older than this is run again before a start: a margin under
     /// the engine's own 2-minute stamp lifetime.
     static let freshness: TimeInterval = ConditionalStart.stampLifetime - 10
@@ -1661,7 +1699,8 @@ enum ConditionalCheckIn {
     /// `live` is the saved rule now; `sessions` saved state's sessions;
     /// `now` the wall clock (sessions end on it).
     static func screen(check: CheckInResult?, live: ConditionalRule?, sessions: [BlockSession],
-                       attempt: CheckInAttempt?, now: Date) -> CheckInScreen {
+                       attempt: CheckInAttempt?, now: Date,
+                       location: CheckInLocationPhase = .idle) -> CheckInScreen {
         guard let live else { return .gone }
         // Only saved state says free time is on: a start that was ended
         // elsewhere (housekeeping, another process) no longer reads as running.
@@ -1677,17 +1716,52 @@ enum ConditionalCheckIn {
         guard let check else { return .checking }
         guard check.rule.revision == live.revision, check.rule.sameConfiguration(as: live)
         else { return .changed }
-        guard case .freeTime(_, _, let maxMinutes, let usesPerDay) = live.outcome else { return .needsLocation }
+        guard case .freeTime(_, _, let maxMinutes, let usesPerDay) = live.outcome else { return .arrivesLater(.block) }
         guard check.clockAgrees else { return .clockChanged }
         let evaluation = check.evaluation
         if !evaluation.isMet {
-            return evaluation.locationCouldChangeVerdict && !locationAvailable ? .needsLocation : .notMet
+            // Only a check that didn't read location can still be waiting for it.
+            guard evaluation.locationCouldChangeVerdict else { return .notMet }
+            guard fixCouldDecide(check.rule, evaluation: evaluation) else { return .arrivesLater(.country) }
+            switch location {
+            case .asking: return .askPermission
+            case .reading: return .locating
+            case .idle: return .needsLocation
+            }
         }
         guard let used = check.used else { return .unknownUses }
         guard used < usesPerDay else { return .usedUp }
         guard let cap = lengthCap(maxMinutes: maxMinutes, windowEnd: check.wallWindowEnd, now: now)
         else { return .windowEnding }
         return .met(cap: cap)
+    }
+
+    /// Could one fix make this unread check met? Places decide with a fix;
+    /// countries only once their lookup exists (step 5); block check-ins are
+    /// step 6. Day/time/date results stay as they are.
+    static func fixCouldDecide(_ rule: ConditionalRule, evaluation: ConditionalEvaluation,
+                               countryLookupAvailable: Bool = countryLookupAvailable) -> Bool {
+        guard rule.isFreeTime, evaluation.locationCouldChangeVerdict,
+              evaluation.results.count == rule.conditions.count else { return false }
+        let best: [ConditionStatus] = zip(rule.conditions, evaluation.results).map { condition, result in
+            switch condition {
+            case .place: return .met
+            case .country: return countryLookupAvailable ? .met : .unknown
+            case .days, .time, .dates: return result.status
+            }
+        }
+        return ConditionEvaluator.verdict(rule, statuses: best,
+                                          windowEnds: evaluation.results.map(\.windowEnd)).isMet
+    }
+
+    /// What to do after the clock-only check the sheet always runs first.
+    static func locationStep(_ check: CheckInResult, permission: LocationPermission) -> CheckInLocationStep {
+        guard !check.readLocation, fixCouldDecide(check.rule, evaluation: check.evaluation) else { return .none }
+        switch permission {
+        case .notAsked: return .ask
+        case .denied, .restricted: return .off
+        case .allowed: return .read
+        }
     }
 
     /// Whole minutes a session started now may last: the rule's maximum,
@@ -1754,7 +1828,9 @@ enum ConditionalCheckIn {
         case .gone: return "This rule has been removed."
         case .changed: return "This rule changed. Check in again."
         case .running: return "Free time is on until %@."
-        case .needsLocation: return "This rule needs your location."
+        case .needsLocation, .askPermission: return "This rule needs your location."
+        case .locating: return "Checking…"
+        case .arrivesLater: return "This rule can't be checked yet."
         case .met: return "You can have free time now."
         case .usedUp: return "You've used today's free time."
         case .refused, .queued: return "Free time didn't start."
@@ -1765,14 +1841,17 @@ enum ConditionalCheckIn {
     /// One line under the sentence, when the rows don't already say why.
     static func detailKey(_ screen: CheckInScreen) -> String? {
         switch screen {
-        case .needsLocation: return "Location checks arrive in a later update."
+        case .needsLocation: return "Check in again to check where you are."
+        case .askPermission: return "Demora checks where you are once, when you tap Check in. It doesn't save or send your location."
+        case .arrivesLater(.country): return "Checking which country you're in arrives in a later update."
+        case .arrivesLater(.block): return "Starting a block when you check in arrives in a later update."
         case .clockChanged: return "Your clock was changed recently. Free time can start once it's set right again."
         case .unknownUses: return "Couldn't count today's uses. Try again."
         case .usedUp: return "Resets at midnight"
         case .windowEnding: return "Less than a minute is left in this window."
         case .refused(let refusal): return refusalKey(refusal)
         case .queued: return "It's waiting in Changes instead."
-        case .checking, .gone, .changed, .running, .met, .notMet: return nil
+        case .checking, .gone, .changed, .running, .met, .notMet, .locating: return nil
         }
     }
 
@@ -1825,13 +1904,16 @@ enum ConditionalCheckIn {
         case .inDates: return translate("Today is one of these dates")
         case .outsideDates: return translate("Today isn't one of these dates")
         case .notNeeded: return translate("Not needed")
+        case .unknown(.notChecked):
+            if case .country = condition, !countryLookupAvailable { return translate("Arrives in a later update.") }
+            return translate(unknownKey(.notChecked))
         case .unknown(let why): return translate(unknownKey(why))
         }
     }
 
     static func unknownKey(_ reason: ConditionalUnknownReason) -> String {
         switch reason {
-        case .notChecked: return "Needs your location — arrives in a later update."
+        case .notChecked: return "Not checked yet"
         case .clockChanged: return "Your clock was changed recently"
         case .timeZoneChanged: return "Your time zone changed recently"
         case .timeZoneUnknown: return "Couldn't read your time zone"
@@ -1883,12 +1965,12 @@ enum ConditionalAvailability {
 
     /// Free-time rules a check-in could start now: uses left (the engine's
     /// count in `used`; unknown → no row), nothing of theirs running, and
-    /// their day/time/date conditions holding now. In this build a rule that
-    /// still needs a place or country shows no row (location arrives later).
-    /// Block rules get rows with their check-in (C15 step 6). Rules order;
-    /// at most three, with how many more there are.
+    /// either met on day/time/dates alone or a place that one fix could
+    /// make true (nothing is read here: the row only opens the check-in).
+    /// Countries get rows with their lookup (C15 step 5), block rules with
+    /// their check-in (step 6). Rules order; at most three, with how many more.
     static func todayRows(state: LatchState, used: [UUID: Int], clock: ConditionalClockInput,
-                          locationAvailable: Bool = ConditionalCheckIn.locationAvailable)
+                          countryLookupAvailable: Bool = ConditionalCheckIn.countryLookupAvailable)
         -> (rows: [Row], more: Int) {
         let rows = state.conditionalRules.compactMap { rule -> Row? in
             guard case .freeTime(_, _, _, let usesPerDay) = rule.outcome, rule.isValid,
@@ -1896,12 +1978,166 @@ enum ConditionalAvailability {
                   !state.sessions.contains(where: { $0.conditionalRuleID == rule.id && $0.endsAt > clock.wallNow })
             else { return nil }
             let evaluation = ConditionEvaluator.evaluate(rule, clock: clock, location: .notRead)
-            guard evaluation.isMet || (locationAvailable && evaluation.locationCouldChangeVerdict) else { return nil }
+            guard evaluation.isMet || ConditionalCheckIn.fixCouldDecide(
+                rule, evaluation: evaluation, countryLookupAvailable: countryLookupAvailable) else { return nil }
             if evaluation.isMet,
                ConditionalCheckIn.lengthCap(maxMinutes: 1, windowEnd: evaluation.windowEnd,
                                             now: clock.guardedNow) == nil { return nil }
             return Row(ruleID: rule.id, name: rule.name, left: usesPerDay - count)
         }
         return (Array(rows.prefix(maximumRows)), max(0, rows.count - maximumRows))
+    }
+}
+
+// MARK: - When & where location: permission, one fix, trust rules (C8, C9; C15 step 4)
+
+/// Demora's location permission as the check-in and place editor need it.
+/// "While Using" only; Demora never asks for Always.
+enum LocationPermission: Equatable {
+    case notAsked
+    case denied
+    /// Parental controls or a profile: Settings can't change it here.
+    case restricted
+    /// `precise` is false under Approximate Location.
+    case allowed(precise: Bool)
+}
+
+/// One fix as CoreLocation delivered it, before any trust rule. Lives only
+/// in memory for the moment it's turned into results or a centre.
+struct LocationSample: Equatable {
+    var latitude: Double
+    var longitude: Double
+    /// Metres; iOS reports a negative value for an invalid fix.
+    var horizontalAccuracy: Double
+    /// When iOS took the fix (wall clock).
+    var timestamp: Date
+    /// `CLLocationSourceInformation.isSimulatedBySoftware`.
+    var isSimulated: Bool
+    /// `CLLocationSourceInformation.isProducedByAccessory`.
+    var isFromAccessory: Bool
+}
+
+enum LocationReadFailure: Equatable {
+    case denied, noFix, timedOut, cancelled
+}
+
+enum LocationReadOutcome: Equatable {
+    case sample(LocationSample, precise: Bool)
+    case failed(LocationReadFailure)
+}
+
+enum LocationTrust {
+    /// One read waits at most this long (spec §5.5 step 4).
+    static let timeout: TimeInterval = 15
+    /// A place's centre needs a fix at least this good: the smallest place
+    /// is 100 m, so a centre can't be off by more than its own size.
+    static let maximumCentreAccuracy: Double = 100
+
+    /// The check-in's evaluation input. The engine applies the rest of C9
+    /// (age, simulated, accessory, precise, the whole circle inside the
+    /// place); countries get their lookup in step 5, so `country` stays nil
+    /// and a country condition can't be met from this fix.
+    static func checkInInput(_ outcome: LocationReadOutcome, wallNow: Date) -> ConditionalLocationInput {
+        switch outcome {
+        case .failed(.denied): return .unavailable(.locationOff)
+        case .failed(.noFix), .failed(.timedOut), .failed(.cancelled): return .unavailable(.noFix)
+        case .sample(let sample, let precise):
+            return .fix(ConditionalLocationFix(latitude: sample.latitude, longitude: sample.longitude,
+                                               horizontalAccuracy: sample.horizontalAccuracy,
+                                               age: wallNow.timeIntervalSince(sample.timestamp),
+                                               isPrecise: precise, isSimulated: sample.isSimulated,
+                                               isFromAccessory: sample.isFromAccessory),
+                        country: nil)
+        }
+    }
+
+    /// A place's centre from "Set to where I am now" (C12): a fresh, precise,
+    /// real fix good to 100 m, rounded to 5 decimals (about 1 m). Anything
+    /// else is refused with the reason the check-in would give.
+    static func centre(_ outcome: LocationReadOutcome, wallNow: Date) -> Result<PlaceCentre, PlaceCentreProblem> {
+        let sample: LocationSample, precise: Bool
+        switch outcome {
+        case .failed(.denied): return .failure(PlaceCentreProblem(reason: .locationOff))
+        case .failed: return .failure(PlaceCentreProblem(reason: .noFix))
+        case .sample(let value, let isPrecise): sample = value; precise = isPrecise
+        }
+        let accuracy = sample.horizontalAccuracy
+        guard accuracy.isFinite, accuracy > 0, sample.latitude.isFinite, sample.longitude.isFinite,
+              (-90...90).contains(sample.latitude), (-180...180).contains(sample.longitude)
+        else { return .failure(PlaceCentreProblem(reason: .noFix)) }
+        let age = wallNow.timeIntervalSince(sample.timestamp)
+        guard age.isFinite, age >= -5, age <= ConditionEvaluator.maximumFixAge
+        else { return .failure(PlaceCentreProblem(reason: .staleFix)) }
+        guard !sample.isSimulated else { return .failure(PlaceCentreProblem(reason: .simulated)) }
+        guard !sample.isFromAccessory else { return .failure(PlaceCentreProblem(reason: .accessory)) }
+        guard precise else { return .failure(PlaceCentreProblem(reason: .needsPrecise)) }
+        guard accuracy <= maximumCentreAccuracy else { return .failure(PlaceCentreProblem(reason: .imprecise)) }
+        return .success(PlaceCentre(latitude: rounded(sample.latitude), longitude: rounded(sample.longitude)))
+    }
+
+    static func rounded(_ degrees: Double) -> Double { (degrees * 100_000).rounded() / 100_000 }
+}
+
+struct PlaceCentre: Equatable {
+    var latitude: Double
+    var longitude: Double
+}
+
+struct PlaceCentreProblem: Error, Equatable {
+    var reason: ConditionalUnknownReason
+
+    /// Same words as the check-in's "?" lines, plus one for the accessory case.
+    var messageKey: String {
+        switch reason {
+        case .accessory: return "Location from an accessory can't set a place"
+        default: return ConditionalCheckIn.unknownKey(reason)
+        }
+    }
+}
+
+/// The place editor's choices (spec §5.7, C10–C12).
+enum PlaceChoices {
+    static let defaultRadius = 250
+    /// The only sizes; nothing larger than 2 km (C10).
+    static let sizes = ConditionalPlace.radiusChoices
+
+    static func sizeWordsKey(_ meters: Int) -> String {
+        switch meters {
+        case ...100: return "About a house and its street"
+        case ...250: return "A building and its grounds"
+        case ...500: return "A campus or a few blocks"
+        case ...1000: return "A neighbourhood"
+        default: return "A small town centre"
+        }
+    }
+
+    /// Places in the user's other When & where rules, saved or waiting to be
+    /// added or edited, to copy into this one (C11: a copy, never shared).
+    /// Same name, centre and size listed once; Rules order.
+    static func otherPlaces(state: LatchState, excluding ruleID: UUID?) -> [ConditionalPlace] {
+        var rules = state.conditionalRules
+        for change in state.pending {
+            switch change.action {
+            case .addConditionalRule(let rule), .updateConditionalRule(let rule): rules.append(rule)
+            default: continue
+            }
+        }
+        var result: [ConditionalPlace] = []
+        for rule in rules where rule.id != ruleID {
+            for case .place(let place) in rule.conditions where place.isValid && !result.contains(place) {
+                result.append(place)
+            }
+        }
+        return result
+    }
+
+    /// The editor's place: the name trimmed, a size from the list (C10).
+    /// Nil until it has a name and a centre.
+    static func place(name: String, centre: PlaceCentre?, radius: Int) -> ConditionalPlace? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let centre, !trimmed.isEmpty, sizes.contains(radius) else { return nil }
+        let place = ConditionalPlace(name: trimmed, latitude: centre.latitude, longitude: centre.longitude,
+                                     radiusMeters: radius)
+        return place.isValid ? place : nil
     }
 }

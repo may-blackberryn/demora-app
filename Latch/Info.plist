@@ -28,6 +28,11 @@
 		<string>tr</string>
 		<string>hi</string>
 	</array>
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>CheckIn</key>
+		<string>Demora needs your precise location for this check, to tell whether you're inside a rule's place.</string>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

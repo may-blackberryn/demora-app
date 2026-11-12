@@ -254,13 +254,14 @@ four.pending = [change(.addConditionalRule(weekendSchool))]
 check(NewRuleKind.disabledReason(.whenWhere, state: four) == "You can have up to five When & where rules.", "4 + 1 queued")
 check(NewRuleKind.disabledReason(.dailyLimit, state: four) == nil, "others stay open")
 
-// MARK: Add condition chooser: place/country explained, four at most
-check(ConditionKind.disabledReason(.place, conditionCount: 0) == "Arrives in a later update."
-      && ConditionKind.disabledReason(.country, conditionCount: 0) == "Arrives in a later update.", "location later")
-check([ConditionKind.days, .time, .dates].allSatisfy { ConditionKind.disabledReason($0, conditionCount: 3) == nil }, "open")
+// MARK: Add condition chooser: places open (step 4), countries explained, four at most
+check(ConditionKind.disabledReason(.place, conditionCount: 0) == nil, "places can be added (step 4)")
+check(ConditionKind.disabledReason(.country, conditionCount: 0) == "Arrives in a later update.", "countries later (step 5)")
+check([ConditionKind.place, .days, .time, .dates].allSatisfy { ConditionKind.disabledReason($0, conditionCount: 3) == nil }, "open")
 check(ConditionKind.allCases.allSatisfy { ConditionKind.disabledReason($0, conditionCount: 4) == "You can add up to four conditions." }, "full")
 check(ConditionKind.defaultCondition(.place, now: sundayNoon, calendar: mx) == nil
-      && ConditionKind.defaultCondition(.country, now: sundayNoon, calendar: mx) == nil, "no place or country without location")
+      && ConditionKind.defaultCondition(.country, now: sundayNoon, calendar: mx) == nil,
+      "a place starts in the place editor (it needs a centre); no country yet")
 check(ConditionKind.defaultCondition(.days, now: sundayNoon, calendar: mx) == .days([1, 7]), "weekends")
 check(ConditionKind.defaultCondition(.time, now: sundayNoon, calendar: mx) == .time(start: 1320, end: 0), "after 22:00")
 check(ConditionKind.defaultCondition(.dates, now: at(12, 28, 23, 30), calendar: mx)
@@ -290,7 +291,10 @@ check(problem(with(sunday) { $0.conditions = [.dates(first: ConditionalDay(year:
                                                      last: ConditionalDay(year: 2026, month: 3, day: 2))] }) == .invalid, "impossible day")
 check(problem(with(sunday) { $0.conditions = [.time(start: -5, end: 60)] }) == .invalid, "out-of-range time")
 check(problem(with(sunday) { $0.outcome = .freeTime(kind: .unblock, selection: FamilyActivitySelection(), maxMinutes: 60, usesPerDay: 1) }) == .apps, "only these apps needs apps")
-check(problem(with(instagram) { $0.outcome = .block(mode: .blockSelected, selection: FamilyActivitySelection(), until: .time(420)) }) == .apps, "block needs apps")
+// Step 4: places exist, but a block's check-in start is step 6, so a block rule can't be saved yet.
+check(problem(instagram) == .blockLater, "a block with a place waits for step 6")
+check(problem(with(instagram) { $0.outcome = .block(mode: .blockSelected, selection: FamilyActivitySelection(), until: .time(420)) }) == .blockLater,
+      "…with or without apps")
 let dayBlock = with(instagram) { $0.conditions = [.time(start: 1320, end: 360)] }
 check(problem(dayBlock) == .blockNeedsPlace, "v1: a block needs a place or country")
 // Review fix: what no choice of apps can fix is said first.
@@ -300,13 +304,15 @@ check(problem(with(instagram) { $0.conditions.append(.days([1]))
     $0.outcome = .block(mode: .blockSelected, selection: FamilyActivitySelection(), until: .time(420)) }) == .blockAnyOfDays,
       "any-of days before no apps")
 check(problem(with(instagram) { $0.conditions.append(.days([1])) }) == .blockAnyOfDays, "v1: any-of block, no days")
-check(problem(with(instagram) { $0.match = .all; $0.conditions.append(.days([1])) }) == nil, "all-of block may use days")
-check(problem(with(instagram) { $0.outcome = .block(mode: .blockAllExcept, selection: apps("a"), until: .time(420)) }) == .invalid,
-      "v1: no all-except block")
+check(problem(with(instagram) { $0.match = .all; $0.conditions.append(.days([1])) }) == .blockLater, "all-of block may use days (step 6)")
+check(problem(with(instagram) { $0.outcome = .block(mode: .blockAllExcept, selection: apps("a"), until: .time(420)) }) == .blockLater,
+      "v1: no all-except block (step 6 says why)")
+check(EditorProblem.blockNeedsPlace.messageKey == "Use a repeating block for rules without a place.", "spec §5.10 wording")
 check(problem(edited, existing: sunday) == nil, "a real edit")
 check(problem(with(sunday) { $0.revision = 4; $0.addedAt = at(1, 1) }, existing: sunday) == .unchanged, "no-op edit")
 check(EditorProblem.unchanged.messageKey == nil, "unchanged is not explained")
-for p in [EditorProblem.nameTooLong, .noConditions, .tooManyConditions, .datesOrder, .blockNeedsPlace, .blockAnyOfDays, .invalid] {
+for p in [EditorProblem.nameTooLong, .noConditions, .tooManyConditions, .datesOrder, .blockNeedsPlace, .blockAnyOfDays, .invalid,
+          .blockLater] {
     check(p.messageKey != nil, "message for \(p)")
 }
 
@@ -344,14 +350,15 @@ for name in ["", "Sunday", String(repeating: "n", count: 81)] {
             for outcome in outcomes {
                 let draft = ConditionalRule(name: name, match: match, conditions: conditions, outcome: outcome, addedAt: at(11, 1))
                 let p = problem(draft)
-                if (p == nil) != draft.isValid { print("FAIL: mismatch \(name.count) \(match) \(conditions) \(outcome) → \(String(describing: p))"); exit(1) }
+                // Step 4: block rules can't be saved until their check-in (step 6).
+                if (p == nil) != (draft.isValid && draft.isFreeTime) { print("FAIL: mismatch \(name.count) \(match) \(conditions) \(outcome) → \(String(describing: p))"); exit(1) }
                 if p == nil { accepted += 1 }
                 table += 1
             }
         }
     }
 }
-check(table > 20_000 && accepted > 300, "table \(table), accepted \(accepted)")
+check(table > 20_000 && accepted > 200, "table \(table), accepted \(accepted) (free time only in step 4)")
 print("When & where Rules presentation passed: \(checks) checks; validation table \(table) drafts (\(accepted) accepted) matches ConditionalRule.isValid")
 '''
 
@@ -381,8 +388,18 @@ def section(text, start, end):
 
 editor = (ROOT / 'Latch/ConditionalRuleEditor.swift').read_text()
 for forbidden in ('model.queue(', 'ChangeEngine.', 'SharedStore', 'TimeGuard', 'CoreLocation', 'CLLocation',
-                  'requestLocation', 'UserDefaults'):
+                  'requestLocation', 'UserDefaults', 'LocationCheck', 'readOnce'):
     assert forbidden not in editor, ('the editor only drafts; it never queues, reads location or storage', forbidden)
+# Step 4: a place is set in its own sheet, which alone reads location; the
+# editor only receives the finished place.
+assert 'PlaceEditor(initial: request.place, ruleID: ruleID)' in editor
+add = declaration(editor, 'private func addChosen()')
+assert add.index('if kind == .place {\n            placeEditing = PlaceEditRequest(conditionID: nil, place: nil)') \
+    < add.index('ConditionKind.defaultCondition(kind'), 'a new place opens the place editor'
+set_place = declaration(editor, 'private func setPlace(_ place: ConditionalPlace, conditionID: UUID?)')
+assert 'guard let index = conditions.firstIndex(where: { $0.id == conditionID }) else { return }' in set_place, \
+    'a card removed while its place editor was open stays removed'
+assert 'conditions.count < ConditionalRule.maximumConditions' in set_place
 review = declaration(editor, 'private func review()')
 assert 'guard canReview else { return }' in review
 assert ('ChangeReceiptRequest(action: existing == nil ? .addConditionalRule(draft)\n'
@@ -394,7 +411,7 @@ assert 'EditorValidation.conditional(draft, existing: current ?? existing)' in e
 assert 'waiting: waiting, onReview: review' in editor
 # Review fixes: bindings by ID (no index-based ForEach($conditions)), a stale
 # editor can't silently revert a landed edit, Cancel asks for every change.
-assert 'ForEach($conditions)' not in editor and 'ConditionEditorCard(condition: binding(for: item.id))' in editor
+assert 'ForEach($conditions)' not in editor and 'ConditionEditorCard(condition: binding(for: item.id), onEditPlace:' in editor
 binding_src = declaration(editor, 'private func binding(for id: UUID)')
 assert 'guard let index = conditions.firstIndex(where: { $0.id == id }) else { return }' in binding_src
 assert '!changedUnderneath' in editor and 'return !current.sameConfiguration(as: existing)' in editor
@@ -427,15 +444,20 @@ assert '.filter { !isRuleOwned($0, state: model.state) }' in conflicts, 'owned w
 assert '&& !isRuleOwned(key, state: model.state)' in conflicts, 'nor a reviewable priority change'
 calendar_src = (ROOT / 'Latch/SchedulesView.swift').read_text()
 assert 'ref: s.ownerRuleID.map { RuleRef.conditional($0) } ?? .schedule(s.id)' in calendar_src
-project = (ROOT / 'Latch.xcodeproj/project.pbxproj').read_text()
-assert 'NSLocation' not in project, 'no location permission in step 2'
+# Step 4: CoreLocation is confined to the host's one-shot reader, used only
+# by the check-in and place sheets (Tests/WhenWhereLocationHarness.py).
 for path in (ROOT / 'Latch').glob('*.swift'):
-    assert 'import CoreLocation' not in path.read_text(), ('no CoreLocation in step 2', path.name)
-print('When & where source guards passed: receipt-only editor, no location, Check in on, owned windows')
+    text = path.read_text()
+    if path.name != 'LocationCheck.swift':
+        assert 'import CoreLocation' not in text, ('CoreLocation only in LocationCheck.swift', path.name)
+    if path.name not in ('LocationCheck.swift', 'CheckInSheet.swift', 'PlaceEditor.swift'):
+        assert 'LocationCheck()' not in text, ('location is read only from Check in or Set to where I am now', path.name)
+print('When & where source guards passed: receipt-only editor, places through the place sheet, Check in on, owned windows')
 
 # --- Translations of every When & where string ---------------------------
 keys = set()
-for name in ('Latch/ConditionalRuleEditor.swift', 'Latch/RuleSummarySheet.swift', 'Latch/RulesView.swift'):
+for name in ('Latch/ConditionalRuleEditor.swift', 'Latch/RuleSummarySheet.swift', 'Latch/RulesView.swift',
+             'Latch/PlaceEditor.swift'):
     for call in re.findall(r'\btr\((?:[^()"]|"(?:[^"\\]|\\.)*")*\)', (ROOT / name).read_text()):
         keys.update(re.findall(STRING, call))
 kinds = section(presentation, 'enum ConditionKind: CaseIterable, Equatable {', '\n}\n')

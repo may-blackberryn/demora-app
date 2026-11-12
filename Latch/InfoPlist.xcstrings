@@ -1,0 +1,114 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "CheckIn": {
+      "comment": "NSLocationTemporaryUsageDescriptionDictionary → CheckIn: iOS's one-time precise-location prompt during a When & where check.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora braucht für diese Prüfung deinen genauen Standort, um zu erkennen, ob du dich im Ort einer Regel befindest."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora needs your precise location for this check, to tell whether you're inside a rule's place."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora necesita tu ubicación exacta para esta comprobación, para saber si estás dentro del lugar de una regla."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora a besoin de votre position exacte pour cette vérification, afin de savoir si vous êtes dans le lieu d'une règle."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "इस जाँच के लिए Demora को आपकी सटीक लोकेशन चाहिए, ताकि पता चल सके कि आप किसी नियम की जगह के अंदर हैं या नहीं।"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora potrzebuje Twojej dokładnej lokalizacji do tego sprawdzenia, aby ustalić, czy jesteś w miejscu z zasady."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Demora precisa da sua localização exata para esta verificação, para saber se você está dentro do lugar de uma regra."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora'nın bu kontrol için tam konumuna ihtiyacı var; böylece bir kuralın yerinin içinde olup olmadığını anlayabilir."
+          }
+        }
+      }
+    },
+    "NSLocationWhenInUseUsageDescription": {
+      "comment": "Location permission prompt (While Using only). Must match INFOPLIST_KEY_NSLocationWhenInUseUsageDescription in English.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora liest deinen Standort einmal, wenn du auf „Einchecken“ tippst oder einen Ort festlegst, um zu prüfen, ob der Ort einer Regel zutrifft. Dein Standort wird nirgendwohin gesendet; gespeichert werden nur die Orte, die du speicherst."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora reads your location once when you tap Check in or set a place, to see if a rule's place applies. Your location isn't sent anywhere; only the places you save are kept."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora lee tu ubicación una vez cuando tocas Comprobar o defines un lugar, para ver si se cumple el lugar de una regla. Tu ubicación no se envía a ningún sitio; solo se guardan los lugares que guardas."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora lit votre position une seule fois lorsque vous touchez Vérifier ou définissez un lieu, pour savoir si le lieu d'une règle s'applique. Votre position n'est envoyée nulle part ; seuls les lieux que vous enregistrez sont conservés."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "जब आप चेक इन पर टैप करते हैं या कोई जगह सेट करते हैं, तब Demora एक बार आपकी लोकेशन पढ़ता है, यह देखने के लिए कि किसी नियम की जगह लागू होती है या नहीं। आपकी लोकेशन कहीं नहीं भेजी जाती; सिर्फ़ आपकी सहेजी गई जगहें रखी जाती हैं।"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora odczytuje Twoją lokalizację raz, gdy stukniesz Sprawdź lub ustawisz miejsce, aby sprawdzić, czy miejsce z zasady pasuje. Twoja lokalizacja nie jest nigdzie wysyłana; zachowywane są tylko miejsca, które zapiszesz."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Demora lê sua localização uma vez quando você toca em Verificar ou define um lugar, para ver se o lugar de uma regra se aplica. Sua localização não é enviada a lugar nenhum; só os lugares que você salva são guardados."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora, Kontrol et'e dokunduğunda veya bir yer belirlediğinde konumunu bir kez okur; böylece bir kuralın yerinin geçerli olup olmadığını görür. Konumun hiçbir yere gönderilmez; yalnızca kaydettiğin yerler saklanır."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

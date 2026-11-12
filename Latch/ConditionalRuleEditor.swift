@@ -6,10 +6,11 @@
 //  first problem stopping it shows above the button (R12). Decisions live in
 //  RulesPresentation.swift (`EditorValidation.conditional`, `ConditionKind`,
 //  `ConditionalText`); the engine validates again when the change queues
-//  and applies. Places and countries need location, which arrives in a later
-//  build step (C15 steps 4–5): the chooser explains that instead of offering
-//  a picker. Nothing here reads location, the guarded clock or saved state
-//  outside `model.state`.
+//  and applies. A place is set in `PlaceEditor` (its own sheet, which reads
+//  one fix only when the user taps "Set to where I am now"); countries need
+//  the offline lookup of a later build step (C15 step 5), so the chooser
+//  explains that instead. Nothing here reads location, the guarded clock or
+//  saved state outside `model.state`.
 //
 
 import SwiftUI
@@ -48,6 +49,7 @@ struct ConditionalRuleEditor: View {
     @State private var receipt: ChangeReceiptRequest?
     @State private var showChooser = false
     @State private var chosenKind: ConditionKind?
+    @State private var placeEditing: PlaceEditRequest?
 
     init(existing: ConditionalRule?) {
         self.existing = existing
@@ -191,6 +193,11 @@ struct ConditionalRuleEditor: View {
                 showChooser = false
             }
         }
+        .sheet(item: $placeEditing) { request in
+            PlaceEditor(initial: request.place, ruleID: ruleID) { place in
+                setPlace(place, conditionID: request.conditionID)
+            }
+        }
     }
 
     // MARK: If
@@ -212,7 +219,11 @@ struct ConditionalRuleEditor: View {
                             .frame(maxWidth: .infinity)
                             .accessibilityHidden(true)
                     }
-                    ConditionEditorCard(condition: binding(for: item.id)) {
+                    ConditionEditorCard(condition: binding(for: item.id), onEditPlace: {
+                        if case .place(let place) = item.condition {
+                            placeEditing = PlaceEditRequest(conditionID: item.id, place: place)
+                        }
+                    }) {
                         conditions.removeAll { $0.id == item.id }
                     }
                 }
@@ -243,10 +254,27 @@ struct ConditionalRuleEditor: View {
     private func addChosen() {
         guard let kind = chosenKind else { return }
         chosenKind = nil
+        guard conditions.count < ConditionalRule.maximumConditions else { return }
+        // A place needs a name and a centre before it is a condition.
+        if kind == .place {
+            placeEditing = PlaceEditRequest(conditionID: nil, place: nil)
+            return
+        }
         guard conditions.count < ConditionalRule.maximumConditions,
               let condition = ConditionKind.defaultCondition(kind, now: Date(), calendar: .current)
         else { return }
         conditions.append(ConditionDraft(condition: condition))
+    }
+
+    /// The place editor's result: a new condition, or the same card changed
+    /// (found by ID; a card removed meanwhile is left removed).
+    private func setPlace(_ place: ConditionalPlace, conditionID: UUID?) {
+        if let conditionID {
+            guard let index = conditions.firstIndex(where: { $0.id == conditionID }) else { return }
+            conditions[index].condition = .place(place)
+        } else if conditions.count < ConditionalRule.maximumConditions {
+            conditions.append(ConditionDraft(condition: .place(place)))
+        }
     }
 
     // MARK: Then
@@ -354,6 +382,7 @@ private struct ConditionEditorCard: View {
     @AppLoosen private var loosen
     @Environment(\.locale) private var locale
     @Binding var condition: ConditionalCondition
+    var onEditPlace: () -> Void = {}
     let onRemove: () -> Void
 
     private var calendar: Calendar {
@@ -409,8 +438,11 @@ private struct ConditionEditorCard: View {
                 .frame(minHeight: 44)
             DatePicker(tr("Last day"), selection: dateBinding(first: false), displayedComponents: .date)
                 .frame(minHeight: 44)
-        case .place, .country:
-            // Only an existing rule can hold one before location arrives; it
+        case .place:
+            ConditionRow(condition: condition)
+            shortcut(tr("Change place"), action: onEditPlace)
+        case .country:
+            // Only an existing rule can hold one before countries arrive; it
             // is kept as it is (or removed with the trash button).
             ConditionRow(condition: condition)
         }
@@ -477,6 +509,8 @@ struct ConditionRow: View {
     @Environment(\.locale) private var locale
     let condition: ConditionalCondition
     var status: ConditionStatus? = nil
+    /// The check-in's spinner row while one fix is read ("Checking where you are").
+    var checking = false
     var reason: String? = nil
 
     var body: some View {
@@ -484,10 +518,16 @@ struct ConditionRow: View {
         calendar.locale = locale
         let line = ConditionalText.sheetLine(condition, translate: tr, locale: locale, calendar: calendar)
         return HStack(alignment: .firstTextBaseline, spacing: DemoraSpace.s) {
-            Image(systemName: status.map(Self.mark) ?? ConditionalText.symbol(condition))
-                .foregroundStyle(status.map(color) ?? Ink.inkSoft)
-                .frame(width: 22)
-                .accessibilityHidden(true)
+            Group {
+                if checking {
+                    ProgressView()
+                } else {
+                    Image(systemName: status.map(Self.mark) ?? ConditionalText.symbol(condition))
+                        .foregroundStyle(status.map(color) ?? Ink.inkSoft)
+                }
+            }
+            .frame(width: 22)
+            .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(line)
                     .demoraType(.body)
@@ -527,8 +567,8 @@ struct ConditionRow: View {
 
 // MARK: - Add condition chooser
 
-/// Rows with a title and one example line (Google Home). Place and Country
-/// explain that they arrive in a later update.
+/// Rows with a title and one example line (Google Home). Country explains
+/// that it arrives in a later update.
 struct ConditionChooser: View {
     let conditionCount: Int
     let onChoose: (ConditionKind) -> Void
