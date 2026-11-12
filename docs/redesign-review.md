@@ -1,6 +1,12 @@
 # Demora iOS full redesign — review
 
 ## Start here
+- **When & where step 3 (2026-11-12):** check-in and Today rows (`bf2d2ed` +
+  review fixes `4784fe8`): Check in is on; the check-in sheet checks day,
+  time and dates (no location yet), shows ✓/✗/? with reasons and starts free
+  time with a hold; Today lists "Check in" rows under your limits; a running
+  check-in session lives on its rule with End early. See "When & where
+  step 3" at the end for decisions, phone checks and what step 4 needs.
 - **When & where step 2 (2026-11-11):** editor, Rules card and summary sheet
   (`79e51ba` + review fixes `af71cf8`): When & where section after Schedules,
   New rule row, one-page editor (days, time, dates; place/country explained
@@ -1040,3 +1046,127 @@ sequential unsigned arm64 Debug and Release builds with stable Xcode 27.0
   from Planned and put **End early** on the When & where sheet.
 - A waiting check-in block (step 6) has no card line (`RulePending` maps
   `.startConditionalSession` to nil); add one with step 6 if wanted.
+
+## When & where step 3 (2026-11-12)
+Step 3 of the approved `docs/conditional-sessions-redesign.md` (C15: check-in
+with day/time/dates only + Today rows). No CoreLocation, no Info.plist change,
+engine and model untouched (`git diff ec7234a -- Shared/ChangeEngine.swift
+Shared/SharedModels.swift` is empty). Commits `bf2d2ed` + review fixes
+`4784fe8`. Evidence: new `Tests/WhenWhereCheckInHarness.py` compiles the real
+`RulesPresentation.swift` with the real models and checks every sheet state,
+that the stamp the sheet builds is accepted by the engine's own
+`ConditionalStart.plan` (and refused when stale, after midnight or after a
+clock change), reason copy for every reason, Today rows and the Planned
+mapping, plus source guards and 103 strings × 7 tables. Nothing was seen on
+a screen (no simulator runtime on this Mac).
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| **Check in** is on in the summary sheet (primary) and stays available while an edit of the rule waits; it opens `CheckInSheet` on top of the summary sheet | §5.4: the enforced rule keeps working until its edit lands | Yes |
+| The sheet checks on open: `ConditionalClockInput.current` → `ConditionEvaluator.evaluate(…, location: .notRead)` → per-condition ✓ / ✗ / ? / – rows with a reason (`ConditionRow` gained a status and reason) → if met, Hold to start sends that check's `ConditionalCheckInStamp` through `startConditionalSessionOffMain`, which validates it again | §5.5; C2: no start without a met evaluation and a fresh stamp | Yes |
+| **Location is never read** (`ConditionalCheckIn.locationAvailable = false`). A rule whose verdict a place or country could still change says **"This rule needs your location."** / "Location checks arrive in a later update."; its row reads "Needs your location — arrives in a later update." and nothing can start. A met any-of rule (e.g. "in Mexico **or** on Sundays" on a Sunday) starts on its day/time branch | Brief; C8 already says location is read only when it can change the answer | Yes |
+| **Block rules** show the same "needs your location" state, even inside their own time window, and get no Today row | Check-in blocks are step 6; block rules can't be saved yet anyway | Limit until step 6 |
+| Verdict order: removed → running → refusal → rule changed → block → clock changed → needs location → not met → uses unknown → used up → under a minute left → met. "Not met" wins over "used up" | §5.5 step 6 lists "used up" only for a met rule; on a day it can't hold, the ✗ rows say more | Yes |
+| **Freshness**: a check is re-run on its own (10 s timer) once it is 110 s old, the window it relied on has closed, the day or zone changed, or the rule changed/was removed (state publish). A hold on a check that only aged re-runs it and sends the new one if it is still met for the same rule version, day and zone; any other change is shown with "Checked again. Hold again to start." | 110 s keeps a margin under the engine's 120 s stamp lifetime; a pre-midnight or pre-edit check is never sent | Yes — the aged-only resend is worth your eye (the alternative is always needing a second hold) |
+| **One start in flight**: `starting` is set on the main actor before the request leaves it, the hold is disabled while it runs, and a refused or started result removes the hold (Try again builds a new check with a new check-in ID). The engine's conflict key and one-use check-in IDs back this up | Double taps, VoiceOver confirm + hold | Yes |
+| **How long**: `DurationControl` from 5 (or the cap if smaller) to the cap = min(rule's max, whole minutes left in the window); the sent length is clamped to 1…cap; "Ends at 15:20 · 1 of 1 today" (use number = today's count + 1) | §5.5; the wheels can overshoot the range | Yes |
+| No receipt for a free start: **Hold to start free time** (free ink, 1.2 s); with VoiceOver or Reduce Motion one confirmation "Start free time now?" | §5.5 step 6: nothing waits, the hold is the deliberate moment | Yes |
+| Every `ConditionalStartRefusal` (14) has its own plain line under **"Free time didn't start."** with Try again / Done; an unexpected queued start reads "Free time didn't start. It's waiting in Changes instead."; "Free time is on until …" comes only from saved sessions | Brief: a refusal must never read as success | Yes |
+| Reasons: ✓/✗ day "It's Sunday" (weekday in the app's language), ✓ time "Until 06:00", ✗ time "It's 14:05; this starts at 22:00", dates "Today is (isn't) one of these dates" (the dates are on the line above), "Not needed"; every unknown reason (clock changed, zone changed, the location ones for step 4) has a line | §5.5 step 5 | Yes — wording worth your eye |
+| Haptics: one success or warning when you open or Try again; the hold's own success on a start; none on background re-checks | §9 | Yes |
+| **Today**: Check in rows sit in their own card directly under the Your limits section (so they also show with no limits), same row style as extra time: "**Sunday in Mexico** · 1 left today · Check in ›" → opens the check-in itself. Shown for free-time rules with a known count and uses left, nothing of theirs running, day/time/dates holding now and at least a minute left; three at most, then "All in Rules". Counts come from `RuleLiveReads.conditionalUsed` (now shared by Rules, the sheet and Today), the clock from an event read (guarded offset + recent zones), so nothing reads the guarded clock while drawing | §5.3 | Yes |
+| **Running check-in sessions** live on their rule: hidden from Planned while the rule exists; the Now card, day thread and Calendar open the When & where sheet ("Free until" chip, **End early** through the receipt, delayed like any session, or the waiting End early); the rule's card shows a waiting End early. After the rule is removed (C14) the session shows under Planned again with its own End early | "What step 3 needs" recommendation; Q1: ending early stays a delayed looser change | Yes |
+| Editor's free-time note now says "You start it with Check in on the rule or on Today."; the two step-2 "arrives in a later update" check-in strings are removed from all tables; Place/Country in Add condition still say later | Brief | Yes |
+| "Ends at" is phrased "Ends at: 15:20"-style in the other languages ("Termina: %@", "Ende: %@"…), keeping the English argument order | Times past midnight carry a weekday ("Mon 00:10"); arguments are not positional | Yes |
+| Recovery: Check in isn't disabled up front; the engine refuses (`.unavailable`) and the sheet says nothing changed | No engine change; rare | Limit |
+| No change to the engine, model, capacity or any existing rule's behaviour | Brief | Preserved |
+
+## When & where step 3 review fixes
+A fresh reviewer read `bf2d2ed` and the spec with none of the lead's
+conclusions. It found **no high-severity bug**: no start without a met check,
+no override path, one request in flight, stale sheets re-checked, refusals
+never shown as success, the session mapping keeps End early reachable, and no
+guarded-clock reads while drawing; all new translations keep placeholder
+count and order. Fixed in `4784fe8`, each with a check in
+`Tests/WhenWhereCheckInHarness.py` that fails without the fix
+(mutation-checked):
+
+| Finding | Fix | Check |
+| --- | --- | --- |
+| Borderline medium: a hold on a check that had just aged past 110 s re-checked silently, played two success haptics and started nothing | Aged-only checks are re-run and sent; other changes show "Checked again. Hold again to start." with no extra haptic | `mayStartAfterRecheck`: aged → send; after midnight, edited, not met, running → never |
+| "Free time is on until …" could outlive a session ended elsewhere | Running state comes only from saved sessions | Started but not saved → not running |
+| A check whose window had just closed kept its ✓ rows and said "under a minute left" | `needsRecheck` when the window end has passed | 12:00–12:30 window: 12:29:50 fresh, 12:30:10 re-check |
+| A waiting End early showed on no Rules card (its session card is hidden) | `RulePending.cardChange` gives the rule's card its running session's End early (the rule's own change first) | Card table |
+| The sheet's End early read `Date()` in the body | It follows the sheet's own clock | Source guard |
+
+The same reviewer rechecked `4784fe8` and found no high or medium issue (the
+re-check path sends only a fresh, met check for the same rule version, day
+and zone; one start in flight still holds). Low, left: when a hold lands on a
+re-check that is no longer met, the hold button's own success haptic still
+plays (the screen shows the not-met verdict).
+
+Left as limits: an engine-side race refused inside the queue or at apply comes
+back as `.unavailable`, so it reads "iOS may not be able to track another
+session right now. Nothing changed." (engine unchanged); Today's rows use a
+count and clock offset up to 30 s old and refresh each minute, so a row can
+stay up to a minute after its window ends (the sheet decides).
+
+Verification on `4784fe8`: all 37 `Tests/*Harness.py` (new
+`WhenWhereCheckInHarness`: 192 checks, source guards, 103 strings × 7
+tables; `WhenWhereHarness` and `WhenWhereRulesHarness` passing, the latter's
+Check-in guard updated to "on"), both Swift harnesses, both localization
+checks, `git diff --check`, then sequential unsigned arm64 Debug and Release
+builds with stable Xcode 27.0 (27A266a), DerivedData outside the repo, no
+warnings. `bf2d2ed` passed the same verify on its own. Not installed; no
+simulator runtime on this Mac.
+
+### When & where step 3: what to try on the phone
+1. Make (or keep) a rule "Sundays": **Days** Sunday only, **Free time**,
+   Everything, up to 1 hr, once a day. Let it land (or **Skip delay (dev)**).
+2. On a Sunday, **Today** shows a card under Your limits: "**Sundays** · 1
+   left today · Check in ›". On another day there is no row.
+3. Tap it: "Sundays", **You can have free time now.**, "Free time needs all
+   of these.", a ✓ row "On Sun / It's Sunday". Change **How long** to 30 min:
+   "Ends at … · 1 of 1 today" moves. Hold **Hold to start free time**.
+4. The sheet says **Free time is on until …** with Done. Today's Now card says
+   you're in a free period; the Check in row is gone; Rules → Planned does
+   **not** list the session; the When & where card chip reads "Free until …".
+5. Tap the Now card: the **Sundays** sheet opens with **End early**. Tap it:
+   the receipt says Looser change and waits your looser delay; after Confirm
+   the sheet and the card show the waiting End early.
+6. After the session ends, Check in again: **You've used today's free time.**
+   / "Resets at midnight". Monday: **Not right now.** with ✗ "It's Monday".
+7. Try a double hold, or hold then quickly tap again: only one session starts.
+   Open the check-in, wait 2–3 minutes, then hold: it starts (re-checked).
+   Open it at 23:58 on a rule that holds every day and hold after midnight:
+   "Checked again. Hold again to start."
+8. Add a **Time** 22:00–00:00 condition (all of): at 23:30 How long caps at
+   30 min and ends at 00:00; at 23:59:30 "Less than a minute is left…".
+9. Change the iPhone's time by hand (Settings → General → Date & Time): the
+   rows show "?" "Your clock was changed recently" and nothing starts.
+10. With VoiceOver on: the hold becomes one button asking "Start free time
+    now?"; each row reads "Met, On Sun, It's Sunday".
+11. Remove the rule while its session runs: the session appears under
+    Planned with End early (C14).
+12. Languages: German/Polish/Hindi rows and refusal lines wrap, never cut the
+    mark; weekday names follow the app language.
+
+### What step 4 needs (places + location permission)
+- Flip `ConditionalCheckIn.locationAvailable` (Today rows then also list rules
+  that location could make true) and turn the `.needsLocation` state into a
+  real read: when `evaluation.locationCouldChangeVerdict`, run the one-shot
+  `LocationCheck` (host only) and evaluate again with `.fix`/`.unavailable`.
+  `CheckInResult.make` hardcodes `location: .notRead` today: give it the
+  location input, and make the stamp come from that evaluation.
+- The aged-only resend in `CheckInSheet.start` re-evaluates without location:
+  for a rule that needed a fix it would come back not met and show "Checked
+  again"; re-read location there (or require a new check).
+- `unknownKey(.notChecked)` still says "Needs your location — arrives in a
+  later update."; add the spinner row "Checking where you are", the
+  permission card, and enable Place in `ConditionKind.disabledReason`.
+- The location reason strings (location off, no fix, imprecise, needs precise,
+  simulated, accessory, border, country unknown) already exist and are
+  translated; the permission prompt strings and `InfoPlist.xcstrings` don't.
+- Update the "no CoreLocation / NSLocation" source guards in
+  `Tests/WhenWhereRulesHarness.py` and `Tests/WhenWhereCheckInHarness.py`.
+- Block check-ins (Review → receipt, Today rows for block rules) stay step 6.
