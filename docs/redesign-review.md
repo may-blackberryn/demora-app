@@ -1,6 +1,16 @@
 # Demora iOS full redesign — review
 
 ## Start here
+- **When & where is complete (step 6, 2026-11-12):** block rules and their
+  check-in (`8318ebe` + review fixes `a01c8c6`): blocks save (chosen apps; a
+  place or country; under any of only times run on their own); a met block
+  goes Review → receipt → your stricter wait, like Block now; doubt counts as
+  met for blocks only (approximate location, near a border); free time is
+  proven unchanged against step 5. **Read "When & where: start here"
+  (further down in this Start here) first**: what the feature is, the decisions worth your eye, and the
+  phone test list for all six steps with your three examples end to end.
+  Website privacy section drafted in `docs/website-privacy-location-draft.md`
+  (not deployed). Nothing seen on a screen or with a real location.
 - **When & where step 5 (2026-11-12):** countries from bundled offline
   borders (`a525219` + review fixes `53cef19`, `9141b00`): Natural Earth
   1:10m v5.1.2 (public domain), 946,468 bytes, decided on the iPhone with no network; a
@@ -86,6 +96,131 @@
 - **Known limits:** nothing seen on a phone; no live contact/invite round
   trip; ~380 catalog keys are no longer used literally in source (some are
   used through variables), not pruned here.
+
+### When & where: start here (all six steps, 2026-11-12)
+**What it is.** Rules → New rule → **When & where**: up to four conditions
+(Place, Country, Days, Time, Dates) joined by **all of** or **any of**, and
+one outcome: **free time** (up to N min, N times a day) or a **block**
+(chosen apps, until a time or for a length). Creating, editing or removing a
+rule goes through the receipt and waits like any change. Using it is **Check
+in** (rule sheet or a Today row): day/time/dates on the guarded clock, then
+one foreground location reading only if it can change the answer, ✓/✗/? per
+condition. Met free time starts with a hold, at once, capped and counted;
+a met block goes Review → receipt → your **stricter** wait, like Block now.
+Nothing about where you were is kept or sent; countries come from borders
+built into the app.
+
+**Commits.** Engine `9151393..da7fe64`; editor/card/sheet `79e51ba..af71cf8`;
+check-in + Today `bf2d2ed..4784fe8`; places + location `f4aa920..3387a4d`;
+countries `a525219..9141b00`; blocks `8318ebe`, `a01c8c6`; docs in the commit after.
+Each step was freshly reviewed and verified (harnesses, both Swift
+harnesses, localization checks, unsigned Debug + Release). **Nothing has
+been seen on a screen or tried with a real location**; no simulator runtime
+on this Mac.
+
+**Decisions most worth your eye** (details in the step sections below):
+blocks count what a reading can't rule out (San Ysidro counts for "In
+Mexico"; Approximate Location ~12 km from a border); free time needs ~3 km +
+accuracy from a border (Tijuana centre reads "can't tell"); a time change of
+zone in the last 12 h must hold in both zones, uses too; block v1 is chosen
+apps only and, under any of, only times run on their own; `sourceInformation
+== nil` counts as a real fix; disputed areas follow Natural Earth (Simferopol
+reads Russia); "Show on map" deferred; an older build can't read a state
+with a *pending* When & where change (recovery, nothing lost).
+
+**Before you start.** Install dev demora (signed Debug; command in
+`CLAUDE.md`). Set **Rules → Your waits** to something short you can live
+with for testing (e.g. Stricter: right away, Looser: 5 min), or use **Skip
+delay (dev)** in Changes. Location tests need the real place; you can make a
+test place where you are.
+
+**Your three examples, end to end**
+1. **"In Mexico AND Sunday → one free session a day, 1 hour max."**
+   New rule → When & where → name "Sunday in Mexico" → **Add condition →
+   Country** → search "mex" → México → Use this country → **Add condition →
+   Days** → Sunday only → Then **Free time**, Everything, Up to 1 hr, Times a
+   day 1 → **Review change**: "Looser change", "Add When & where rule: Sunday
+   in Mexico. If in Mexico and on Sun: 60 min free, once a day." Hold. The card
+   shows "Added in …"; after it lands, "In Mexico, on Sun · 1 hr free" and, on
+   a Sunday, **1 left today**; Today shows "Sunday in Mexico · 1 left today ·
+   Check in ›".
+   - Not in Mexico (most tests): Check in → the first time the card "Demora
+     checks where you are once…" → **Allow location** → iOS asks → "Checking
+     where you are" → ✗ "You're not in Mexico" → **Not right now.** with Try
+     again / Done. No Skip, no password, nothing to override.
+   - To see it pass, make the same rule with **your** country. On Sunday:
+     ✓ "You're in …", ✓ "It's Sunday", **You can have free time now.**, How
+     long ≤ 60, "Ends at … · 1 of 1 today", **Hold to start free time** →
+     "Free time is on until …"; Today's Now card shows the free period; the
+     card chip "Free until …". After it ends: **You've used today's free
+     time.** A Monday: ✗ "It's Monday" and **no location read at all**.
+   - Within ~3 km of a border (or with Precise Location off, ~12 km): "?" **Too
+     close to a border to tell**; nothing starts.
+2. **"At my house (radius) OR after 22:00 → Instagram is blocked."**
+   New rule → name "Instagram at home" → **Add condition → Place** → Home →
+   **Set to where I am now** → 250 m → Use this place → **Add condition →
+   Time** → **After 22:00**, drag To to 06:00 → **Any of these** → Then
+   **Block** → Apps → Instagram → Until 07:00. The note says "From 22:00 this
+   blocks on its own. At Home it starts when you check in." Review change:
+   **Stricter change** (your stricter wait). After it lands:
+   - **On its own:** at 22:00 Instagram is blocked until 06:00 without any
+     check-in (the card chip "On until 06:00"); it appears in Calendar /
+     Today's day thread under the rule's name and is **not** listed under
+     Schedules (it changes only with its rule).
+   - **At home, any time:** Today shows "Instagram at home · starts a block ·
+     Check in ›". Check in → ✓ "You're at Home" → **Block 1 app until 07:00?**
+     → **Review** → receipt "Stricter change · Start block: Instagram at
+     home", Takes effect (now, or after your stricter wait), "Then runs until
+     07:00." → **Confirm**. With "Stricter: right away": "The block is on
+     until 07:00." With a stricter wait: "The block starts at …" and the card
+     shows **Starts in …**; the rule's sheet shows the waiting change with See
+     in Changes.
+   - **Away at 23:00:** Check in → ✗ "You're not at Home", ✓ "Until 06:00" →
+     **This block is on until 06:00.** "Its time blocks on its own, without a
+     check-in." Nothing to start.
+   - **Leaving home doesn't end it**; checking in again says it's on;
+     **End early** (rule sheet) is a looser change that waits your looser
+     delay.
+   - **Doubt counts for a block:** Precise Location off → Check in at home: no
+     precise-location prompt; ✓ "Close enough to Home to count for a block".
+3. **"At school AND weekend → two free sessions of 30 minutes a day."**
+   New rule → "School weekend" → Place School (set it while you're there, or
+   use a test place where you are) → Days → **Weekend** → Free time,
+   Everything, Up to 30 min, Times a day 2 → Review change (looser) → Hold.
+   On a Saturday at the place: Check in → ✓ ✓ → hold → 30 min; after it ends,
+   Check in again → **2 of 2 today**; a third time → **You've used today's free
+   time.** Ending early doesn't give a use back. With Precise Location off iOS
+   asks once for precise for this check; decline → "Needs precise location".
+   Near the edge of the place: "?" "Location isn't precise enough here".
+
+**Then, once each**
+4. Editor: Add condition at four → off ("You can add up to four
+   conditions."); five rules → New rule row off. A block without a place:
+   "Use a repeating block for rules without a place."; any of + Days on a
+   block: "With “any of”, a block can use times, places and countries, not
+   days or dates."; no apps: "Choose at least one app."
+5. Edit a rule (any change, including moving a place) → always **Looser
+   change**; the card says "Loosens in …"; **Check in keeps working** with the
+   old rule until the edit lands. Remove free time → stricter; remove a block
+   → looser.
+6. Settings → Demora → Location → **Never**: check-in shows "?" "Location is
+   off for Demora. You can turn it on in Settings." — no prompt, no jump to
+   Settings. Day/time-only free rules keep working.
+7. Leave a check-in open 2 minutes, then hold / Confirm: it reads once more
+   and starts only if still met; otherwise "Checked again. …". Close the sheet
+   while "Checking where you are" spins: the location arrow goes away.
+8. Change the iPhone's time by hand: "?" "Your clock was changed recently";
+   nothing starts (free time or block).
+9. Airplane mode: everything above works the same (no network involved).
+10. VoiceOver: rows read "Met, In Mexico, You're in Mexico"; the hold becomes
+    one "Start free time now?" confirmation; Large text wraps, never cuts the
+    ✓/✗.
+11. Languages (German, Polish, Hindi): iOS's location prompts are translated;
+    country names follow the app language; long block lines wrap.
+12. You → **Credits**: word list and Natural Earth borders.
+13. Tell me if every check-in says **"This location looks simulated"** (the
+    `sourceInformation == nil` decision) or if a reading near home is often
+    "?" for free time.
 
 ### You: what to try on the phone (2026-11-08)
 - **State:** foundations, Today, Rules, Insights and now the You build
@@ -1483,3 +1618,114 @@ mention countries ("…to see if a rule's place or country applies…").
 - `ConditionalCheckIn.wantsPrecise` / `wantsPreciseRetry` are written for
   free time; a block check-in should decide whether an approximate fix
   near a border is enough to start a block (it is stricter, so probably yes).
+
+## When & where step 6 (2026-11-12)
+Step 6, the last step, of the approved `docs/conditional-sessions-redesign.md`
+(C15: block outcome; C3, C4, §5.6). Commit `8318ebe` + review fixes `a01c8c6`
+(below). Evidence: new `Tests/WhenWhereBlockHarness.py` (1) builds the
+evaluator, country lookup and check-in presentation **as they were at
+`830dd55`** and as they are now, runs 319,440 free-time location checks at 330
+points near borders, enclaves and the sea (11 kinds of fix, every free-time
+rule shape) and requires the engine's evaluation, the stamp, the sheet's
+screen, its read/precise/retry decisions and Today's rows to agree point for
+point; (2) checks block saving, the block check-in screens, the engine plan
+for the sheet's stamp, the doubt rules on the real borders, Today rows, the
+card line and source guards. No simulator, no real fix, nothing on a screen.
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| `EditorProblem.blockLater` removed; a block draft now gets, in page order: needs a place/country → any of with days/dates → **no apps** → `isValid`. The Rules harness's 21,450-draft table no longer excludes blocks (64 block drafts accepted, each exactly `isValid`) | Brief; the step-1 v1 limits stay (chosen apps only; all-except can't be made in the editor) | Yes |
+| A met block reads **"Block 1 app until 07:00?"** (or "for 3 hr" when it runs its whole length), with **Review** → the ordinary `ChangeReceiptSheet` for `.startConditionalSession` (Stricter change, your stricter wait, one-tap Confirm; note "Then runs until …") → Confirm hands off to the sheet's one start path (`start` → `ChangeEngine.startConditionalSessionOffMain`), which re-checks an aged check (reading location again) and queues it through the engine's normal stricter path | C4: exactly like Block now; one start path for free time and blocks; the engine validates again | Yes — the receipt gained an optional `perform` hand-off (used only here); its direction, wait and summary are the action's own |
+| The end shown is the engine's own `ConditionalStart.plan`, run where the engine runs it: at queue now, and — review fix — again when the stricter wait ends, so the end is the one the block really gets (rule's until after it lands, capped at an all-of window end; < 1 min left → "Less than a minute is left"; window closing before the wait ends → never offered) | The sheet never claims an end the engine wouldn't set | Yes |
+| **Any of with a time**: the check-in is for the place/country. Away while the time window blocks → **"This block is on until 06:00." / "Its time blocks on its own, without a check-in."** (nothing to start); at home → the check-in block runs to its own end (07:00), past the window | C3: day/time branches run on their own; a check-in block only for place/country branches. Starting a duplicate of the owned window would add nothing | Yes |
+| A block's place/country row is never "Not needed" before a read: it reads "?" "Not checked yet" | Its check-in is for that row | Yes |
+| **Doubt favours the stricter result, blocks only (§5.6)** — engine (`ConditionEvaluator.locationResult`, block branches only): a place takes an **approximate fix** too (the host already treats it as ≥ 10 km vague) and counts if the circle touches the place; only a precise fix with its point inside reads "You're at Home", otherwise **"Close enough to Home to count for a block"**. A country counts if inside, or if the country is within the fix's accuracy + 2 km (**"Close enough to Mexico to count for a block"**) | Brief: near a border / can't tell / approximate count as met for a block, never for free time. Simulated fixes, no fix, location off and missing borders data stay "?" (no reading to doubt) | Yes — worth your eye: San Ysidro (2 km into the US) counts for "In Mexico"; with Approximate Location ~12 km |
+| For that, the offline lookup's answer gained an in-memory **`nearbyMeters`** (each country within 100 km, dataset allowance taken off; 0 for a country the point may be in: one containing it, or, in a spot the dataset can't name, one whose outline box comes within 5 km of that unnamed area). Without the list (not produced by the app) the engine falls back to "any border this close" | A block must count the country across the border, never a far one: near the US–Canada border "In Mexico" stays ✗. North Cyprus counts for "In Cyprus", not "In Turkey"; Baarle-Hertog for Belgium and the Netherlands | Yes — the only engine/model change; free-time lines are byte-identical (source guard) and the lookup's region/distance is unchanged (equivalence harness) |
+| Blocks **never ask for temporary precise location** (`wantsPrecise` / `wantsPreciseRetry` are free-time only) | An approximate fix already decides a block | Yes |
+| Location for a block: read once on the user's tap (card first, never re-prompted), not while its block runs or a start waits, not while the clock is off | C8 | Yes |
+| One check-in block at a time: a waiting start shows **"The block starts at …" / "It waits your stricter delay, like Block now. It's in Changes."** (Done only); a running one **"The block is on until …"**; a second check-in is refused by the engine (`alreadyRunning`, conflict key) | Q1: a check-in never replaces, shortens or ends a block | Yes |
+| Refusals and the clock line say **"The block …"** for blocks; "Checked again. Review it again to start." | Free-time words would mislead | Yes |
+| **Today**: block rules with a place/country get a row ("**Instagram at home** · starts a block · Check in ›") when a fix could start them now (all of: day/time/dates hold), nothing of theirs runs or waits | Spec §5.3 | Yes |
+| **Card and summary sheet**: a check-in block waiting its delay shows on the rule's card as **"Starts in …"** and on the sheet as "Stricter change waiting · lands … / See in Changes". It does not lock Edit/Remove (`RulePending.ref` stays nil; `cardChange` adds it) | Step 2 kept the start off the rule's conflict key on purpose | Yes |
+| All "arrives in a later update" copy for When & where removed (`blockLater`, `arrivesLater(.block)`, "This rule can't be checked yet."), and the three keys from all seven tables; 17 new strings in all seven | Brief | Yes — harness scans `Latch/` and `Shared/` |
+| Harness guards rewritten to the final intent: Rules (blocks save; table = `isValid`), Check-in (a block's place needs a fix even in its window; block rows), Location (a block reads once, approximate is enough; pending decides), Country (free-time fields compared without the nearby list), engine (doubt cases) | Brief | Yes |
+| No change to free time, other rule kinds, delays, overrides, Block now, capacity or the engine's queue/apply | Brief | Preserved — equivalence harness and unchanged engine harnesses |
+
+## When & where step 6 review fixes
+A fresh reviewer read `8318ebe` and the spec with none of the lead's
+conclusions. It found **no high-severity bug**: no check-in ends, shortens or
+replaces a block (the engine refuses `alreadyRunning`; only finished sessions
+are replaced; ending early stays the delayed `.endSessionEarly`); no doubt
+reaches free time (every block-only branch is gated on the outcome); no
+instant or override path (the receipt's hand-off goes only through the
+sheet's one start path to the engine's stricter queue; double sends are
+blocked in the sheet and by the conflict key); the auto re-check pauses while
+the receipt is open; the lookup changes leave free time's inputs unchanged
+(it probed Tijuana, Kyrenia, Hargeisa, Siachen, Baarle on the real borders);
+translations keep placeholders and order. Fixed in `a01c8c6`, each with a
+check in `Tests/WhenWhereBlockHarness.py` that fails without the fix
+(mutation-checked):
+
+| Finding | Fix | Check |
+| --- | --- | --- |
+| **Medium:** with a stricter wait the shown end was wrong: the engine plans a waiting block from when it lands, so "until 07:00" checked in at 06:30 with a 1 h wait runs 07:30 → 07:00 **the next day**, while the sheet and receipt said 07:00 | The sheet plans the stamp again at landing (now + your stricter wait, apply phase) and shows that end ("until Tue 07:00"); an all-of block whose window closes before the wait ends is never offered ("This window closes before your stricter wait ends.") | 06:30 + 1 h → next day 07:00, equal to the engine's apply plan; no wait → today 07:00; school window closing → not offered |
+| Medium/low: a waiting edit or removal of the rule that lands before the waiting block silently drops the start (revision changed) | Not offered: "A change to this rule lands first. Check in after it lands."; a waiting start made for an older version reads **"This block won't start."** / "Its rule changed while it waited. Cancel it in Changes, then check in again." | Edit landing first → not offered; landing after → fine; removal first → not offered; stale waiting start |
+| Low: the sheet chose "free time" vs "block" running from the rule, not the session (an edit can switch the outcome while a session runs) | The session's own kind decides | Free session under a block rule → "Free time is on…"; block session under a free rule → "The block is on…" |
+
+Left as limits, **worth your eye**:
+- **Engine semantics, not changed (outside step 6's authorization):** a
+  check-in block "until 07:00" that waits a stricter delay runs until the
+  next 07:00 *after it lands* — up to ~24 h when the wait crosses 07:00. The
+  screen now says so before you confirm. The alternative (end it at the
+  07:00 the check-in meant, or drop it if that has passed) is an engine
+  change to `ConditionalStart.plan`; ask if you want it.
+- The engine doesn't refuse `.setSchedulePriority` for a rule's own windows
+  (only the Conflicts screen hides the control; add/remove/edit are refused
+  in the engine). A one-line engine guard; not added (outside scope).
+- The "next to an unnamed area" box test is generous: a "Djibouti" block
+  counts in Hargeisa (~100 km). It only ever adds strictness to a block the
+  user asked to start.
+- A block that waits is applied without the wall/guarded clock check (step-1
+  design: a stricter change that waited isn't stale); moving the wall clock
+  meanwhile affects it like any session.
+
+The same reviewer rechecked `a01c8c6`: all three fixes correct, free time
+still identical to `830dd55`, nothing new of high or medium severity. Low,
+left: the "edit lands first" test uses the check's time, so an edit landing
+in the ≤ 110 s between the check and Confirm can still drop the block
+silently; an edit queued *after* a block start (only possible when your
+looser wait is shorter than your stricter one) can still land first, and the
+sheet then says "This block won't start."; the landing check keeps today's
+recent-zone list (conservative: it may refuse a block the engine would
+accept after a zone change); "This block won't start." can also show for a
+free-time rule that was a block when its start was queued (a state only
+step 6 can create; the message is right there).
+
+Verification on `a01c8c6` (and the same on `8318ebe`): all 40
+`Tests/*Harness.py` (new `WhenWhereBlockHarness`: 319,440 free-time checks
+identical to `830dd55`, 89 block checks, source guards, 21 strings × 7
+tables; the step 1–5 When & where harnesses with their guards rewritten to
+the final intent), both Swift harnesses, both localization checks, `git diff
+--check`, then sequential unsigned arm64 Debug and Release builds with stable
+Xcode 27.0 (27A266a), DerivedData outside the repo, no compiler warnings.
+Every review fix was mutation-checked against its check. Not installed; no
+simulator runtime; no real location.
+
+### When & where step 6: what to try on the phone
+Your example 2, "At home OR after 22:00 → Instagram is blocked", end to end
+is in **When & where: start here** (top of this file). Also:
+1. With **Stricter: 1 hour**, check in at home at 06:30 on a rule "until
+   07:00": the question reads "Block 1 app until <tomorrow> 07:00?" and the
+   receipt "Takes effect 07:30 · Then runs until <tomorrow> 07:00." (the
+   engine limit above). A school rule (all of, 08:00–15:00) checked in at
+   14:30 with that wait: "This window closes before your stricter wait ends."
+2. While a block waits: the card says **Starts in …**, the sheet shows the
+   waiting change, Check in says "The block starts at …"; Today has no row
+   for it. Cancel it in Changes: the row comes back.
+3. Edit the rule while a block waits and let the edit land first: Check in
+   says "This block won't start."
+4. Precise Location off: no precise prompt for a block; ✓ "Close enough to
+   Home to count for a block" a few km away. Near a border, "Close enough to
+   Mexico…" from the other side.
+5. Languages: the block lines in German/Polish/Hindi wrap; the question
+   keeps the apps before the time.
