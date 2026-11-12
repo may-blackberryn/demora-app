@@ -273,7 +273,8 @@ struct CheckInSheet: View {
         if check == nil, case .freeTime(_, _, let maxMinutes, _) = rule.outcome { minutes = maxMinutes }
         check = result
         if userAsked {
-            switch ConditionalCheckIn.locationStep(result, permission: locator.permission) {
+            switch ConditionalCheckIn.locationStep(result, permission: locator.permission,
+                                                   sessions: state.sessions, now: Date()) {
             case .read:
                 readLocation(announce: announce)
                 return

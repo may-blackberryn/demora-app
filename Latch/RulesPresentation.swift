@@ -1723,6 +1723,9 @@ enum ConditionalCheckIn {
             // Only a check that didn't read location can still be waiting for it.
             guard evaluation.locationCouldChangeVerdict else { return .notMet }
             guard fixCouldDecide(check.rule, evaluation: evaluation) else { return .arrivesLater(.country) }
+            // A fix couldn't help: say so before asking for location.
+            guard let used = check.used else { return .unknownUses }
+            guard used < usesPerDay else { return .usedUp }
             switch location {
             case .asking: return .askPermission
             case .reading: return .locating
@@ -1755,8 +1758,15 @@ enum ConditionalCheckIn {
     }
 
     /// What to do after the clock-only check the sheet always runs first.
-    static func locationStep(_ check: CheckInResult, permission: LocationPermission) -> CheckInLocationStep {
-        guard !check.readLocation, fixCouldDecide(check.rule, evaluation: check.evaluation) else { return .none }
+    /// Never when a fix couldn't change what the sheet says: today's uses
+    /// are spent or unknown, or this rule's free time is already on (C8).
+    static func locationStep(_ check: CheckInResult, permission: LocationPermission,
+                             sessions: [BlockSession], now: Date) -> CheckInLocationStep {
+        guard !check.readLocation, fixCouldDecide(check.rule, evaluation: check.evaluation),
+              case .freeTime(_, _, _, let usesPerDay) = check.rule.outcome,
+              let used = check.used, used < usesPerDay,
+              !sessions.contains(where: { $0.conditionalRuleID == check.rule.id && $0.endsAt > now })
+        else { return .none }
         switch permission {
         case .notAsked: return .ask
         case .denied, .restricted: return .off

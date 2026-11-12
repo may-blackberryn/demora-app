@@ -156,30 +156,51 @@ let mexicoSunday = free("Sunday in Mexico", .all, [.country("MX"), .days([1])])
 let block = ConditionalRule(name: "Instagram at home", match: .any, conditions: [.place(home)],
     outcome: .block(mode: .blockSelected, selection: none, until: .time(7 * 60)), addedAt: at(11, 1))
 let allowed = LocationPermission.allowed(precise: true)
-check(ConditionalCheckIn.locationStep(notRead(homeSunday, sundayNoon), permission: allowed) == .read, "Sunday: read once")
-check(ConditionalCheckIn.locationStep(notRead(homeSunday, sundayNoon), permission: .allowed(precise: false)) == .read,
+func step(_ r: CheckInResult, permission: LocationPermission, sessions: [BlockSession] = []) -> CheckInLocationStep {
+    ConditionalCheckIn.locationStep(r, permission: permission, sessions: sessions, now: sundayNoon)
+}
+check(step(notRead(homeSunday, sundayNoon), permission: allowed) == .read, "Sunday: read once")
+check(step(notRead(homeSunday, sundayNoon), permission: .allowed(precise: false)) == .read,
       "approximate: read (iOS is asked for precise first)")
-check(ConditionalCheckIn.locationStep(notRead(homeSunday, sundayNoon), permission: .notAsked) == .ask, "never asked: the card")
-check(ConditionalCheckIn.locationStep(notRead(homeSunday, sundayNoon), permission: .denied) == .off, "denied: no prompt")
-check(ConditionalCheckIn.locationStep(notRead(homeSunday, sundayNoon), permission: .restricted) == .off, "restricted: no prompt")
-check(ConditionalCheckIn.locationStep(notRead(homeSunday, mondayNoon), permission: allowed) == .none,
+check(step(notRead(homeSunday, sundayNoon), permission: .notAsked) == .ask, "never asked: the card")
+check(step(notRead(homeSunday, sundayNoon), permission: .denied) == .off, "denied: no prompt")
+check(step(notRead(homeSunday, sundayNoon), permission: .restricted) == .off, "restricted: no prompt")
+check(step(notRead(homeSunday, mondayNoon), permission: allowed) == .none,
       "all of: the day already fails, so no read and no prompt")
-check(ConditionalCheckIn.locationStep(notRead(homeSunday, mondayNoon), permission: .notAsked) == .none, "…nor a card")
-check(ConditionalCheckIn.locationStep(notRead(homeOrSunday, sundayNoon), permission: allowed) == .none,
+check(step(notRead(homeSunday, mondayNoon), permission: .notAsked) == .none, "…nor a card")
+check(step(notRead(homeOrSunday, sundayNoon), permission: allowed) == .none,
       "any of: the day is enough, so no read")
-check(ConditionalCheckIn.locationStep(notRead(homeOrSunday, mondayNoon), permission: allowed) == .read, "any of: only home could")
-check(ConditionalCheckIn.locationStep(notRead(mexicoSunday, sundayNoon), permission: allowed) == .none,
+check(step(notRead(homeOrSunday, mondayNoon), permission: allowed) == .read, "any of: only home could")
+check(step(notRead(mexicoSunday, sundayNoon), permission: allowed) == .none,
       "a country can't be decided yet: no read")
-check(ConditionalCheckIn.locationStep(notRead(mexicoAndHome, sundayNoon), permission: allowed) == .read,
+check(step(notRead(mexicoAndHome, sundayNoon), permission: allowed) == .read,
       "any of country/home: home could decide")
 let allThree = free("Mexico home Sunday", .all, [.country("MX"), .place(home), .days([1])])
-check(ConditionalCheckIn.locationStep(notRead(allThree, sundayNoon), permission: allowed) == .none,
+check(step(notRead(allThree, sundayNoon), permission: allowed) == .none,
       "all of with a country: no fix can make it true yet")
-check(ConditionalCheckIn.locationStep(notRead(block, sundayNoon), permission: allowed) == .none, "block check-ins: step 6")
+check(step(notRead(block, sundayNoon), permission: allowed) == .none, "block check-ins: step 6")
 let alreadyRead = CheckInResult.make(rule: homeSunday, state: stateWith([homeSunday]), clock: clock(sundayNoon),
                                      location: .unavailable(.noFix))
 check(alreadyRead.readLocation && !notRead(homeSunday, sundayNoon).readLocation, "a check knows whether it read")
-check(ConditionalCheckIn.locationStep(alreadyRead, permission: allowed) == .none, "a check that read never reads again by itself")
+check(step(alreadyRead, permission: allowed) == .none, "a check that read never reads again by itself")
+// Review fix: no read (and no card) when a fix couldn't change what the sheet says.
+var spentState = stateWith([homeSunday])
+spentState.conditionalUses = ConditionalUses.recording(ruleID: homeSunday.id, dayKeys: ["2026-11-15"], checkInID: UUID(),
+                                                       at: sundayNoon.addingTimeInterval(-600), in: [])
+let spent = CheckInResult.make(rule: homeSunday, state: spentState, clock: clock(sundayNoon), location: .notRead)
+check(step(spent, permission: allowed) == .none && step(spent, permission: .notAsked) == .none, "used up: no read, no card")
+check(ConditionalCheckIn.screen(check: spent, live: homeSunday, sessions: [], attempt: nil, now: sundayNoon, location: .idle)
+      == .usedUp, "used up is said before asking for location")
+var runningHome = BlockSession(name: "Sunday at home", kind: .free, selection: none,
+                               startedAt: sundayNoon.addingTimeInterval(-60), endsAt: sundayNoon.addingTimeInterval(1800))
+runningHome.conditionalRuleID = homeSunday.id
+check(step(notRead(homeSunday, sundayNoon), permission: allowed, sessions: [runningHome]) == .none, "free time already on: no read")
+var otherSession = runningHome; otherSession.conditionalRuleID = UUID()
+check(step(notRead(homeSunday, sundayNoon), permission: allowed, sessions: [otherSession]) == .read, "another rule's session")
+let unknownCount = CheckInResult.make(rule: homeSunday, state: stateWith([homeSunday]),
+    clock: ConditionalClockInput(guardedNow: sundayNoon, wallNow: sundayNoon, calendar: mx,
+                                 recentTimeZoneIDs: ["America/Mexico_City", "Not/AZone"]), location: .notRead)
+check(unknownCount.used == nil && step(unknownCount, permission: allowed) == .none, "uses unknown: no read")
 
 // MARK: Screens around the read
 func screen(_ r: CheckInResult, phase: CheckInLocationPhase = .idle, now: Date = sundayNoon) -> CheckInScreen {
@@ -356,6 +377,9 @@ assert 'guard manager.authorizationStatus == .notDetermined, permissionWaiter ==
 # prompt and never answers; treat it as off instead of waiting forever.
 assert code.count('locationServicesEnabled()') == 1 and \
     'await Task.detached { CLLocationManager.locationServicesEnabled() }.value' in permission_src, 'checked off the main thread'
+assert permission_src.index('let token = readToken') < permission_src.index('locationServicesEnabled()') \
+    < permission_src.index('guard token == readToken else { return }') < permission_src.index('requestWhenInUseAuthorization()'), \
+    'a sheet closed during the services check gets no prompt'
 assert permission_src.index('guard enabled else {\n            servicesOff = true\n            return') \
     < permission_src.index('manager.requestWhenInUseAuthorization()')
 assert 'if servicesOff { return .denied }' in declaration(locator, 'var permission: LocationPermission {')
@@ -419,6 +443,7 @@ for name in ('LatchApp.swift', 'AppModel.swift', 'AppDelegate.swift', 'HomeView.
 sheet = readers['CheckInSheet.swift']
 run_src = declaration(sheet, 'private func runCheck(_ state: LatchState, announce: Bool, userAsked: Bool = false)')
 assert run_src.index('if userAsked {') < run_src.index('readLocation(announce: announce)'), 'a read only when the user asked'
+assert 'sessions: state.sessions, now: Date())' in run_src, 'running sessions and uses decide too'
 assert 'locationPhase = .asking' in run_src and "location: .unavailable(.locationOff))" in run_src
 assert sheet.count('userAsked: true') == 3, 'opening the sheet, Try again, and the card'
 assert '.onAppear { runCheck(model.state, announce: true, userAsked: true) }' in sheet

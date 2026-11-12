@@ -56,8 +56,11 @@ final class LocationCheck: NSObject, ObservableObject, CLLocationManagerDelegate
     /// for the answer. Call only from the user's tap on "Allow location".
     func requestPermission() async {
         guard manager.authorizationStatus == .notDetermined, permissionWaiter == nil else { return }
-        // Off the main thread, as Apple asks for this call.
+        // Off the main thread, as Apple asks for this call. A sheet that
+        // closed (or a newer check) meanwhile gets no prompt.
+        let token = readToken
         let enabled = await Task.detached { CLLocationManager.locationServicesEnabled() }.value
+        guard token == readToken else { return }
         guard enabled else {
             servicesOff = true
             return
