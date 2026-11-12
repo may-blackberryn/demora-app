@@ -1514,19 +1514,14 @@ enum ConditionKind: CaseIterable, Equatable {
         }
     }
 
-    /// Why a row can't be chosen, as a translation key. Countries need the
-    /// offline country lookup, which arrives in its own build step (C15 step 5).
+    /// Why a row can't be chosen, as a translation key: only the four-condition cap.
     static func disabledReason(_ kind: ConditionKind, conditionCount: Int) -> String? {
-        if conditionCount >= ConditionalRule.maximumConditions { return "You can add up to four conditions." }
-        switch kind {
-        case .country: return ConditionalCheckIn.countryLookupAvailable ? nil : "Arrives in a later update."
-        case .place, .days, .time, .dates: return nil
-        }
+        conditionCount >= ConditionalRule.maximumConditions ? "You can add up to four conditions." : nil
     }
 
     /// A new condition's starting value: weekends, 22:00–00:00 ("after
     /// 22:00"), or the coming seven days. Nil for a place (it needs a centre
-    /// from the place editor first) and for kinds that can't be added.
+    /// from the place editor first) and a country (chosen in its picker).
     static func defaultCondition(_ kind: ConditionKind, now: Date, calendar: Calendar) -> ConditionalCondition? {
         switch kind {
         case .place, .country:
@@ -1671,8 +1666,8 @@ enum CheckInScreen: Equatable {
     var canStart: Bool { if case .met = self { return true }; return false }
 }
 
-/// What a later build step adds (C15 steps 5 and 6).
-enum CheckInLater: Equatable { case country, block }
+/// What a later build step adds (C15 step 6).
+enum CheckInLater: Equatable { case block }
 
 /// Where the sheet is in its one location read; held by the view, never saved.
 enum CheckInLocationPhase: Equatable { case idle, asking, reading }
@@ -1690,8 +1685,9 @@ enum CheckInLocationStep: Equatable {
 }
 
 enum ConditionalCheckIn {
-    /// Flipped by the countries step (C15 step 5), with its offline lookup.
-    static let countryLookupAvailable = false
+    /// On since the countries step (C15 step 5): a fix decides countries
+    /// through the bundled offline lookup (`CountryBorders`).
+    static let countryLookupAvailable = true
     /// A check older than this is run again before a start: a margin under
     /// the engine's own 2-minute stamp lifetime.
     static let freshness: TimeInterval = ConditionalStart.stampLifetime - 10
@@ -1722,7 +1718,7 @@ enum ConditionalCheckIn {
         if !evaluation.isMet {
             // Only a check that didn't read location can still be waiting for it.
             guard evaluation.locationCouldChangeVerdict else { return .notMet }
-            guard fixCouldDecide(check.rule, evaluation: evaluation) else { return .arrivesLater(.country) }
+            guard fixCouldDecide(check.rule, evaluation: evaluation) else { return .notMet }
             // A fix couldn't help: say so before asking for location.
             guard let used = check.used else { return .unknownUses }
             guard used < usesPerDay else { return .usedUp }
@@ -1739,8 +1735,8 @@ enum ConditionalCheckIn {
         return .met(cap: cap)
     }
 
-    /// Could one fix make this unread check met? Places decide with a fix;
-    /// countries only once their lookup exists (step 5); block check-ins are
+    /// Could one fix make this unread check met? Places and countries decide
+    /// with a fix (countries through the offline lookup); block check-ins are
     /// step 6. Day/time/date results stay as they are.
     static func fixCouldDecide(_ rule: ConditionalRule, evaluation: ConditionalEvaluation,
                                countryLookupAvailable: Bool = countryLookupAvailable) -> Bool {
@@ -1772,6 +1768,12 @@ enum ConditionalCheckIn {
         case .denied, .restricted: return .off
         case .allowed: return .read
         }
+    }
+
+    /// Only a place needs precise location: a country check never asks iOS
+    /// for temporary precise location unless a place in the same rule does.
+    static func wantsPrecise(_ rule: ConditionalRule) -> Bool {
+        rule.conditions.contains { if case .place = $0 { return true }; return false }
     }
 
     /// Whole minutes a session started now may last: the rule's maximum,
@@ -1853,7 +1855,6 @@ enum ConditionalCheckIn {
         switch screen {
         case .needsLocation: return "Check in again to check where you are."
         case .askPermission: return "Demora checks where you are once, when you tap Check in. It doesn't save or send your location."
-        case .arrivesLater(.country): return "Checking which country you're in arrives in a later update."
         case .arrivesLater(.block): return "Starting a block when you check in arrives in a later update."
         case .clockChanged: return "Your clock was changed recently. Free time can start once it's set right again."
         case .unknownUses: return "Couldn't count today's uses. Try again."
@@ -1914,9 +1915,6 @@ enum ConditionalCheckIn {
         case .inDates: return translate("Today is one of these dates")
         case .outsideDates: return translate("Today isn't one of these dates")
         case .notNeeded: return translate("Not needed")
-        case .unknown(.notChecked):
-            if case .country = condition, !countryLookupAvailable { return translate("Arrives in a later update.") }
-            return translate(unknownKey(.notChecked))
         case .unknown(let why): return translate(unknownKey(why))
         }
     }
@@ -1976,9 +1974,9 @@ enum ConditionalAvailability {
     /// Free-time rules a check-in could start now: uses left (the engine's
     /// count in `used`; unknown → no row), nothing of theirs running, and
     /// either met on day/time/dates alone or a place that one fix could
-    /// make true (nothing is read here: the row only opens the check-in).
-    /// Countries get rows with their lookup (C15 step 5), block rules with
-    /// their check-in (step 6). Rules order; at most three, with how many more.
+    /// make true (nothing is read here: the row only opens the check-in), a
+    /// country included. Block rules get rows with their check-in (step 6).
+    /// Rules order; at most three, with how many more.
     static func todayRows(state: LatchState, used: [UUID: Int], clock: ConditionalClockInput,
                           countryLookupAvailable: Bool = ConditionalCheckIn.countryLookupAvailable)
         -> (rows: [Row], more: Int) {
@@ -2043,22 +2041,70 @@ enum LocationTrust {
     /// is 100 m, so a centre can't be off by more than its own size.
     static let maximumCentreAccuracy: Double = 100
 
+    /// Under Approximate Location iOS moves the point by up to several
+    /// kilometres; a country is judged as if the fix were at least this
+    /// vague, so it can't be told within about 12 km of a border.
+    static let approximateAccuracyFloor: Double = 10_000
+
+    /// The offline lookup for one point (`CountryBorders.lookup`), or nil
+    /// when the rule has no country (or the bundled borders couldn't load).
+    typealias CountryAt = (_ latitude: Double, _ longitude: Double) -> ConditionalCountryLookup?
+
+    /// The accuracy the trust rules use: iOS's own, never better than the
+    /// approximate floor when precise location is off.
+    static func trustedAccuracy(_ sample: LocationSample, precise: Bool) -> Double {
+        precise ? sample.horizontalAccuracy : max(sample.horizontalAccuracy, approximateAccuracyFloor)
+    }
+
     /// The check-in's evaluation input. The engine applies the rest of C9
     /// (age, simulated, accessory, precise, the whole circle inside the
-    /// place); countries get their lookup in step 5, so `country` stays nil
-    /// and a country condition can't be met from this fix.
-    static func checkInInput(_ outcome: LocationReadOutcome, wallNow: Date) -> ConditionalLocationInput {
+    /// place, accuracy + 2 km from any border for a country). The country is
+    /// looked up only for a usable point; the coordinates go no further.
+    static func checkInInput(_ outcome: LocationReadOutcome, wallNow: Date,
+                             country: CountryAt?) -> ConditionalLocationInput {
         switch outcome {
         case .failed(.denied): return .unavailable(.locationOff)
         case .failed(.noFix), .failed(.timedOut), .failed(.cancelled): return .unavailable(.noFix)
         case .sample(let sample, let precise):
+            let usable = sample.latitude.isFinite && sample.longitude.isFinite
+                && (-90...90).contains(sample.latitude) && (-180...180).contains(sample.longitude)
             return .fix(ConditionalLocationFix(latitude: sample.latitude, longitude: sample.longitude,
-                                               horizontalAccuracy: sample.horizontalAccuracy,
+                                               horizontalAccuracy: trustedAccuracy(sample, precise: precise),
                                                age: wallNow.timeIntervalSince(sample.timestamp),
                                                isPrecise: precise, isSimulated: sample.isSimulated,
                                                isFromAccessory: sample.isFromAccessory),
-                        country: nil)
+                        country: usable ? country?(sample.latitude, sample.longitude) : nil)
         }
+    }
+
+    /// "Use the country I'm in" (spec §5.7): a fresh, real fix (precise not
+    /// needed) whose point is clearly inside one country, by the same margin
+    /// free time needs (accuracy + 2 km from any border). Anything else is
+    /// refused with the check-in's words; nothing is kept but the code.
+    static func countryHere(_ outcome: LocationReadOutcome, wallNow: Date,
+                            country: CountryAt?) -> Result<String, CountryHereProblem> {
+        func refuse(_ reason: ConditionalUnknownReason) -> Result<String, CountryHereProblem> {
+            .failure(CountryHereProblem(reason: reason))
+        }
+        let sample: LocationSample, precise: Bool
+        switch outcome {
+        case .failed(.denied): return refuse(.locationOff)
+        case .failed: return refuse(.noFix)
+        case .sample(let value, let isPrecise): sample = value; precise = isPrecise
+        }
+        let accuracy = trustedAccuracy(sample, precise: precise)
+        guard accuracy.isFinite, accuracy > 0, sample.latitude.isFinite, sample.longitude.isFinite,
+              (-90...90).contains(sample.latitude), (-180...180).contains(sample.longitude)
+        else { return refuse(.noFix) }
+        let age = wallNow.timeIntervalSince(sample.timestamp)
+        guard age.isFinite, age >= -5, age <= ConditionEvaluator.maximumFixAge else { return refuse(.staleFix) }
+        guard !sample.isSimulated else { return refuse(.simulated) }
+        guard !sample.isFromAccessory else { return refuse(.accessory) }
+        guard let found = country?(sample.latitude, sample.longitude), found.borderDistanceMeters.isFinite,
+              found.borderDistanceMeters >= 0 else { return refuse(.countryUnavailable) }
+        let clear = found.borderDistanceMeters > accuracy + ConditionEvaluator.borderMargin
+        guard let code = found.regionCode else { return refuse(clear ? .countryUnavailable : .nearBorder) }
+        return clear ? .success(code) : refuse(.nearBorder)
     }
 
     /// A place's centre from "Set to where I am now" (C12): a fresh, precise,
@@ -2091,6 +2137,18 @@ enum LocationTrust {
 struct PlaceCentre: Equatable {
     var latitude: Double
     var longitude: Double
+}
+
+/// Why "Use the country I'm in" set nothing; same words as the check-in's "?" lines.
+struct CountryHereProblem: Error, Equatable {
+    var reason: ConditionalUnknownReason
+
+    var messageKey: String {
+        switch reason {
+        case .accessory: return "Location from an accessory can't set a country"
+        default: return ConditionalCheckIn.unknownKey(reason)
+        }
+    }
 }
 
 struct PlaceCentreProblem: Error, Equatable {
@@ -2149,5 +2207,35 @@ enum PlaceChoices {
         let place = ConditionalPlace(name: trimmed, latitude: centre.latitude, longitude: centre.longitude,
                                      radiusMeters: radius)
         return place.isValid ? place : nil
+    }
+}
+
+/// The country picker's rows (spec §5.7, Q4): the codes the bundled borders
+/// can answer with, named by iOS in the app's language (never by the
+/// dataset); a code iOS can't name is left out. Sorted and searched the way
+/// the language sorts and matches, ignoring case and accents.
+enum CountryChoices {
+    struct Choice: Equatable, Identifiable {
+        let code: String
+        let name: String
+        var id: String { code }
+    }
+
+    static func list(codes: [String], locale: Locale, query: String = "") -> [Choice] {
+        let wanted = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let choices = Set(codes).compactMap { code -> Choice? in
+            guard code.count == 2, let name = locale.localizedString(forRegionCode: code),
+                  !name.isEmpty, name != code else { return nil }
+            return Choice(code: code, name: name)
+        }
+        let matching = wanted.isEmpty ? choices : choices.filter {
+            $0.name.range(of: wanted, options: [.caseInsensitive, .diacriticInsensitive], locale: locale) != nil
+                || $0.code == wanted.uppercased()
+        }
+        return matching.sorted {
+            let order = $0.name.compare($1.name, options: [.caseInsensitive, .diacriticInsensitive],
+                                        range: nil, locale: locale)
+            return order == .orderedSame ? $0.code < $1.code : order == .orderedAscending
+        }
     }
 }

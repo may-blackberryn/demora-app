@@ -7,10 +7,10 @@
 //  RulesPresentation.swift (`EditorValidation.conditional`, `ConditionKind`,
 //  `ConditionalText`); the engine validates again when the change queues
 //  and applies. A place is set in `PlaceEditor` (its own sheet, which reads
-//  one fix only when the user taps "Set to where I am now"); countries need
-//  the offline lookup of a later build step (C15 step 5), so the chooser
-//  explains that instead. Nothing here reads location, the guarded clock or
-//  saved state outside `model.state`.
+//  one fix only when the user taps "Set to where I am now"); a country in
+//  `CountryPicker` (a searchable list named by iOS, or "Use the country I'm
+//  in": one fix and the bundled offline borders). Nothing here reads
+//  location, the guarded clock or saved state outside `model.state`.
 //
 
 import SwiftUI
@@ -50,6 +50,7 @@ struct ConditionalRuleEditor: View {
     @State private var showChooser = false
     @State private var chosenKind: ConditionKind?
     @State private var placeEditing: PlaceEditRequest?
+    @State private var countryEditing: CountryEditRequest?
 
     init(existing: ConditionalRule?) {
         self.existing = existing
@@ -198,6 +199,11 @@ struct ConditionalRuleEditor: View {
                 setPlace(place, conditionID: request.conditionID)
             }
         }
+        .sheet(item: $countryEditing) { request in
+            CountryPicker(initial: request.code) { code in
+                setCountry(code, conditionID: request.conditionID)
+            }
+        }
     }
 
     // MARK: If
@@ -222,6 +228,10 @@ struct ConditionalRuleEditor: View {
                     ConditionEditorCard(condition: binding(for: item.id), onEditPlace: {
                         if case .place(let place) = item.condition {
                             placeEditing = PlaceEditRequest(conditionID: item.id, place: place)
+                        }
+                    }, onEditCountry: {
+                        if case .country(let code) = item.condition {
+                            countryEditing = CountryEditRequest(conditionID: item.id, code: code)
                         }
                     }) {
                         conditions.removeAll { $0.id == item.id }
@@ -260,6 +270,11 @@ struct ConditionalRuleEditor: View {
             placeEditing = PlaceEditRequest(conditionID: nil, place: nil)
             return
         }
+        // A country is chosen in its picker before it is a condition.
+        if kind == .country {
+            countryEditing = CountryEditRequest(conditionID: nil, code: nil)
+            return
+        }
         guard conditions.count < ConditionalRule.maximumConditions,
               let condition = ConditionKind.defaultCondition(kind, now: Date(), calendar: .current)
         else { return }
@@ -274,6 +289,18 @@ struct ConditionalRuleEditor: View {
             conditions[index].condition = .place(place)
         } else if conditions.count < ConditionalRule.maximumConditions {
             conditions.append(ConditionDraft(condition: .place(place)))
+        }
+    }
+
+    /// The country picker's result, the same way as a place.
+    private func setCountry(_ code: String, conditionID: UUID?) {
+        let condition = ConditionalCondition.country(code)
+        guard condition.isValid else { return }
+        if let conditionID {
+            guard let index = conditions.firstIndex(where: { $0.id == conditionID }) else { return }
+            conditions[index].condition = condition
+        } else if conditions.count < ConditionalRule.maximumConditions {
+            conditions.append(ConditionDraft(condition: condition))
         }
     }
 
@@ -383,6 +410,7 @@ private struct ConditionEditorCard: View {
     @Environment(\.locale) private var locale
     @Binding var condition: ConditionalCondition
     var onEditPlace: () -> Void = {}
+    var onEditCountry: () -> Void = {}
     let onRemove: () -> Void
 
     private var calendar: Calendar {
@@ -442,9 +470,8 @@ private struct ConditionEditorCard: View {
             ConditionRow(condition: condition)
             shortcut(tr("Change place"), action: onEditPlace)
         case .country:
-            // Only an existing rule can hold one before countries arrive; it
-            // is kept as it is (or removed with the trash button).
             ConditionRow(condition: condition)
+            shortcut(tr("Change country"), action: onEditCountry)
         }
     }
 
@@ -567,8 +594,8 @@ struct ConditionRow: View {
 
 // MARK: - Add condition chooser
 
-/// Rows with a title and one example line (Google Home). Country explains
-/// that it arrives in a later update.
+/// Rows with a title and one example line (Google Home); a row says why
+/// when it can't be chosen (four conditions already).
 struct ConditionChooser: View {
     let conditionCount: Int
     let onChoose: (ConditionKind) -> Void

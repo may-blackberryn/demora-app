@@ -161,19 +161,19 @@ check(ConditionalCheckIn.reason(monday.evaluation.results[0], condition: .days([
       locale: gb, calendar: mxText) == "It's Monday", "✗ It's Monday")
 check(ConditionalCheckIn.reason(met.evaluation.results[0], condition: .days([1]), translate: say,
       locale: gb, calendar: mxText) == "It's Sunday", "✓ It's Sunday")
-check(screen(mexicoSunday, sundayNoon) == .arrivesLater(.country), "all of: day met, country unchecked until step 5")
+check(screen(mexicoSunday, sundayNoon) == .needsLocation, "all of: day met, the country needs one fix (step 5)")
 let mexico = CheckInResult.make(rule: mexicoSunday, state: stateWith([mexicoSunday]), clock: clock(sundayNoon), location: .notRead)
 check(mexico.evaluation.results.map(\.status) == [.unknown, .met], "country ?, day ✓")
 check(ConditionalCheckIn.reason(mexico.evaluation.results[0], condition: .country("MX"), translate: say,
-      locale: gb, calendar: mxText) == "Arrives in a later update.", "country later (step 5)")
+      locale: gb, calendar: mxText) == "Not checked yet", "country not checked until the fix (step 5)")
 check(screen(mexicoSunday, mondayNoon) == .notMet, "all of: the day already fails, location not needed")
 let mexicoMonday = CheckInResult.make(rule: mexicoSunday, state: stateWith([mexicoSunday]), clock: clock(mondayNoon), location: .notRead)
 check(ConditionalCheckIn.reason(mexicoMonday.evaluation.results[0], condition: .country("MX"), translate: say,
       locale: gb, calendar: mxText) == "Not needed", "not needed")
 check(screen(mexicoOrSunday, sundayNoon) == .met(cap: 60), "any of: the day is enough")
-check(screen(mexicoOrSunday, mondayNoon) == .arrivesLater(.country), "any of: only the country could make it true")
+check(screen(mexicoOrSunday, mondayNoon) == .needsLocation, "any of: only the country could make it true: one fix")
 check(screen(block, at(11, 15, 23)) == .arrivesLater(.block), "a block's check-in arrives later, even inside its window")
-check(!ConditionalCheckIn.countryLookupAvailable, "countries arrive in step 5")
+check(ConditionalCheckIn.countryLookupAvailable, "countries decided by the offline lookup (step 5)")
 check(screen(sundays, sundayNoon, guarded: sundayNoon.addingTimeInterval(-400)) == .clockChanged, "clock changed")
 if case .failure(let refusal) = ConditionalStart.plan(
     request(CheckInResult.make(rule: sundays, state: sundayState, clock: clock(sundayNoon, guarded: sundayNoon.addingTimeInterval(-400)), location: .notRead), minutes: 30),
@@ -319,7 +319,7 @@ for s in [ConditionStatus.met, .notMet, .unknown, .notNeeded] { check(!Condition
 check(ConditionalCheckIn.needsLine(sundays) == "Free time needs all of these."
       && ConditionalCheckIn.needsLine(mexicoOrSunday) == "Free time needs any of these.", "needs lines")
 let screens: [CheckInScreen] = [.checking, .gone, .changed, .running(until: until), .needsLocation, .askPermission,
-    .locating, .arrivesLater(.country), .arrivesLater(.block), .clockChanged, .notMet,
+    .locating, .arrivesLater(.block), .clockChanged, .notMet,
     .unknownUses, .usedUp, .windowEnding, .met(cap: 5), .refused(.wrongDay), .queued]
 for s in screens {
     check(!ConditionalCheckIn.heroKey(s).isEmpty, "hero \(s)")
@@ -341,9 +341,10 @@ check(rows(stateWith([sundays]), sundayNoon, used: [sundays.id: 1]).rows.isEmpty
 check(rows(stateWith([sundays]), sundayNoon, used: [:]).rows.isEmpty, "unknown count: no row, never a guess")
 check(rows(stateWith([twice]), sundayNoon, used: [twice.id: 1]).rows.first?.left == 1, "2 a day, 1 used")
 check(rows(withSession, sundayNoon.addingTimeInterval(60), used: [sundays.id: 0]).rows.isEmpty, "running: the Now card shows it")
-check(rows(stateWith([mexicoSunday]), sundayNoon).rows.isEmpty, "a country rule: no row until its lookup (step 5)")
+check(rows(stateWith([mexicoSunday]), sundayNoon).rows.count == 1, "a country rule one fix could make true: a row (step 5)")
+check(rows(stateWith([mexicoSunday]), mondayNoon).rows.isEmpty, "…but not on a day that already fails")
 check(ConditionalAvailability.todayRows(state: stateWith([mexicoSunday]), used: [mexicoSunday.id: 0], clock: clock(sundayNoon),
-      countryLookupAvailable: true).rows.count == 1, "with the lookup (step 5) it gets a row")
+      countryLookupAvailable: false).rows.isEmpty, "the switch still gates the row")
 let homeSunday = free("Sunday at home", .all, [.place(home), .days([1])])
 check(rows(stateWith([homeSunday]), sundayNoon).rows.count == 1, "a place one fix could make true: a row (step 4)")
 check(rows(stateWith([homeSunday]), mondayNoon).rows.isEmpty, "…but not on a day that already fails")
@@ -436,11 +437,13 @@ assert start.index('if check.readLocation {\n                // Its fix is too o
                    '                recheckWithLocation(old: check)\n                return') \
     < start.index('let fresh = CheckInResult.make(rule: rule, state: state, clock: clock, location: .notRead)'), \
     'a location check is re-read, not refreshed from the clock alone'
-assert recheck.index('starting = true') < recheck.index('Task {') < recheck.index('locator.readOnce(wantsPrecise: true)'), \
+assert recheck.index('starting = true') < recheck.index('Task {') \
+    < recheck.index('locator.readOnce(wantsPrecise: ConditionalCheckIn.wantsPrecise(old.rule))'), \
     'the hold that triggered the re-read can\'t send a second request meanwhile'
 assert recheck.index('ConditionalCheckIn.mayStartAfterRecheck(old: old, fresh: fresh') \
     < recheck.index('checkedAgain = true') < recheck.index('send(fresh, cap: freshCap)'), 'sent only if still met'
-assert 'location: LocationTrust.checkInInput(outcome, wallNow: clock.wallNow))' in recheck, 'the stamp comes from the new fix'
+assert 'location: LocationTrust.checkInInput(outcome, wallNow: clock.wallNow,\n' in recheck \
+    and 'country: Self.countryLookup(for: rule)))' in recheck, 'the stamp comes from the new fix (and its country)'
 assert 'stamp: check.stamp' in send and 'revision: check.rule.revision' in send, 'the shown check, its rule version'
 assert 'ConditionalCheckIn.requestMinutes(chosen: minutes, cap: cap)' in send
 assert 'case .refused(let refusal):\n                attempt = .refused(refusal)' in send
@@ -478,6 +481,10 @@ for name in ('Latch', 'Shared'):
     for path in (ROOT / name).glob('*.swift'):
         text = path.read_text()
         assert 'Check in arrives in a later update.' not in text, path.name
+        # Step 5: no "countries come later" copy is left anywhere.
+        for gone in ('Arrives in a later update.', "Checking which country you're in arrives in a later update.",
+                     'arrivesLater(.country)'):
+            assert gone not in text, (gone, path.name)
         # Step 4: location is confined to the host's one-shot reader
         # (Tests/WhenWhereLocationHarness.py checks it in depth).
         if path.name != 'LocationCheck.swift':

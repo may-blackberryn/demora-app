@@ -7,8 +7,9 @@ SchedulePrecedence (as the other When & where harnesses do) and checks
 - the trust rules from a CoreLocation-shaped sample to ✓/✗/?: simulated and
   accessory fixes, approximate location, stale or invalid fixes, denial and
   timeouts all fail closed; free time needs the whole uncertainty circle
-  inside the place; countries can't pass before their lookup (step 5);
-- when the sheet reads location (only when a place could change the answer,
+  inside the place; a country is decided only by the lookup handed in
+  (step 5: Tests/WhenWhereCountryHarness.py checks the real borders);
+- when the sheet reads location (only when a place or country could change the answer,
   never for a check refreshed on its own), when it shows the permission card
   (never asked yet) and when it says location is off (no re-prompt);
 - that the stamp built from a fix is exactly what the engine's own
@@ -111,7 +112,7 @@ func sample(_ point: (Double, Double), accuracy: Double = 20, age: TimeInterval 
 }
 func read(_ s: LocationSample, precise: Bool = true) -> LocationReadOutcome { .sample(s, precise: precise) }
 func input(_ o: LocationReadOutcome, now: Date = sundayNoon) -> ConditionalLocationInput {
-    LocationTrust.checkInInput(o, wallNow: now)
+    LocationTrust.checkInInput(o, wallNow: now, country: nil)
 }
 
 // MARK: Geometry: the distance the trust rules use
@@ -140,12 +141,33 @@ for failure in [LocationReadFailure.noFix, .timedOut, .cancelled] {
     check(placeResult(.failed(failure)) == .unknown(.noFix), "\(failure): couldn't get your location")
 }
 check(LocationTrust.timeout == 15, "one read waits 15 s at most")
-// A country can't be decided before its offline lookup (step 5): never met from a fix.
+// A country is decided only by the lookup handed in (step 5); without one it can't be told.
 let mexicoAndHome = free("Mexico", .any, [.country("MX"), .place(home)])
 check(ConditionEvaluator.evaluate(mexicoAndHome, clock: clock(sundayNoon), location: input(read(sample(north(5000)))))
-      .results[0] == .unknown(.countryUnavailable), "country: can't tell yet")
-if case .fix(_, let country) = input(read(sample(north(0)))) { check(country == nil, "no country lookup in step 4") }
+      .results[0] == .unknown(.countryUnavailable), "no lookup: can't tell")
+if case .fix(_, let country) = input(read(sample(north(0)))) { check(country == nil, "no lookup, no country") }
 else { check(false, "a sample is a fix") }
+var asked: [(Double, Double)] = []
+let inMexico: LocationTrust.CountryAt = { lat, lon in
+    asked.append((lat, lon)); return ConditionalCountryLookup(regionCode: "MX", borderDistanceMeters: 600_000)
+}
+if case .fix(let fix, let country) = LocationTrust.checkInInput(read(sample(north(0), accuracy: 30)), wallNow: sundayNoon,
+                                                                 country: inMexico) {
+    check(country?.regionCode == "MX" && asked.count == 1 && asked[0].0 == home.latitude, "the fix's point is looked up once")
+    check(fix.horizontalAccuracy == 30 && fix.isPrecise, "precise: iOS's accuracy as it is")
+} else { check(false, "a sample is a fix") }
+check(ConditionEvaluator.evaluate(mexicoAndHome, clock: clock(mondayNoon),
+      location: LocationTrust.checkInInput(read(sample(north(5000), now: mondayNoon)), wallNow: mondayNoon, country: inMexico))
+      .results[0] == ConditionResult(status: .met, reason: .inCountry), "the lookup decides the country")
+// Approximate Location: a country is judged as if the fix were at least 10 km vague.
+if case .fix(let fix, _) = LocationTrust.checkInInput(read(sample(north(0), accuracy: 1_500), precise: false),
+                                                       wallNow: sundayNoon, country: inMexico) {
+    check(fix.horizontalAccuracy == 10_000 && !fix.isPrecise, "approximate: accuracy floored at 10 km")
+} else { check(false, "a sample is a fix") }
+asked = []
+if case .fix(_, let country) = LocationTrust.checkInInput(read(sample((.nan, 0))), wallNow: sundayNoon, country: inMexico) {
+    check(country == nil && asked.isEmpty, "no lookup for an unusable point")
+} else { check(false, "a sample is a fix") }
 
 // MARK: When the sheet reads, asks, or says location is off (C8)
 func notRead(_ rule: ConditionalRule, _ now: Date) -> CheckInResult {
@@ -171,13 +193,16 @@ check(step(notRead(homeSunday, mondayNoon), permission: .notAsked) == .none, "�
 check(step(notRead(homeOrSunday, sundayNoon), permission: allowed) == .none,
       "any of: the day is enough, so no read")
 check(step(notRead(homeOrSunday, mondayNoon), permission: allowed) == .read, "any of: only home could")
-check(step(notRead(mexicoSunday, sundayNoon), permission: allowed) == .none,
-      "a country can't be decided yet: no read")
+check(step(notRead(mexicoSunday, sundayNoon), permission: allowed) == .read,
+      "a country one fix could decide: read once (step 5)")
+check(step(notRead(mexicoSunday, mondayNoon), permission: allowed) == .none, "…never on a day that already fails")
+check(!ConditionalCheckIn.wantsPrecise(mexicoSunday) && ConditionalCheckIn.wantsPrecise(homeSunday)
+      && ConditionalCheckIn.wantsPrecise(mexicoAndHome), "temporary precise only when a place needs it")
 check(step(notRead(mexicoAndHome, sundayNoon), permission: allowed) == .read,
       "any of country/home: home could decide")
 let allThree = free("Mexico home Sunday", .all, [.country("MX"), .place(home), .days([1])])
-check(step(notRead(allThree, sundayNoon), permission: allowed) == .none,
-      "all of with a country: no fix can make it true yet")
+check(step(notRead(allThree, sundayNoon), permission: allowed) == .read,
+      "all of with a country and a place: one fix decides both")
 check(step(notRead(block, sundayNoon), permission: allowed) == .none, "block check-ins: step 6")
 let alreadyRead = CheckInResult.make(rule: homeSunday, state: stateWith([homeSunday]), clock: clock(sundayNoon),
                                      location: .unavailable(.noFix))
@@ -209,14 +234,14 @@ func screen(_ r: CheckInResult, phase: CheckInLocationPhase = .idle, now: Date =
 check(screen(notRead(homeSunday, sundayNoon), phase: .asking) == .askPermission, "the card before iOS asks")
 check(screen(notRead(homeSunday, sundayNoon), phase: .reading) == .locating, "Checking where you are")
 check(screen(notRead(homeSunday, sundayNoon)) == .needsLocation, "a check refreshed on its own: check in again")
-for s in [CheckInScreen.askPermission, .locating, .needsLocation, .arrivesLater(.country), .arrivesLater(.block)] {
+for s in [CheckInScreen.askPermission, .locating, .needsLocation, .arrivesLater(.block)] {
     check(!s.canStart, "\(s) never starts")
 }
 check(ConditionalCheckIn.detailKey(.askPermission)
       == "Demora checks where you are once, when you tap Check in. It doesn't save or send your location.", "card copy")
 check(ConditionalCheckIn.detailKey(.needsLocation) == "Check in again to check where you are.", "expired copy")
 check(screen(notRead(homeSunday, mondayNoon), phase: .reading) == .notMet, "Monday: not met, whatever the phase")
-check(screen(notRead(mexicoSunday, sundayNoon)) == .arrivesLater(.country), "country: later")
+check(screen(notRead(mexicoSunday, sundayNoon)) == .needsLocation, "country: needs one fix")
 
 // MARK: The stamp from a fix is what the engine accepts
 func withFix(_ rule: ConditionalRule, _ o: LocationReadOutcome, now: Date = sundayNoon) -> CheckInResult {
@@ -279,7 +304,8 @@ func rows(_ s: LatchState, _ wall: Date) -> [ConditionalAvailability.Row] {
 }
 check(rows(stateWith([homeSunday]), sundayNoon).map(\.name) == ["Sunday at home"], "Sunday: a row")
 check(rows(stateWith([homeSunday]), mondayNoon).isEmpty, "Monday: no row")
-check(rows(stateWith([mexicoSunday, allThree]), sundayNoon).isEmpty, "countries: no row until step 5")
+check(rows(stateWith([mexicoSunday, allThree]), sundayNoon).count == 2, "countries one fix could decide: rows (step 5)")
+check(rows(stateWith([mexicoSunday, allThree]), mondayNoon).isEmpty, "…not on Monday")
 
 // MARK: Place choices (C10, C11, C12)
 check(PlaceChoices.sizes == [100, 250, 500, 1000, 2000] && PlaceChoices.sizes.max() == 2000, "five sizes, capped at 2 km")
@@ -409,7 +435,7 @@ assert 'let decided = manager.authorizationStatus != .notDetermined' in auth_src
 assert re.search(r'case \.denied: return \.denied\s+@unknown default: return \.denied', locator), 'unknown status fails closed'
 assert '@MainActor\nfinal class LocationCheck' in locator
 
-# Only the check-in and place sheets read location, each with its own reader.
+# Only the check-in, place and country sheets read location, each with its own reader.
 readers = {}
 for directory in ('Latch', 'Shared', 'LatchMonitor', 'LatchReport', 'LatchWidgets', 'LatchShieldUI'):
     for path in (ROOT / directory).rglob('*.swift'):
@@ -419,8 +445,9 @@ for directory in ('Latch', 'Shared', 'LatchMonitor', 'LatchReport', 'LatchWidget
                 assert word not in text, ('CoreLocation only in Latch/LocationCheck.swift', path, word)
             if 'LocationCheck' in text:
                 readers[path.name] = text
-assert set(readers) - {'RulesPresentation.swift'} == {'CheckInSheet.swift', 'PlaceEditor.swift'}, sorted(readers)
-for name in ('CheckInSheet.swift', 'PlaceEditor.swift'):
+assert set(readers) - {'RulesPresentation.swift'} == {'CheckInSheet.swift', 'PlaceEditor.swift', 'CountryPicker.swift'}, \
+    sorted(readers)
+for name in ('CheckInSheet.swift', 'PlaceEditor.swift', 'CountryPicker.swift'):
     text = readers[name]
     assert text.count('@StateObject private var locator = LocationCheck()') == 1, ('one reader per sheet, dropped with it', name)
     assert text.count('locator.requestPermission()') == 1, name
@@ -442,7 +469,8 @@ for name in ('LatchApp.swift', 'AppModel.swift', 'AppDelegate.swift', 'HomeView.
 
 sheet = readers['CheckInSheet.swift']
 run_src = declaration(sheet, 'private func runCheck(_ state: LatchState, announce: Bool, userAsked: Bool = false)')
-assert run_src.index('if userAsked {') < run_src.index('readLocation(announce: announce)'), 'a read only when the user asked'
+assert run_src.index('if userAsked {') < run_src.index('readLocation(announce: announce, precise: ConditionalCheckIn.wantsPrecise(rule))'), \
+    'a read only when the user asked; precise only for a place'
 assert 'sessions: state.sessions, now: Date())' in run_src, 'running sessions and uses decide too'
 assert 'locationPhase = .asking' in run_src and "location: .unavailable(.locationOff))" in run_src
 assert sheet.count('userAsked: true') == 3, 'opening the sheet, Try again, and the card'
@@ -453,13 +481,15 @@ try_again = sheet.split('primary(tr("Try again")) {', 1)[1].split('}', 1)[0]
 # Review fix: Try again is the user's tap, so it may read a new fix (after a
 # timeout or an aged check); denied stays "off" (locationStep), never re-prompted.
 assert 'runCheck(model.state, announce: true, userAsked: true)' in try_again, try_again
-read_location = declaration(sheet, 'private func readLocation(announce: Bool)')
-assert read_location.index('let outcome = await locator.readOnce(wantsPrecise: true)') \
+read_location = declaration(sheet, 'private func readLocation(announce: Bool, precise: Bool)')
+assert read_location.index('let outcome = await locator.readOnce(wantsPrecise: precise)') \
     < read_location.index('guard token == generation else { return }') \
     < read_location.index('let clock = ConditionalClockInput.current(for: state)') \
-    < read_location.index('location: LocationTrust.checkInInput(outcome, wallNow: clock.wallNow))'), \
+    < read_location.index('location: LocationTrust.checkInInput(outcome, wallNow: clock.wallNow,\n') \
+    < read_location.index('country: Self.countryLookup(for: rule)))'), \
     'a late fix never replaces a newer check; the stamp is made on the clock read after the fix'
-for state_line in re.findall(r'@State private var [^\n]+', sheet + readers['PlaceEditor.swift']):
+for state_line in re.findall(r'@State private var [^\n]+', sheet + readers['PlaceEditor.swift']
+                             + readers['CountryPicker.swift']):
     for word in ('LocationSample', 'LocationReadOutcome', 'ConditionalLocationFix', 'ConditionalLocationInput',
                  'latitude', 'CLLocation'):
         assert word not in state_line, ('no fix is kept in view state', state_line)

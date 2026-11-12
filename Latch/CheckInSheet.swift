@@ -2,13 +2,14 @@
 //  CheckInSheet.swift
 //  The When & where check-in (docs/conditional-sessions-redesign.md §5.5):
 //  checks day, time and dates on the guarded clock first, then, only when a
-//  place could still change the answer (C8), reads one foreground fix through
+//  place or country could still change the answer (C8), reads one foreground fix through
 //  `LocationCheck` and checks again with it. Shows ✓ / ✗ / ? per condition
 //  with its reason, and when the rule is met starts free time through
 //  `ChangeEngine.startConditionalSessionOffMain`, which validates everything
 //  again. The stamp comes from the check that read the fix; the fix itself is
 //  never kept (only ✓/✗ results), and checks refreshed on their own never
-//  read location. Countries arrive in C15 step 5, block check-ins in step 6.
+//  read location. A country is told by the bundled offline borders
+//  (`CountryBorders`, no network, no geocoder); block check-ins are step 6.
 //  A condition has no way around it here: no skip, no Apply now, no password,
 //  phrase or contact.
 //
@@ -276,7 +277,7 @@ struct CheckInSheet: View {
             switch ConditionalCheckIn.locationStep(result, permission: locator.permission,
                                                    sessions: state.sessions, now: Date()) {
             case .read:
-                readLocation(announce: announce)
+                readLocation(announce: announce, precise: ConditionalCheckIn.wantsPrecise(rule))
                 return
             case .ask:
                 locationPhase = .asking
@@ -294,12 +295,15 @@ struct CheckInSheet: View {
     }
 
     /// One fix, then the same check again with it, on a fresh clock read so
-    /// the stamp's time matches the fix. The fix goes no further than this.
-    private func readLocation(announce: Bool) {
+    /// the stamp's time matches the fix. The fix goes no further than this
+    /// and the offline country lookup. Temporary precise location is asked
+    /// for only when a place needs it (`precise`), never for a country alone.
+    private func readLocation(announce: Bool, precise: Bool) {
         let token = generation
         locationPhase = .reading
+        Self.preloadCountries(for: model.state.conditionalRules.first { $0.id == ruleID })
         Task { @MainActor in
-            let outcome = await locator.readOnce(wantsPrecise: true)
+            let outcome = await locator.readOnce(wantsPrecise: precise)
             guard token == generation else { return }
             locationPhase = .idle
             let state = model.state
@@ -309,7 +313,8 @@ struct CheckInSheet: View {
             }
             let clock = ConditionalClockInput.current(for: state)
             let result = CheckInResult.make(rule: rule, state: state, clock: clock,
-                                            location: LocationTrust.checkInInput(outcome, wallNow: clock.wallNow))
+                                            location: LocationTrust.checkInInput(outcome, wallNow: clock.wallNow,
+                                                                                 country: Self.countryLookup(for: rule)))
             check = result
             if announce { announceVerdict(result, rule: rule, sessions: state.sessions) }
         }
@@ -384,8 +389,9 @@ struct CheckInSheet: View {
         generation += 1
         let token = generation
         locationPhase = .reading
+        Self.preloadCountries(for: old.rule)
         Task { @MainActor in
-            let outcome = await locator.readOnce(wantsPrecise: true)
+            let outcome = await locator.readOnce(wantsPrecise: ConditionalCheckIn.wantsPrecise(old.rule))
             guard token == generation else { starting = false; return }
             locationPhase = .idle
             let state = model.state
@@ -397,7 +403,8 @@ struct CheckInSheet: View {
             }
             let clock = ConditionalClockInput.current(for: state)
             let fresh = CheckInResult.make(rule: rule, state: state, clock: clock,
-                                           location: LocationTrust.checkInInput(outcome, wallNow: clock.wallNow))
+                                           location: LocationTrust.checkInInput(outcome, wallNow: clock.wallNow,
+                                                                                country: Self.countryLookup(for: rule)))
             check = fresh
             guard ConditionalCheckIn.mayStartAfterRecheck(old: old, fresh: fresh, live: live,
                                                           sessions: state.sessions, now: Date()),
@@ -410,6 +417,25 @@ struct CheckInSheet: View {
             starting = false
             send(fresh, cap: freshCap)
         }
+    }
+
+    /// The bundled offline borders, only for a rule with a country (a place
+    /// rule never loads them). No network: `CountryBorders` reads the app's
+    /// own file. Nil if it can't load: the country row then says it couldn't tell.
+    private static func countryLookup(for rule: ConditionalRule) -> LocationTrust.CountryAt? {
+        guard hasCountry(rule), let borders = CountryBorders.bundled else { return nil }
+        return { borders.lookup(latitude: $0, longitude: $1) }
+    }
+
+    private static func hasCountry(_ rule: ConditionalRule?) -> Bool {
+        rule?.conditions.contains(where: { if case .country = $0 { return true }; return false }) ?? false
+    }
+
+    /// Reads the bundled borders off the main thread while iOS gets the fix,
+    /// so the lookup after it doesn't wait for the file.
+    private static func preloadCountries(for rule: ConditionalRule?) {
+        guard hasCountry(rule) else { return }
+        Task.detached(priority: .userInitiated) { _ = CountryBorders.bundled }
     }
 
     /// The one place a start request is made, for the check on screen.

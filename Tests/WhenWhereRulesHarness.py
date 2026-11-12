@@ -254,14 +254,14 @@ four.pending = [change(.addConditionalRule(weekendSchool))]
 check(NewRuleKind.disabledReason(.whenWhere, state: four) == "You can have up to five When & where rules.", "4 + 1 queued")
 check(NewRuleKind.disabledReason(.dailyLimit, state: four) == nil, "others stay open")
 
-// MARK: Add condition chooser: places open (step 4), countries explained, four at most
+// MARK: Add condition chooser: places (step 4) and countries (step 5) open, four at most
 check(ConditionKind.disabledReason(.place, conditionCount: 0) == nil, "places can be added (step 4)")
-check(ConditionKind.disabledReason(.country, conditionCount: 0) == "Arrives in a later update.", "countries later (step 5)")
-check([ConditionKind.place, .days, .time, .dates].allSatisfy { ConditionKind.disabledReason($0, conditionCount: 3) == nil }, "open")
+check(ConditionKind.disabledReason(.country, conditionCount: 0) == nil, "countries can be added (step 5)")
+check(ConditionKind.allCases.allSatisfy { ConditionKind.disabledReason($0, conditionCount: 3) == nil }, "open")
 check(ConditionKind.allCases.allSatisfy { ConditionKind.disabledReason($0, conditionCount: 4) == "You can add up to four conditions." }, "full")
 check(ConditionKind.defaultCondition(.place, now: sundayNoon, calendar: mx) == nil
       && ConditionKind.defaultCondition(.country, now: sundayNoon, calendar: mx) == nil,
-      "a place starts in the place editor (it needs a centre); no country yet")
+      "a place starts in the place editor (it needs a centre), a country in its picker")
 check(ConditionKind.defaultCondition(.days, now: sundayNoon, calendar: mx) == .days([1, 7]), "weekends")
 check(ConditionKind.defaultCondition(.time, now: sundayNoon, calendar: mx) == .time(start: 1320, end: 0), "after 22:00")
 check(ConditionKind.defaultCondition(.dates, now: at(12, 28, 23, 30), calendar: mx)
@@ -445,19 +445,20 @@ assert '&& !isRuleOwned(key, state: model.state)' in conflicts, 'nor a reviewabl
 calendar_src = (ROOT / 'Latch/SchedulesView.swift').read_text()
 assert 'ref: s.ownerRuleID.map { RuleRef.conditional($0) } ?? .schedule(s.id)' in calendar_src
 # Step 4: CoreLocation is confined to the host's one-shot reader, used only
-# by the check-in and place sheets (Tests/WhenWhereLocationHarness.py).
+# by the check-in, place and (step 5) country sheets (Tests/WhenWhereLocationHarness.py).
 for path in (ROOT / 'Latch').glob('*.swift'):
     text = path.read_text()
     if path.name != 'LocationCheck.swift':
         assert 'import CoreLocation' not in text, ('CoreLocation only in LocationCheck.swift', path.name)
-    if path.name not in ('LocationCheck.swift', 'CheckInSheet.swift', 'PlaceEditor.swift'):
-        assert 'LocationCheck()' not in text, ('location is read only from Check in or Set to where I am now', path.name)
+    if path.name not in ('LocationCheck.swift', 'CheckInSheet.swift', 'PlaceEditor.swift', 'CountryPicker.swift'):
+        assert 'LocationCheck()' not in text, \
+            ("location is read only from Check in, Set to where I am now or Use the country I'm in", path.name)
 print('When & where source guards passed: receipt-only editor, places through the place sheet, Check in on, owned windows')
 
 # --- Translations of every When & where string ---------------------------
 keys = set()
 for name in ('Latch/ConditionalRuleEditor.swift', 'Latch/RuleSummarySheet.swift', 'Latch/RulesView.swift',
-             'Latch/PlaceEditor.swift'):
+             'Latch/PlaceEditor.swift', 'Latch/CountryPicker.swift'):
     for call in re.findall(r'\btr\((?:[^()"]|"(?:[^"\\]|\\.)*")*\)', (ROOT / name).read_text()):
         keys.update(re.findall(STRING, call))
 kinds = section(presentation, 'enum ConditionKind: CaseIterable, Equatable {', '\n}\n')

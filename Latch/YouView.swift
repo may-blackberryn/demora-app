@@ -12,7 +12,7 @@ import UserNotifications
 
 /// Pages pushed inside You.
 enum YouRoute: Hashable {
-    case appearance, preventDisabling, help, wordList
+    case appearance, preventDisabling, help, credits
     case yourCode, approveFor, blocked, requestsSent
     case way(SkipWayKind, UUID)
     /// The Changes ledger, scrolled to one change when given.
@@ -193,7 +193,7 @@ struct YouView: View {
             HStack(spacing: DemoraSpace.s) {
                 Link(tr("Privacy"), destination: AppVersion.privacyURL)
                 Text("·").accessibilityHidden(true).foregroundStyle(Ink.inkSoft)
-                Button(tr("Word list credits")) { model.youPath.append(.wordList) }
+                Button(tr("Credits")) { model.youPath.append(.credits) }
                     .buttonStyle(.plain)
             }
             .demoraType(.meta)
@@ -211,7 +211,7 @@ struct YouView: View {
         case .appearance: AppearanceView()
         case .preventDisabling: PreventDisablingPage()
         case .help: HelpGuideView()
-        case .wordList: WordListCreditsView()
+        case .credits: CreditsView()
         case .yourCode: MyInfoView()
         case .approveFor: ApproveForView()
         case .blocked: BlockedUsersView()
@@ -461,32 +461,56 @@ enum AppVersion {
     static let privacyURL = URL(string: "https://getdemora.app/privacy-policy.html")!
 }
 
-struct WordListCreditsView: View {
-    @State private var text = ""
+/// Third-party data bundled in the app, each shown as its attribution file
+/// is written (English): the phrase word list and the country borders.
+struct CreditsView: View {
+    private struct Credit: Identifiable {
+        let titleKey: String
+        let resource: String
+        let fallback: String
+        var id: String { resource }
+    }
+
+    private static let credits = [
+        Credit(titleKey: "Word list", resource: "WORDLIST_ATTRIBUTION",
+               fallback: "The bundled word list is derived from the Electronic Frontier Foundation's long wordlist, created by Joseph Bonneau: https://www.eff.org/dice"),
+        Credit(titleKey: "Country borders", resource: "COUNTRY_BORDERS_ATTRIBUTION",
+               fallback: "Country borders: made with Natural Earth. Free vector and raster map data @ naturalearthdata.com."),
+    ]
+
+    @State private var texts: [String: String] = [:]
 
     var body: some View {
         ScrollView {
-            Text(text)
-                .demoraType(.body)
-                .foregroundStyle(Ink.ink)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .paperCard()
-                .padding(.horizontal, DemoraSpace.pageGutter)
-                .padding(.vertical, DemoraSpace.l)
-                .frame(maxWidth: DemoraSpace.maxContentWidth)
-                .frame(maxWidth: .infinity)
+            VStack(alignment: .leading, spacing: DemoraSpace.l) {
+                ForEach(Self.credits) { credit in
+                    VStack(alignment: .leading, spacing: DemoraSpace.xs) {
+                        SectionHeader(tr(credit.titleKey))
+                        Text(texts[credit.resource] ?? credit.fallback)
+                            .demoraType(.body)
+                            .foregroundStyle(Ink.ink)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .paperCard()
+                    }
+                }
+            }
+            .padding(.horizontal, DemoraSpace.pageGutter)
+            .padding(.vertical, DemoraSpace.l)
+            .frame(maxWidth: DemoraSpace.maxContentWidth)
+            .frame(maxWidth: .infinity)
         }
         .background(Ink.paper.ignoresSafeArea())
-        .casedNavigationTitle(tr("Word list credits"))
+        .casedNavigationTitle(tr("Credits"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            // The bundled attribution file, shown as written (English).
-            if let url = Bundle.main.url(forResource: "WORDLIST_ATTRIBUTION", withExtension: "md"),
-               let contents = try? String(contentsOf: url, encoding: .utf8) {
-                text = contents.trimmingCharacters(in: .whitespacesAndNewlines)
-            } else {
-                text = "The bundled word list is derived from the Electronic Frontier Foundation's long wordlist, created by Joseph Bonneau: https://www.eff.org/dice"
+            // The bundled attribution files, shown as written (English).
+            for credit in Self.credits {
+                if let url = Bundle.main.url(forResource: credit.resource, withExtension: "md"),
+                   let contents = try? String(contentsOf: url, encoding: .utf8) {
+                    texts[credit.resource] = contents.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
             }
         }
     }
