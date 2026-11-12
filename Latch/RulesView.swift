@@ -377,18 +377,26 @@ enum RuleLiveReads {
                 until: until, wall: now, guarded: guarded,
                 latestMinutes: state.wakeRule.latest(on: now), calendar: .current)
         }
-        if state.conditionalRules.contains(where: \.isFreeTime),
-           let keys = ConditionalClockInput.current(for: state, guardedNow: guarded, wallNow: now).dayKeys {
-            for rule in state.conditionalRules where rule.isFreeTime {
-                reads.conditionalUsed[rule.id] = ConditionalUses.used(ruleID: rule.id, dayKeys: keys,
-                                                                      in: state.conditionalUses)
-            }
-        }
+        reads.conditionalUsed = conditionalUsed(state: state, guardedNow: guarded, wallNow: now)
         let week = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
         reads.hasConflicts = !SchedulePrecedence.conflicts(
             entries: SchedulePrecedence.entries(state: state, from: now, through: week),
             prioritizedKeys: state.prioritizedScheduleKeys).isEmpty
         return reads
+    }
+
+    /// Today's uses per free-time rule (Rules, the summary sheet and Today's
+    /// Check in rows read the same count).
+    static func conditionalUsed(state: LatchState, guardedNow guarded: Date, wallNow now: Date) -> [UUID: Int] {
+        var used: [UUID: Int] = [:]
+        if state.conditionalRules.contains(where: \.isFreeTime),
+           let keys = ConditionalClockInput.current(for: state, guardedNow: guarded, wallNow: now).dayKeys {
+            for rule in state.conditionalRules where rule.isFreeTime {
+                used[rule.id] = ConditionalUses.used(ruleID: rule.id, dayKeys: keys,
+                                                     in: state.conditionalUses)
+            }
+        }
+        return used
     }
 }
 

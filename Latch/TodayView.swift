@@ -366,6 +366,72 @@ struct ExtraTimeRows: View {
     }
 }
 
+// MARK: - Check in
+
+/// When & where rules a check-in could start now, under extra time, in the
+/// same row style (docs/conditional-sessions-redesign.md §5.3). The rows come
+/// from `ConditionalAvailability.todayRows`; each opens the check-in sheet,
+/// which decides for real.
+struct CheckInRows: View {
+    @AppAccent private var accent
+    let rows: [ConditionalAvailability.Row]
+    /// Rules left out by the three-row cap.
+    let more: Int
+    let onCheckIn: (UUID) -> Void
+    let onAll: () -> Void
+
+    var body: some View {
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(rows.enumerated()), id: \.element.ruleID) { index, row in
+                    if index > 0 { divider }
+                    Button { onCheckIn(row.ruleID) } label: {
+                        HStack {
+                            Text(row.name).bold().foregroundColor(Ink.ink)
+                                + Text(" · ") + Text(String(format: tr("%d left today"), row.left))
+                                    .foregroundColor(Ink.inkSoft)
+                                + Text(" · ") + Text(tr("Check in")).foregroundColor(accent)
+                            Spacer(minLength: 0)
+                            chevron
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .demoraType(.meta)
+                    .padding(.horizontal, DemoraSpace.cardPadding)
+                    .frame(minHeight: 52)
+                    .accessibilityHint(tr("Checks this rule's conditions"))
+                }
+                if more > 0 {
+                    divider
+                    Button(action: onAll) {
+                        HStack {
+                            Text(tr("All in Rules")).foregroundColor(accent)
+                            Spacer(minLength: 0)
+                            chevron
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .demoraType(.meta)
+                    .padding(.horizontal, DemoraSpace.cardPadding)
+                    .frame(minHeight: 52)
+                }
+            }
+            .paperCard(padding: 0)
+        }
+    }
+
+    private var divider: some View { Rectangle().fill(Ink.hairline).frame(height: 1) }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Ink.inkSoft)
+            .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Day thread
 
 /// Today's rules on a vertical thread, with "now" marked on the line.

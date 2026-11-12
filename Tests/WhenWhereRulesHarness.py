@@ -403,7 +403,8 @@ assert 'ConditionKind.defaultCondition(kind' in editor and 'conditions.count < C
 
 sheet = (ROOT / 'Latch/RuleSummarySheet.swift').read_text()
 actions = section(sheet, 'case .conditional(let id):\n                if let rule', 'case .queuedSession, .waits:')
-assert 'primary(tr("Check in")) {}.disabled(true)' in actions, 'Check in stays off until step 3'
+# Step 3 switched Check in on (Tests/WhenWhereCheckInHarness.py checks the flow).
+assert 'primary(tr("Check in")) { editor = .checkIn(id) }' in actions and '.disabled(true)' not in actions, 'Check in is on'
 assert 'secondary(tr("Edit")) { editor = .conditional(rule) }.disabled(blocked)' in actions
 assert 'receipt = ChangeReceiptRequest(action: .removeConditionalRule(id: id)) }\n                        .disabled(blocked)' in actions
 assert 'case .conditional(let rule): ConditionalRuleEditor(existing: rule)' in sheet
@@ -430,7 +431,7 @@ project = (ROOT / 'Latch.xcodeproj/project.pbxproj').read_text()
 assert 'NSLocation' not in project, 'no location permission in step 2'
 for path in (ROOT / 'Latch').glob('*.swift'):
     assert 'import CoreLocation' not in path.read_text(), ('no CoreLocation in step 2', path.name)
-print('When & where source guards passed: receipt-only editor, no location, Check in off, owned windows')
+print('When & where source guards passed: receipt-only editor, no location, Check in on, owned windows')
 
 # --- Translations of every When & where string ---------------------------
 keys = set()
@@ -443,10 +444,10 @@ words = section(presentation, 'enum ConditionalText {', '\n}\n')
 keys.update(re.findall(r'translate\(' + STRING + r'\)', words))
 problems = section(presentation, 'var messageKey: String? {', '\n    }\n')
 keys.update(re.findall(r'return ' + STRING, problems))
-keys.update(['If (all of)', 'If (any of)', 'Then', 'When & where', 'Check in', 'Check in arrives in a later update.',
+keys.update(['If (all of)', 'If (any of)', 'Then', 'When & where', 'Check in',
              'Remove rule', '%d of %d left', 'None left today', '%d left today',
              'Free time or a block that depends on place, day or time', 'You can have up to five When & where rules.'])
-for key in ('If (all of)', 'If (any of)', 'Check in arrives in a later update.', 'None left today'):
+for key in ('If (all of)', 'If (any of)', 'None left today'):
     assert f'"{key}"' in presentation + sheet + rules_view, key
 assert len(keys) > 60, len(keys)
 TABLES = {'es': '', 'de': '+German', 'fr': '+French', 'pt': '+Portuguese',

@@ -290,7 +290,7 @@ struct ConditionalRuleEditor: View {
             }
         }
         .frame(minHeight: 44)
-        EditorNote(text: tr("You start it with Check in, which arrives in a later update."))
+        EditorNote(text: tr("You start it with Check in on the rule or on Today."))
     }
 
     @ViewBuilder private var blockControls: some View {
@@ -469,24 +469,58 @@ private struct ConditionEditorCard: View {
 
 // MARK: - One condition, read-only
 
-/// Symbol and words for one condition, as the summary sheet lists them.
+/// Symbol and words for one condition, as the summary sheet lists them. The
+/// check-in sheet adds its mark (✓ met, ✗ not met, ? can't tell, – not
+/// needed) and the reason; "?" always counts as not met.
 struct ConditionRow: View {
+    @AppLoosen private var loosen
     @Environment(\.locale) private var locale
     let condition: ConditionalCondition
+    var status: ConditionStatus? = nil
+    var reason: String? = nil
 
     var body: some View {
         var calendar = Calendar.current
         calendar.locale = locale
+        let line = ConditionalText.sheetLine(condition, translate: tr, locale: locale, calendar: calendar)
         return HStack(alignment: .firstTextBaseline, spacing: DemoraSpace.s) {
-            Image(systemName: ConditionalText.symbol(condition))
-                .foregroundStyle(Ink.inkSoft)
+            Image(systemName: status.map(Self.mark) ?? ConditionalText.symbol(condition))
+                .foregroundStyle(status.map(color) ?? Ink.inkSoft)
                 .frame(width: 22)
                 .accessibilityHidden(true)
-            Text(ConditionalText.sheetLine(condition, translate: tr, locale: locale, calendar: calendar))
-                .demoraType(.body)
-                .foregroundStyle(Ink.ink)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(line)
+                    .demoraType(.body)
+                    .foregroundStyle(Ink.ink)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let reason, !reason.isEmpty {
+                    Text(reason)
+                        .demoraType(.meta)
+                        .foregroundStyle(Ink.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([status.map { tr(ConditionalCheckIn.statusKey($0)) }, line, reason]
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", "))
+    }
+
+    private static func mark(_ status: ConditionStatus) -> String {
+        switch status {
+        case .met: return "checkmark.circle.fill"
+        case .notMet: return "xmark.circle"
+        case .unknown: return "questionmark.circle"
+        case .notNeeded: return "minus.circle"
+        }
+    }
+
+    private func color(_ status: ConditionStatus) -> Color {
+        switch status {
+        case .met: return Ink.free
+        case .notMet, .unknown: return loosen
+        case .notNeeded: return Ink.inkSoft
         }
     }
 }

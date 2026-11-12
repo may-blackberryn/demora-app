@@ -66,6 +66,11 @@ struct HomeView: View {
     @State private var portionLimitIDs: Set<UUID> = []
     @State private var extraRequestPending: Set<UUID> = []
     @State private var extraTimes: [UUID: ExtraTimeState] = [:]
+    // When & where Check in rows: the engine's use counts and the clock,
+    // both read in events.
+    @State private var conditionalUsed: [UUID: Int] = [:]
+    @State private var conditionalClock: ConditionalClockRead?
+    @State private var checkIn: CheckInRequest?
     private enum TodayRoute: Hashable { case changes }
     @State private var todayPath: [TodayRoute] = []
     @State private var ledgerTarget: PendingChange.ID?
@@ -155,6 +160,7 @@ struct HomeView: View {
         // Navigate out of transient UI without changing/cancelling saved rules
         // or requests, and never remount the retained private usage report.
         ruleSheet = nil
+        checkIn = nil
         skipTarget = nil
         homeNotice = nil
         showAddLimit = false
@@ -198,6 +204,11 @@ struct HomeView: View {
                         .id(Self.inboxAnchor)
                     }
                     limitsSection
+                    if !model.state.conditionalRules.isEmpty {
+                        TimelineView(.periodic(from: .now, by: 60)) { context in
+                            checkInRows(at: context.date)
+                        }
+                    }
                     TimelineView(.periodic(from: .now, by: 60)) { context in
                         dayThread(at: context.date)
                     }
@@ -235,6 +246,7 @@ struct HomeView: View {
             ledgerTarget = id
             todayPath = [.changes]
         }
+        .sheet(item: $checkIn) { request in CheckInSheet(ruleID: request.ruleID) }
         .sheet(isPresented: $showAddLimit) { LimitEditorView(existing: nil) }
         .sheet(isPresented: $showSession) { SessionStartView() }
         .sheet(isPresented: $showCalendar) {
@@ -275,6 +287,17 @@ struct HomeView: View {
                     requestExtraTime(for: limit, remaining: remaining)
                 }
             }
+        }
+    }
+
+    /// Under extra time: rules a check-in could start now (spec §5.3).
+    @ViewBuilder private func checkInRows(at now: Date) -> some View {
+        if let read = conditionalClock {
+            let available = ConditionalAvailability.todayRows(
+                state: model.state, used: conditionalUsed, clock: read.clock(at: now, calendar: .current))
+            CheckInRows(rows: available.rows, more: available.more,
+                        onCheckIn: { checkIn = CheckInRequest(ruleID: $0) },
+                        onAll: { model.selectedTab = 1 })
         }
     }
 
@@ -470,6 +493,17 @@ struct HomeView: View {
         }
         extraTimes = states
         extraRequestPending = pending
+        if state.conditionalRules.isEmpty {
+            conditionalUsed = [:]
+            conditionalClock = nil
+        } else {
+            let guarded = TimeGuard.now()
+            conditionalUsed = RuleLiveReads.conditionalUsed(state: state, guardedNow: guarded, wallNow: now)
+            conditionalClock = ConditionalClockRead(
+                guardedOffset: guarded.timeIntervalSince(now),
+                recentTimeZoneIDs: ConditionalClockInput.current(for: state, guardedNow: guarded,
+                                                                 wallNow: now).recentTimeZoneIDs)
+        }
     }
 
     /// Opens the limit's next extra-time gate: contact, password, phrase or wait.

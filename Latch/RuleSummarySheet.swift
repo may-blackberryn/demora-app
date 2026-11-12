@@ -45,6 +45,7 @@ private enum SummaryEditor: Identifiable {
     case scheduleApps(BlockSchedule)
     case dayNight(DayNightGroup)
     case conditional(ConditionalRule)
+    case checkIn(UUID)
     case legacyWake, legacySleep
 
     var id: String {
@@ -53,6 +54,7 @@ private enum SummaryEditor: Identifiable {
         case .scheduleApps(let schedule): return "schedule-\(schedule.id)"
         case .dayNight(let group): return "day-night-\(group.id)"
         case .conditional(let rule): return "conditional-\(rule.id)"
+        case .checkIn(let id): return "check-in-\(id)"
         case .legacyWake: return "legacy-wake"
         case .legacySleep: return "legacy-sleep"
         }
@@ -71,6 +73,10 @@ struct RuleSummarySheet: View {
         // An owned window opened from Today or the Calendar keeps showing its
         // rule even after a time edit gives the window a new ID.
         if case .schedule = requested, let owner = rememberedOwner { return .conditional(owner) }
+        // A check-in session keeps showing its rule after it ends, while the
+        // rule exists (a removed rule's session shows as itself, with End early).
+        if case .session = requested, let owner = rememberedOwner,
+           model.state.conditionalRules.contains(where: { $0.id == owner }) { return .conditional(owner) }
         return RuleCatalog.resolve(requested, state: model.state, remembered: rememberedStart)
     }
     @AppAccent private var accent
@@ -92,7 +98,8 @@ struct RuleSummarySheet: View {
     @State private var extraState: ExtraTimeState = .notConfigured
     /// The queued Block now this sheet opened on, kept after it applies.
     @State private var rememberedStart: PendingChange?
-    /// The When & where rule behind an owned window this sheet opened on.
+    /// The When & where rule behind an owned window or a check-in session
+    /// this sheet opened on.
     @State private var rememberedOwner: UUID?
     /// The day the live reads were taken, so a sheet left open past midnight
     /// reads the new day's uses.
@@ -549,14 +556,11 @@ struct RuleSummarySheet: View {
                 primary(tr("Edit list")) { path.append(.websites) }
             case .conditional(let id):
                 if let rule = state.conditionalRules.first(where: { $0.id == id }) {
-                    // Check in arrives with C15 step 3; until then it is shown,
-                    // clearly off, so the rule's purpose reads right.
-                    primary(tr("Check in")) {}.disabled(true)
-                    Text(tr("Check in arrives in a later update."))
-                        .demoraType(.meta)
-                        .foregroundStyle(Ink.inkSoft)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // Check in stays available while an edit waits: the
+                    // enforced rule keeps working until the edit lands (§5.4).
+                    primary(tr("Check in")) { editor = .checkIn(id) }
                     secondary(tr("Edit")) { editor = .conditional(rule) }.disabled(blocked)
+                    runningSession(of: id, state: state)
                     quiet(tr("Remove rule")) { receipt = ChangeReceiptRequest(action: .removeConditionalRule(id: id)) }
                         .disabled(blocked)
                 }
@@ -565,6 +569,23 @@ struct RuleSummarySheet: View {
             }
         }
         .padding(.top, DemoraSpace.xs)
+    }
+
+    /// A running check-in session ends early only through the delayed
+    /// `.endSessionEarly`, as any session (spec §5.2, Q1); a waiting end shows
+    /// its change instead of a second button.
+    @ViewBuilder private func runningSession(of ruleID: UUID, state: LatchState) -> some View {
+        if let session = state.sessions.filter({ $0.conditionalRuleID == ruleID && $0.endsAt > Date() })
+            .max(by: { $0.endsAt < $1.endsAt }) {
+            if let ending = state.pending.first(where: {
+                if case .endSessionEarly(let sessionID) = $0.action { return sessionID == session.id }
+                return false
+            }) {
+                pendingBlock(ending, now: Date())
+            } else {
+                quiet(tr("End early")) { receipt = ChangeReceiptRequest(action: .endSessionEarly(id: session.id)) }
+            }
+        }
     }
 
     private func onlyRemove() -> some View {
@@ -624,6 +645,7 @@ struct RuleSummarySheet: View {
         case .scheduleApps(let schedule): ScheduleSelectionEditorView(schedule: schedule)
         case .dayNight(let group): DayNightQueuedEditor(group: group)
         case .conditional(let rule): ConditionalRuleEditor(existing: rule)
+        case .checkIn(let id): CheckInSheet(ruleID: id)
         case .legacyWake: WakeBlockEditor(presentation: .sheet)
         case .legacySleep: SleepBlockEditor(presentation: .sheet)
         }
@@ -635,6 +657,11 @@ struct RuleSummarySheet: View {
         readDay = ConditionalUses.dayKey(for: Date(), calendar: .current)
         if case .schedule(let id) = requested,
            let owner = state.schedules.first(where: { $0.id == id })?.ownerRuleID {
+            rememberedOwner = owner
+        }
+        if case .session(let id) = requested,
+           let owner = state.sessions.first(where: { $0.id == id })?.conditionalRuleID,
+           state.conditionalRules.contains(where: { $0.id == owner }) {
             rememberedOwner = owner
         }
         if case .queuedSession(let id) = requested,
