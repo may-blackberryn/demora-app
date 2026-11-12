@@ -1563,4 +1563,5 @@ let turkishStrings: [String: String] = [
     "everything unblocked": "her şey serbest",
     "or": "veya",
     "within %@": "%@ yarıçapında",
+    "This rule changed while you were editing. Close it and open it again.": "Bu kural sen düzenlerken değişti. Kapatıp yeniden aç.",
 ]

@@ -31,6 +31,8 @@ struct RulesView: View {
     @State private var blockedLimitIDs: Set<UUID> = []
     @State private var wakeOpens: [RuleRef: Date] = [:]
     @State private var conditionalUsed: [UUID: Int] = [:]
+    /// The day the live reads were taken (uses reset at midnight).
+    @State private var readDay = ""
     @State private var hasConflicts = false
     @State private var outgoing: [ContactsRelay.OutgoingRequest] = []
     @State private var showChooser = false
@@ -49,6 +51,9 @@ struct RulesView: View {
                     waitsStrip
                     TimelineView(.periodic(from: .now, by: 60)) { context in
                         sections(now: context.date)
+                            .onChange(of: ConditionalUses.dayKey(for: context.date, calendar: .current)) { day in
+                                if day != readDay { refresh(model.state) }
+                            }
                     }
                 }
                 .padding(.horizontal, DemoraSpace.pageGutter)
@@ -283,6 +288,7 @@ struct RulesView: View {
     // MARK: Events
 
     private func refresh(_ state: LatchState) {
+        readDay = ConditionalUses.dayKey(for: Date(), calendar: .current)
         let reads = RuleLiveReads.read(state: state)
         blockedLimitIDs = reads.blockedLimitIDs
         wakeOpens = reads.wakeOpens

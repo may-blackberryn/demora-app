@@ -418,8 +418,8 @@ enum RuleChip: Equatable {
                 }
                 return ends.max().map { .onUntil($0) }
             case .freeTime(_, _, _, let usesPerDay):
-                if ConditionalText.ruledOutToday(rule, now: now, calendar: calendar) { return nil }
-                guard let used = conditionalUsed[id] else { return nil }
+                guard let used = ConditionalText.usedForToday(rule, used: conditionalUsed[id],
+                                                              now: now, calendar: calendar) else { return nil }
                 let left = max(0, usesPerDay - used)
                 return left > 0 ? .usesLeft(left) : .noneLeft
             }
@@ -945,7 +945,8 @@ enum RuleFact: Equatable {
 enum RuleSummaryFacts {
     /// The sheet's fact rows, only those that apply (spec §5.6). `extraLeft` is
     /// today's remaining extra-time uses, read by the view in an event callback.
-    /// `conditionalUsed` is a When & where rule's uses today (nil = unknown).
+    /// `conditionalUsed` is a When & where rule's uses today, already passed
+    /// through `ConditionalText.usedForToday` (nil = unknown or not today).
     static func make(ref: RuleRef, state: LatchState, extraLeft: Int? = nil,
                      conditionalUsed: Int? = nil) -> [RuleFact] {
         switch ref {
@@ -1257,7 +1258,7 @@ enum EditorValidation {
         case .freeTime(let kind, let selection, _, _):
             if kind == .unblock && !hasSelection(selection) { return .apps }
         case .block(_, let selection, _):
-            if !hasSelection(selection) { return .apps }
+            // Say first what no choice of apps can fix (v1 limits).
             if !draft.hasLocationCondition { return .blockNeedsPlace }
             if draft.match == .any && draft.conditions.contains(where: {
                 switch $0 {
@@ -1265,6 +1266,7 @@ enum EditorValidation {
                 case .place, .country, .time: return false
                 }
             }) { return .blockAnyOfDays }
+            if !hasSelection(selection) { return .apps }
         }
         if !draft.isValid { return .invalid }
         if let existing, draft.sameConfiguration(as: existing) { return .unchanged }
@@ -1294,21 +1296,35 @@ enum ConditionalText {
         return nil
     }
 
-    /// An "all of" rule whose days or dates exclude today can't hold today, so
-    /// its card shows no uses chip (the summary line carries the days). Day and
-    /// date are read in the Gregorian calendar, as the evaluator reads them.
+    /// An "all of" rule whose days or dates exclude today, or whose same-day
+    /// time window has already ended, can't hold again today, so neither the
+    /// card nor the sheet counts uses (the summary line carries the days).
+    /// Read in the Gregorian calendar, as the evaluator reads it. Display
+    /// only: the wall clock and current zone, never a verdict (the check-in
+    /// re-evaluates on the guarded clock in every recent zone).
     static func ruledOutToday(_ rule: ConditionalRule, now: Date, calendar: Calendar) -> Bool {
         guard rule.match == .all else { return false }
         let gregorian = ConditionalDay.gregorian(in: calendar.timeZone)
         let weekday = gregorian.component(.weekday, from: now)
         let today = ConditionalDay.of(now, in: calendar.timeZone)
+        let clock = gregorian.dateComponents([.hour, .minute], from: now)
+        let minute = (clock.hour ?? 0) * 60 + (clock.minute ?? 0)
         return rule.conditions.contains { condition in
             switch condition {
             case .days(let days): return !days.contains(weekday)
             case .dates(let first, let last): return today < first || last < today
-            case .place, .country, .time: return false
+            // A window that wraps midnight can still open tonight.
+            case .time(let start, let end): return start < end && minute >= end
+            case .place, .country: return false
             }
         }
+    }
+
+    /// Today's uses to show for a free-time rule: nil when unknown or when
+    /// the rule can't hold again today. One rule for the chip and the sheet.
+    static func usedForToday(_ rule: ConditionalRule, used: Int?, now: Date, calendar: Calendar) -> Int? {
+        guard rule.isFreeTime, let used, !ruledOutToday(rule, now: now, calendar: calendar) else { return nil }
+        return used
     }
 
     /// "at Home", "in Mexico", "on weekends", "22:00–06:00", "20 Dec to 27 Dec".

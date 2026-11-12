@@ -1562,4 +1562,5 @@ let portugueseStrings: [String: String] = [
     "everything unblocked": "tudo desbloqueado",
     "or": "ou",
     "within %@": "num raio de %@",
+    "This rule changed while you were editing. Close it and open it again.": "Esta regra mudou enquanto você a editava. Feche-a e abra-a de novo.",
 ]

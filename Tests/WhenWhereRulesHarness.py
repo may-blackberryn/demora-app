@@ -189,6 +189,18 @@ check(chip(weekendSchool, sundayNoon, used: [weekendSchool.id: 1]) == .usesLeft(
 var anyDays = sunday; anyDays.match = .any
 check(chip(anyDays, mondayNoon, used: [sunday.id: 0]) == .usesLeft(1), "any-of: the country could still hold")
 check(chip(trip, at(11, 15), used: [trip.id: 0]) == nil, "dates not yet")
+// Review fix: a same-day window that has ended can't hold again today; one
+// that wraps midnight can.
+var morning = sunday; morning.conditions = [.days([1]), .time(start: 9 * 60, end: 10 * 60)]
+check(chip(morning, at(11, 15, 9, 30), used: [morning.id: 0]) == .usesLeft(1), "inside the window")
+check(chip(morning, at(11, 15, 8), used: [morning.id: 0]) == .usesLeft(1), "before it: still today")
+check(chip(morning, at(11, 15, 15), used: [morning.id: 0]) == nil, "after a same-day window: nothing")
+var night = sunday; night.conditions = [.time(start: 22 * 60, end: 6 * 60)]
+check(chip(night, at(11, 15, 15), used: [night.id: 0]) == .usesLeft(1), "a window across midnight is still ahead")
+check(ConditionalText.usedForToday(sunday, used: 0, now: mondayNoon, calendar: mx) == nil, "not today: no count for the sheet")
+check(ConditionalText.usedForToday(sunday, used: 0, now: sundayNoon, calendar: mx) == 0, "today: the count")
+check(ConditionalText.usedForToday(sunday, used: nil, now: sundayNoon, calendar: mx) == nil, "unknown stays unknown")
+check(ConditionalText.usedForToday(instagram, used: 0, now: sundayNoon, calendar: mx) == nil, "a block has no uses")
 check(chip(trip, at(12, 21, 9), used: [trip.id: 0]) == .usesLeft(1), "inside the dates")
 var running = BlockSession(name: "Sunday in Mexico", kind: .free, selection: FamilyActivitySelection(),
                            startedAt: at(11, 15, 12), endsAt: at(11, 15, 13))
@@ -281,6 +293,12 @@ check(problem(with(sunday) { $0.outcome = .freeTime(kind: .unblock, selection: F
 check(problem(with(instagram) { $0.outcome = .block(mode: .blockSelected, selection: FamilyActivitySelection(), until: .time(420)) }) == .apps, "block needs apps")
 let dayBlock = with(instagram) { $0.conditions = [.time(start: 1320, end: 360)] }
 check(problem(dayBlock) == .blockNeedsPlace, "v1: a block needs a place or country")
+// Review fix: what no choice of apps can fix is said first.
+check(problem(with(dayBlock) { $0.outcome = .block(mode: .blockSelected, selection: FamilyActivitySelection(), until: .time(420)) })
+      == .blockNeedsPlace, "no place before no apps")
+check(problem(with(instagram) { $0.conditions.append(.days([1]))
+    $0.outcome = .block(mode: .blockSelected, selection: FamilyActivitySelection(), until: .time(420)) }) == .blockAnyOfDays,
+      "any-of days before no apps")
 check(problem(with(instagram) { $0.conditions.append(.days([1])) }) == .blockAnyOfDays, "v1: any-of block, no days")
 check(problem(with(instagram) { $0.match = .all; $0.conditions.append(.days([1])) }) == nil, "all-of block may use days")
 check(problem(with(instagram) { $0.outcome = .block(mode: .blockAllExcept, selection: apps("a"), until: .time(420)) }) == .invalid,
@@ -371,9 +389,16 @@ assert ('ChangeReceiptRequest(action: existing == nil ? .addConditionalRule(draf
         '                                                               : .updateConditionalRule(draft))') in review, review
 assert '_addedAt = State(initialValue: Date())' in editor
 assert 'addedAt: existing?.addedAt ?? addedAt, revision: existing?.revision ?? 0' in editor
-assert 'problem == nil && !waiting && (existing == nil || current != nil)' in editor, 'stale or waiting edits never review'
+assert 'problem == nil && !waiting && !changedUnderneath && (existing == nil || current != nil)' in editor, 'stale or waiting edits never review'
 assert 'EditorValidation.conditional(draft, existing: current ?? existing)' in editor
 assert 'waiting: waiting, onReview: review' in editor
+# Review fixes: bindings by ID (no index-based ForEach($conditions)), a stale
+# editor can't silently revert a landed edit, Cancel asks for every change.
+assert 'ForEach($conditions)' not in editor and 'ConditionEditorCard(condition: binding(for: item.id))' in editor
+binding_src = declaration(editor, 'private func binding(for id: UUID)')
+assert 'guard let index = conditions.firstIndex(where: { $0.id == id }) else { return }' in binding_src
+assert '!changedUnderneath' in editor and 'return !current.sameConfiguration(as: existing)' in editor
+assert "match != .all" in editor and 'endChoice != .time' in editor
 assert 'ConditionKind.defaultCondition(kind' in editor and 'conditions.count < ConditionalRule.maximumConditions' in editor
 
 sheet = (ROOT / 'Latch/RuleSummarySheet.swift').read_text()
@@ -382,12 +407,20 @@ assert 'primary(tr("Check in")) {}.disabled(true)' in actions, 'Check in stays o
 assert 'secondary(tr("Edit")) { editor = .conditional(rule) }.disabled(blocked)' in actions
 assert 'receipt = ChangeReceiptRequest(action: .removeConditionalRule(id: id)) }\n                        .disabled(blocked)' in actions
 assert 'case .conditional(let rule): ConditionalRuleEditor(existing: rule)' in sheet
+# Review fixes: the sheet counts like the chip, follows an owned window's rule
+# across a time edit, and both screens re-read uses when the day changes.
+assert 'ConditionalText.usedForToday(rule, used: conditionalUsed[id], now: now, calendar: calendar)' in sheet
+assert 'if case .schedule = requested, let owner = rememberedOwner { return .conditional(owner) }' in sheet
+assert 'rememberedOwner = owner' in sheet
 rules_view = (ROOT / 'Latch/RulesView.swift').read_text()
 assert 'case .whenWhere: ConditionalRuleEditor(existing: nil)' in rules_view
 reads = section(rules_view, 'enum RuleLiveReads {', '\n}\n')
 assert 'ConditionalClockInput.current(for: state, guardedNow: guarded, wallNow: now).dayKeys' in reads
 assert 'ConditionalUses.used(ruleID: rule.id, dayKeys: keys' in reads, 'the engine’s own count'
 assert 'conditionalUsed: conditionalUsed' in rules_view and 'conditionalUsed: conditionalUsed' in sheet
+for source in (rules_view, sheet):
+    assert '.onChange(of: ConditionalUses.dayKey(for: context.date, calendar: .current))' in source
+    assert 'readDay = ConditionalUses.dayKey(for: Date(), calendar: .current)' in source
 conflicts = (ROOT / 'Latch/ScheduleConflictsView.swift').read_text()
 assert '.filter { !isRuleOwned($0, state: model.state) }' in conflicts, 'owned windows have no priority row'
 assert '&& !isRuleOwned(key, state: model.state)' in conflicts, 'nor a reviewable priority change'
@@ -401,13 +434,15 @@ print('When & where source guards passed: receipt-only editor, no location, Chec
 
 # --- Translations of every When & where string ---------------------------
 keys = set()
-for name in ('Latch/ConditionalRuleEditor.swift',):
+for name in ('Latch/ConditionalRuleEditor.swift', 'Latch/RuleSummarySheet.swift', 'Latch/RulesView.swift'):
     for call in re.findall(r'\btr\((?:[^()"]|"(?:[^"\\]|\\.)*")*\)', (ROOT / name).read_text()):
         keys.update(re.findall(STRING, call))
 kinds = section(presentation, 'enum ConditionKind: CaseIterable, Equatable {', '\n}\n')
 keys.update(k for k in re.findall(r'return ' + STRING, kinds))
 words = section(presentation, 'enum ConditionalText {', '\n}\n')
 keys.update(re.findall(r'translate\(' + STRING + r'\)', words))
+problems = section(presentation, 'var messageKey: String? {', '\n    }\n')
+keys.update(re.findall(r'return ' + STRING, problems))
 keys.update(['If (all of)', 'If (any of)', 'Then', 'When & where', 'Check in', 'Check in arrives in a later update.',
              'Remove rule', '%d of %d left', 'None left today', '%d left today',
              'Free time or a block that depends on place, day or time', 'You can have up to five When & where rules.'])

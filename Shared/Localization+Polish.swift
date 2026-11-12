@@ -1563,4 +1563,5 @@ let polishStrings: [String: String] = [
     "everything unblocked": "wszystko odblokowane",
     "or": "lub",
     "within %@": "w promieniu %@",
+    "This rule changed while you were editing. Close it and open it again.": "Ta reguła zmieniła się podczas edycji. Zamknij ją i otwórz ponownie.",
 ]

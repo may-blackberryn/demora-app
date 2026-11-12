@@ -1570,4 +1570,5 @@ let germanStrings: [String: String] = [
     "everything unblocked": "alles entsperrt",
     "or": "oder",
     "within %@": "im Umkreis von %@",
+    "This rule changed while you were editing. Close it and open it again.": "Diese Regel hat sich beim Bearbeiten geändert. Schließe sie und öffne sie erneut.",
 ]

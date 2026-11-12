@@ -1563,4 +1563,5 @@ let hindiStrings: [String: String] = [
     "everything unblocked": "सब कुछ अनब्लॉक",
     "or": "या",
     "within %@": "%@ के दायरे में",
+    "This rule changed while you were editing. Close it and open it again.": "आपके संपादन के दौरान यह नियम बदल गया। इसे बंद करके फिर से खोलें।",
 ]

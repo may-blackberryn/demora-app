@@ -129,15 +129,35 @@ struct ConditionalRuleEditor: View {
         return RulePending.blocksEdit(of: .conditional(existing.id), pending: model.state.pending)
     }
 
+    /// The saved rule changed (an edit landed) since this page opened: the
+    /// draft would silently undo it, so the page asks to be reopened.
+    private var changedUnderneath: Bool {
+        guard let existing, let current else { return false }
+        return !current.sameConfiguration(as: existing)
+    }
+
     private var canReview: Bool {
-        problem == nil && !waiting && (existing == nil || current != nil)
+        problem == nil && !waiting && !changedUnderneath && (existing == nil || current != nil)
     }
 
     private var isDirty: Bool {
         if let existing { return !draft.sameConfiguration(as: existing) }
-        return !name.isEmpty || !conditions.isEmpty || outcomeChoice != .free || freeKind != .free
-            || maxMinutes != 60 || usesPerDay != 1 || EditorValidation.hasSelection(freeSelection)
-            || EditorValidation.hasSelection(blockSelection)
+        return !name.isEmpty || !conditions.isEmpty || match != .all || outcomeChoice != .free
+            || freeKind != .free || maxMinutes != 60 || usesPerDay != 1
+            || endChoice != .time || untilMinute != 7 * 60 || blockMinutes != 180
+            || EditorValidation.hasSelection(freeSelection) || EditorValidation.hasSelection(blockSelection)
+    }
+
+    /// A condition's binding found by ID on every read and write, so a card
+    /// removed while one of its pickers is still committing reads a harmless
+    /// value and writes nothing (never another card, never out of range).
+    private func binding(for id: UUID) -> Binding<ConditionalCondition> {
+        Binding(get: {
+            conditions.first(where: { $0.id == id })?.condition ?? .days([])
+        }, set: { value in
+            guard let index = conditions.firstIndex(where: { $0.id == id }) else { return }
+            conditions[index].condition = value
+        })
     }
 
     private var calendar: Calendar {
@@ -152,6 +172,10 @@ struct ConditionalRuleEditor: View {
         RuleEditorPage(title: existing?.name ?? tr("New When & where rule"), isDirty: isDirty,
                        problem: problem?.messageKey.map(tr), canReview: canReview,
                        waiting: waiting, onReview: review) {
+            if changedUnderneath {
+                EditorNote(text: tr("This rule changed while you were editing. Close it and open it again."),
+                           warning: true)
+            }
             EditorSection(tr("Name")) {
                 TextField(tr("e.g. Sunday in Mexico"), text: $name)
                     .demoraType(.cardTitle)
@@ -180,7 +204,7 @@ struct ConditionalRuleEditor: View {
                     Text(tr("Any of these")).tag(ConditionalMatch.any)
                 }
                 .pickerStyle(.segmented)
-                ForEach($conditions) { $item in
+                ForEach(conditions) { item in
                     if item.id != conditions.first?.id {
                         Text(tr(match == .all ? "and" : "or"))
                             .demoraType(.label)
@@ -188,7 +212,7 @@ struct ConditionalRuleEditor: View {
                             .frame(maxWidth: .infinity)
                             .accessibilityHidden(true)
                     }
-                    ConditionEditorCard(condition: $item.condition) {
+                    ConditionEditorCard(condition: binding(for: item.id)) {
                         conditions.removeAll { $0.id == item.id }
                     }
                 }

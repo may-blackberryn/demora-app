@@ -1562,4 +1562,5 @@ let frenchStrings: [String: String] = [
     "everything unblocked": "tout débloqué",
     "or": "ou",
     "within %@": "dans un rayon de %@",
+    "This rule changed while you were editing. Close it and open it again.": "Cette règle a changé pendant que vous la modifiiez. Fermez-la et rouvrez-la.",
 ]

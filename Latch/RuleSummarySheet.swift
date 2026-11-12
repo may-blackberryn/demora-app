@@ -68,7 +68,10 @@ struct RuleSummarySheet: View {
     /// A queued Block now becomes its session once it starts, so an open
     /// sheet follows it instead of reading "removed".
     private var ref: RuleRef {
-        RuleCatalog.resolve(requested, state: model.state, remembered: rememberedStart)
+        // An owned window opened from Today or the Calendar keeps showing its
+        // rule even after a time edit gives the window a new ID.
+        if case .schedule = requested, let owner = rememberedOwner { return .conditional(owner) }
+        return RuleCatalog.resolve(requested, state: model.state, remembered: rememberedStart)
     }
     @AppAccent private var accent
     @AppLoosen private var loosen
@@ -89,6 +92,11 @@ struct RuleSummarySheet: View {
     @State private var extraState: ExtraTimeState = .notConfigured
     /// The queued Block now this sheet opened on, kept after it applies.
     @State private var rememberedStart: PendingChange?
+    /// The When & where rule behind an owned window this sheet opened on.
+    @State private var rememberedOwner: UUID?
+    /// The day the live reads were taken, so a sheet left open past midnight
+    /// reads the new day's uses.
+    @State private var readDay = ""
 
     private var calendar: Calendar {
         var calendar = Calendar.current
@@ -101,6 +109,9 @@ struct RuleSummarySheet: View {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 ScrollView {
                     content(now: context.date)
+                        .onChange(of: ConditionalUses.dayKey(for: context.date, calendar: .current)) { day in
+                            if day != readDay { refresh(model.state) }
+                        }
                         .padding(DemoraSpace.xl)
                         .frame(maxWidth: DemoraSpace.maxContentWidth)
                         .frame(maxWidth: .infinity)
@@ -139,7 +150,7 @@ struct RuleSummarySheet: View {
             VStack(alignment: .leading, spacing: DemoraSpace.m) {
                 header(state: state, chip: nil)
                 dashed
-                facts(state: state)
+                facts(state: state, now: now)
                 dashed
                 pendingBlock(change, now: now)
             }
@@ -152,7 +163,7 @@ struct RuleSummarySheet: View {
                 header(state: state, chip: chip.map {
                     ChipText.make($0, now: now, calendar: calendar, locale: locale) })
                 let rows = RuleSummaryFacts.make(ref: ref, state: state, extraLeft: extraLeft,
-                                                 conditionalUsed: usedToday)
+                                                 conditionalUsed: usedToday(now: now))
                 if !rows.isEmpty || explanation != nil {
                     dashed
                     if let explanation {
@@ -161,7 +172,7 @@ struct RuleSummarySheet: View {
                             .foregroundStyle(Ink.ink)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    facts(state: state)
+                    facts(state: state, now: now)
                 }
                 if let pending {
                     dashed
@@ -258,9 +269,9 @@ struct RuleSummarySheet: View {
 
     // MARK: Facts
 
-    @ViewBuilder private func facts(state: LatchState) -> some View {
+    @ViewBuilder private func facts(state: LatchState, now: Date) -> some View {
         let rows = RuleSummaryFacts.make(ref: ref, state: state, extraLeft: extraLeft,
-                                         conditionalUsed: usedToday)
+                                         conditionalUsed: usedToday(now: now))
         VStack(alignment: .leading, spacing: DemoraSpace.s) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, fact in
                 factRow(fact)
@@ -353,10 +364,12 @@ struct RuleSummarySheet: View {
         }
     }
 
-    /// Today's uses of this When & where rule, read in events; nil = unknown.
-    private var usedToday: Int? {
-        guard case .conditional(let id) = ref else { return nil }
-        return conditionalUsed[id]
+    /// Today's uses of this When & where rule, read in events; nil when
+    /// unknown or when the rule can't hold again today (same as the chip).
+    private func usedToday(now: Date) -> Int? {
+        guard case .conditional(let id) = ref,
+              let rule = model.state.conditionalRules.first(where: { $0.id == id }) else { return nil }
+        return ConditionalText.usedForToday(rule, used: conditionalUsed[id], now: now, calendar: calendar)
     }
 
     private func howMuch(daily: Int, perDay: [Int: Int]) -> String {
@@ -619,6 +632,11 @@ struct RuleSummarySheet: View {
     // MARK: Events
 
     private func refresh(_ state: LatchState) {
+        readDay = ConditionalUses.dayKey(for: Date(), calendar: .current)
+        if case .schedule(let id) = requested,
+           let owner = state.schedules.first(where: { $0.id == id })?.ownerRuleID {
+            rememberedOwner = owner
+        }
         if case .queuedSession(let id) = requested,
            let change = state.pending.first(where: { $0.id == id }) {
             rememberedStart = change
