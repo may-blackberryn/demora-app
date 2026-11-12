@@ -41,6 +41,8 @@ struct PlaceEditor: View {
     @State private var asking = false
     @State private var problemKey: String?
     @State private var generation = 0
+    /// iOS's prompt is up: a second tap on Allow location does nothing.
+    @State private var requestingPermission = false
 
     init(initial: ConditionalPlace?, ruleID: UUID, onDone: @escaping (ConditionalPlace) -> Void) {
         self.initial = initial
@@ -99,7 +101,7 @@ struct PlaceEditor: View {
         .presentationDetents([.large])
         .onDisappear {
             generation += 1
-            locator.cancel()
+            locator.stop()
         }
     }
 
@@ -110,6 +112,7 @@ struct PlaceEditor: View {
             EditorNote(text: tr("Demora reads where you are once to set this place's centre. It doesn't send your location."))
             Button(tr("Allow location")) { allowLocation() }
                 .buttonStyle(DemoraPrimaryButtonStyle())
+                .disabled(requestingPermission)
             quiet(tr("Not now")) { asking = false }
         } else if reading {
             HStack(spacing: DemoraSpace.s) {
@@ -138,6 +141,11 @@ struct PlaceEditor: View {
             ForEach(Array(others.enumerated()), id: \.offset) { _, other in
                 Button(other.name + " · " + ConditionalText.radius(other.radiusMeters, locale: locale)) {
                     // A copy: later edits to either rule don't touch the other (C11).
+                    // A fix still on its way must not replace the copied centre.
+                    generation += 1
+                    locator.cancel()
+                    reading = false
+                    asking = false
                     name = other.name
                     centre = PlaceCentre(latitude: other.latitude, longitude: other.longitude)
                     radius = other.radiusMeters
@@ -179,10 +187,13 @@ struct PlaceEditor: View {
     }
 
     private func allowLocation() {
-        asking = false
+        guard !requestingPermission else { return }
+        requestingPermission = true
         let token = generation
         Task { @MainActor in
             await locator.requestPermission()
+            requestingPermission = false
+            asking = false
             guard token == generation else { return }
             if case .allowed = locator.permission { read() }
             else { problemKey = ConditionalCheckIn.unknownKey(.locationOff) }

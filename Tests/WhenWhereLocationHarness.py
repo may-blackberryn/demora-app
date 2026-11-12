@@ -345,19 +345,34 @@ for forbidden in ('startUpdatingLocation', 'startMonitoring', 'allowsBackgroundL
                   'requestAlwaysAuthorization', 'CLMonitor', 'CLGeocoder', 'CLCircularRegion', 'CLBeacon',
                   'CLVisit', 'CLBackgroundActivitySession', 'CLServiceSession', 'showsBackgroundLocationIndicator',
                   'significant', 'MapKit', 'MKMap', 'URLSession', 'print(', 'NSLog', 'os_log', 'Logger',
-                  'UserDefaults', 'AppStorage', 'SharedStore', 'FileManager', 'Keychain', 'write(', 'NotificationCenter',
-                  'locationServicesEnabled()'):
+                  'UserDefaults', 'AppStorage', 'SharedStore', 'FileManager', 'Keychain', 'write(', 'NotificationCenter'):
     assert forbidden not in code, ('one foreground fix, nothing kept, logged, sent or monitored', forbidden)
 assert code.count('manager.requestLocation()') == 1, 'one fix per read'
 assert code.count('manager.requestWhenInUseAuthorization()') == 1
 permission_src = declaration(locator, 'func requestPermission() async')
 assert 'guard manager.authorizationStatus == .notDetermined, permissionWaiter == nil else { return }' in permission_src, \
     'iOS is asked only if Demora never was (no re-prompt loop)'
+# Review fix: with Location Services off for the whole iPhone, iOS shows no
+# prompt and never answers; treat it as off instead of waiting forever.
+assert code.count('locationServicesEnabled()') == 1 and \
+    'await Task.detached { CLLocationManager.locationServicesEnabled() }.value' in permission_src, 'checked off the main thread'
+assert permission_src.index('guard enabled else {\n            servicesOff = true\n            return') \
+    < permission_src.index('manager.requestWhenInUseAuthorization()')
+assert 'if servicesOff { return .denied }' in declaration(locator, 'var permission: LocationPermission {')
+stop_src = declaration(locator, 'func stop()')
+assert 'cancel()' in stop_src and 'waiter.resume()' in stop_src, 'closing a sheet ends a permission wait iOS may never answer'
 read_src = declaration(locator, 'func readOnce(wantsPrecise: Bool) async -> LocationReadOutcome')
 assert read_src.index('cancel()') < read_src.index('guard case .allowed(let precise) = permission else { return .failed(.denied) }') \
     < read_src.index('manager.requestLocation()'), 'one read at a time, only with permission'
 assert 'LocationTrust.timeout' in read_src and 'self?.finish(.failed(.timedOut))' in read_src, '15 s timeout'
 assert 'requestTemporaryFullAccuracyAuthorization(withPurposeKey: Self.precisePurposeKey)' in read_src
+# Review fix: a read cancelled while iOS asked for precise location never starts its fix.
+assert read_src.index('let token = readToken') \
+    < read_src.index('requestTemporaryFullAccuracyAuthorization') \
+    < read_src.index('guard token == readToken, !Task.isCancelled else { return .failed(.cancelled) }') \
+    < read_src.index('manager.requestLocation()'), 'cancel during the precise prompt is honoured'
+assert 'readToken += 1' in declaration(locator, 'func cancel()'), 'every cancel invalidates a pending read'
+assert read_src.index('finish(.failed(.cancelled))\n            fixWaiter = waiter') > 0, 'never two fix waiters'
 finish_src = declaration(locator, 'private func finish(_ outcome: LocationReadOutcome)')
 assert finish_src.index('guard let waiter = fixWaiter else { return }') < finish_src.index('manager.stopUpdatingLocation()') \
     < finish_src.index('waiter.resume(returning: outcome)'), 'stopped as soon as it resolves; resumed once'
@@ -387,7 +402,12 @@ for name in ('CheckInSheet.swift', 'PlaceEditor.swift'):
     assert text.count('locator.requestPermission()') == 1, name
     assert 'locator.requestPermission()' in declaration(text, 'private func allowLocation()'), \
         ('iOS asks only after the in-sheet "Allow location" tap', name)
-    assert 'locator.cancel()' in text.split('.onDisappear {', 1)[1].split('}', 1)[0], ('closing stops the read', name)
+    assert 'locator.stop()' in text.split('.onDisappear {', 1)[1].split('}', 1)[0], ('closing stops the read and any wait', name)
+    # Review fix: a second tap while iOS's prompt is up does nothing.
+    allow = declaration(text, 'private func allowLocation()')
+    assert allow.index('guard !requestingPermission else { return }') < allow.index('requestingPermission = true') \
+        < allow.index('await locator.requestPermission()') < allow.index('requestingPermission = false'), name
+    assert '.disabled(requestingPermission)' in text, name
     for forbidden in ('print(', 'NSLog', 'Logger', 'UserDefaults', 'AppStorage', 'SharedStore', 'openSettingsURLString',
                       'UIApplication.shared.open', 'openURL'):
         assert forbidden not in text, ('nothing logged or saved, no Settings redirect', name, forbidden)
@@ -400,12 +420,14 @@ sheet = readers['CheckInSheet.swift']
 run_src = declaration(sheet, 'private func runCheck(_ state: LatchState, announce: Bool, userAsked: Bool = false)')
 assert run_src.index('if userAsked {') < run_src.index('readLocation(announce: announce)'), 'a read only when the user asked'
 assert 'locationPhase = .asking' in run_src and "location: .unavailable(.locationOff))" in run_src
-assert sheet.count('userAsked: true') == 2, 'opening the sheet / Try again, and the card'
+assert sheet.count('userAsked: true') == 3, 'opening the sheet, Try again, and the card'
 assert '.onAppear { runCheck(model.state, announce: true, userAsked: true) }' in sheet
 allow_src = declaration(sheet, 'private func allowLocation()')
 assert 'runCheck(model.state, announce: true, userAsked: true)' in allow_src
 try_again = sheet.split('primary(tr("Try again")) {', 1)[1].split('}', 1)[0]
-assert 'runCheck(model.state, announce: true)' in try_again, try_again
+# Review fix: Try again is the user's tap, so it may read a new fix (after a
+# timeout or an aged check); denied stays "off" (locationStep), never re-prompted.
+assert 'runCheck(model.state, announce: true, userAsked: true)' in try_again, try_again
 read_location = declaration(sheet, 'private func readLocation(announce: Bool)')
 assert read_location.index('let outcome = await locator.readOnce(wantsPrecise: true)') \
     < read_location.index('guard token == generation else { return }') \
@@ -429,6 +451,10 @@ set_here = declaration(place_editor, 'private func setFromHere()')
 assert 'case .notAsked:\n            asking = true' in set_here and 'case .denied, .restricted:' in set_here
 assert 'ChoiceList(selection: $radius, options: PlaceChoices.sizes.map' in place_editor, 'only the fixed sizes'
 assert 'PlaceChoices.otherPlaces(state: model.state, excluding: ruleID)' in place_editor
+# Review fix: copying a place cancels a fix still on its way, so it can't
+# replace the copied centre a moment later.
+copy = place_editor.split('private var copyMenu: some View {', 1)[1].split('} label: {', 1)[0]
+assert copy.index('generation += 1') < copy.index('locator.cancel()') < copy.index('centre = PlaceCentre('), copy
 assert 'geocode' not in place_editor.lower() and 'Map(' not in place_editor, 'no address search or map (C12)'
 print('When & where location source guards passed: one fix, While Using, host only, nothing kept or logged')
 

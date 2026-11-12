@@ -27,6 +27,12 @@ final class LocationCheck: NSObject, ObservableObject, CLLocationManagerDelegate
     private var permissionWaiter: CheckedContinuation<Void, Never>?
     private var fixWaiter: CheckedContinuation<LocationReadOutcome, Never>?
     private var timeout: Task<Void, Never>?
+    /// Bumped by every read and every cancel: a read still waiting on the
+    /// precise-location prompt when it was cancelled never starts its fix.
+    private var readToken = 0
+    /// Location Services are off for the whole iPhone: iOS shows no prompt
+    /// and sends no answer, so Demora treats it as "location off".
+    private var servicesOff = false
 
     override init() {
         super.init()
@@ -35,6 +41,7 @@ final class LocationCheck: NSObject, ObservableObject, CLLocationManagerDelegate
     }
 
     var permission: LocationPermission {
+        if servicesOff { return .denied }
         switch manager.authorizationStatus {
         case .notDetermined: return .notAsked
         case .restricted: return .restricted
@@ -49,6 +56,13 @@ final class LocationCheck: NSObject, ObservableObject, CLLocationManagerDelegate
     /// for the answer. Call only from the user's tap on "Allow location".
     func requestPermission() async {
         guard manager.authorizationStatus == .notDetermined, permissionWaiter == nil else { return }
+        // Off the main thread, as Apple asks for this call.
+        let enabled = await Task.detached { CLLocationManager.locationServicesEnabled() }.value
+        guard enabled else {
+            servicesOff = true
+            return
+        }
+        guard manager.authorizationStatus == .notDetermined, permissionWaiter == nil else { return }
         await withCheckedContinuation { (waiter: CheckedContinuation<Void, Never>) in
             permissionWaiter = waiter
             manager.requestWhenInUseAuthorization()
@@ -60,12 +74,17 @@ final class LocationCheck: NSObject, ObservableObject, CLLocationManagerDelegate
     /// approximate fix); declined → the fix is marked not precise.
     func readOnce(wantsPrecise: Bool) async -> LocationReadOutcome {
         cancel()
+        let token = readToken
         guard case .allowed(let precise) = permission else { return .failed(.denied) }
         if wantsPrecise && !precise {
             _ = try? await manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: Self.precisePurposeKey)
+            // Cancelled (sheet closed, newer check) while iOS asked: no fix.
+            guard token == readToken, !Task.isCancelled else { return .failed(.cancelled) }
             guard case .allowed = permission else { return .failed(.denied) }
         }
         return await withCheckedContinuation { (waiter: CheckedContinuation<LocationReadOutcome, Never>) in
+            // Never two waiters: an older one (impossible from the UI) ends cancelled.
+            finish(.failed(.cancelled))
             fixWaiter = waiter
             manager.requestLocation()
             timeout = Task { [weak self] in
@@ -78,7 +97,18 @@ final class LocationCheck: NSObject, ObservableObject, CLLocationManagerDelegate
 
     /// Stops a read in flight (the sheet closed or a newer check started).
     func cancel() {
+        readToken += 1
         finish(.failed(.cancelled))
+    }
+
+    /// The sheet is going away: stop any read and end a permission wait
+    /// that iOS may never answer, so nothing is left waiting.
+    func stop() {
+        cancel()
+        if let waiter = permissionWaiter {
+            permissionWaiter = nil
+            waiter.resume()
+        }
     }
 
     private func finish(_ outcome: LocationReadOutcome) {

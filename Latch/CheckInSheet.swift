@@ -46,6 +46,8 @@ struct CheckInSheet: View {
     @State private var locationPhase: CheckInLocationPhase = .idle
     /// Bumped by every check, so a fix that arrives late can't replace a newer one.
     @State private var generation = 0
+    /// iOS's prompt is up: a second tap on Allow location does nothing.
+    @State private var requestingPermission = false
 
     private var live: ConditionalRule? { model.state.conditionalRules.first { $0.id == ruleID } }
 
@@ -79,7 +81,7 @@ struct CheckInSheet: View {
         .onAppear { runCheck(model.state, announce: true, userAsked: true) }
         .onDisappear {
             generation += 1
-            locator.cancel()
+            locator.stop()
         }
         // `$state` publishes before the property changes: read the new value.
         .onReceive(model.$state) { state in
@@ -210,6 +212,7 @@ struct CheckInSheet: View {
             case .askPermission:
                 // The in-sheet card comes first; iOS asks only after this tap.
                 primary(tr("Allow location")) { allowLocation() }
+                    .disabled(requestingPermission)
                 quiet(tr("Not now")) { dismiss() }
             default:
                 // Not met, used up, needs location, changed, refused: no way
@@ -217,7 +220,9 @@ struct CheckInSheet: View {
                 primary(tr("Try again")) {
                     attempt = nil
                     checkedAgain = false
-                    runCheck(model.state, announce: true)
+                    // The user's tap: it may read one new fix (timeout, aged
+                    // check). Denied stays "off" and is never re-prompted.
+                    runCheck(model.state, announce: true, userAsked: true)
                 }
                 quiet(tr("Done")) { dismiss() }
             }
@@ -312,9 +317,12 @@ struct CheckInSheet: View {
     /// The card's button: iOS's "While Using" prompt, then the check again.
     /// After a denial the card never comes back (the rows say location is off).
     private func allowLocation() {
+        guard !requestingPermission else { return }
+        requestingPermission = true
         let token = generation
         Task { @MainActor in
             await locator.requestPermission()
+            requestingPermission = false
             guard token == generation else { return }
             runCheck(model.state, announce: true, userAsked: true)
         }
