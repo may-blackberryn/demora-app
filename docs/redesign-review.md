@@ -1,6 +1,12 @@
 # Demora iOS full redesign — review
 
 ## Start here
+- **When & where step 2 (2026-11-11):** editor, Rules card and summary sheet
+  (`79e51ba` + review fixes `af71cf8`): When & where section after Schedules,
+  New rule row, one-page editor (days, time, dates; place/country explained
+  as later), summary sheet with Edit/Remove and Check in switched off. Block
+  rules can't be saved until places arrive. See "When & where step 2" at the
+  end for decisions, phone checks and what step 3 needs.
 - **When & where step 1 (2026-11-11):** engine only (model, evaluator,
   check-in starts, per-day uses, capacity, `Tests/WhenWhereHarness.py`),
   `9151393` + review fixes `da7fe64`. No UI or location yet. See "When &
@@ -200,6 +206,7 @@
 | Insights build | Pure logic, host header/loading line/About sheet, Day · Week · Trends report, copy elsewhere, README/status | `46eb366`, `680d09e`, `619a77d`, `a20433e`, `d065979`; review fixes `ec80259` | Done, reviewed and fixed; awaiting the main session's review |
 | You build | Pure logic, You page, Skip the wait sheet, add/edit/remove with receipts, Help and Guide copy, duplicate screens removed | `4492d82`, `562bc69`, `f8994c9`, `41e7d00`, `b62f699`, `e86f704`; review fixes `17ec17f` | Done, reviewed and fixed; awaiting the main session's review |
 | Four-tab switch | Dead beta/language screens, four tabs + tutorial retirement + Calendar restyle, dead list pages, copy; started by Codex, finished by Claude | `748c488`, `9a7d236`, `f061030`, `5cc01b1`; review fixes `afcf685` | Done, reviewed and fixed; signed build not yet installed (phone unavailable) |
+| When & where step 2 | Editor, Rules card and section, summary sheet, owned windows, copy, presentation harness | `79e51ba`; review fixes `af71cf8` | Done, reviewed and fixed; nothing seen on a screen |
 
 ## Foundations build (2026-11-02)
 | Decision | Why | Done? |
@@ -916,3 +923,120 @@ limits); queue `.addConditionalRule` / `.updateConditionalRule` /
 (`locationCouldChangeVerdict` says whether to read location),
 `ConditionalCheckInStamp.make` and `ChangeEngine.startConditionalSessionOffMain`,
 and maps `ConditionalStartRefusal` / `ConditionReason` to copy (no strings yet).
+
+## When & where step 2 (2026-11-11)
+Step 2 of the approved `docs/conditional-sessions-redesign.md` (C15: editor,
+Rules card, summary sheet). No check-in, no CoreLocation, no Info.plist
+change; engine and model untouched (`git diff 2e3f8f3 -- Shared/ChangeEngine.swift
+Shared/SharedModels.swift` is empty). Commits `79e51ba` + review fixes `af71cf8`. Evidence: `Tests/WhenWhereRulesHarness.py`
+compiles the real `RulesPresentation.swift` with the real models and
+`SchedulePrecedence`, checks the pending mapping, section, card line, chip,
+facts, both choosers and a 21,450-draft table where the editor's "no problem"
+equals `ConditionalRule.isValid`, plus source guards and translations.
+Nothing was seen on a screen (no simulator runtime on this Mac).
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| **Owned block windows** (`ownerRuleID != nil`): hidden from Rules → Schedules; still drawn in the Calendar and Today's day thread under the rule's name, and tapping them opens the **When & where rule** (`RuleCatalog.resolve` maps an owned `.schedule` to `.conditional(owner)`); Conflicts still lists their overlaps (they are real enforcement) but gives them no Priority row or link | One rule, one decision (spec §5.2/§5.8). The engine already rejects Edit apps / Remove block on them, so the schedule sheet would have offered actions that fail; a priority on an owned window would be lost when the rule's times change (step-1 limit) | Yes |
+| A check-in start (`.startConditionalSession`) maps to **no** card line | Its conflict key differs from the rule's, so mapping it would lock Edit/Remove while the engine allows them. Free starts never wait; a waiting check-in block (step 6) shows in Changes only | Yes — step 6 may add a "Starts in" line |
+| Card line: conditions joined by ", " (all of) or ", or " (any of), first letter capitalised in the app's language, then " · " and the outcome: "1 hr free", "2 × 30 min free", "30 min unblocked", "blocks 1 app". Lengths use the app's duration words, so 60 min reads "1 hr" | Spec §5.3 with the existing `RuleText.minutes` wording | Yes — wording worth your eye |
+| Chip: free time shows **"1 left today" / "None left today"** (neutral) from the engine's own count (`ConditionalUses.used` over every recent zone's day key, read in events); unknown count → no chip; an all-of rule whose days/dates exclude today, or whose same-day time window has ended, → no chip; a running session → "Free until" / "On until"; a block rule → "On until" only while its own time window runs | Spec §5.3: never "conditions met", unknown is not a number | Yes |
+| New rule chooser: **When & where** is the seventh row, disabled at five rules counting queued additions (the engine's count) | §5.3 | Yes — sheet keeps its medium/large detents; check on SE |
+| Editor starts with no conditions. **Add condition** lists Place, Country, Days, Time, Dates with example lines; **Place and Country are greyed: "Arrives in a later update."** Defaults: weekends; 22:00–00:00 (with an "After 22:00" shortcut); the coming seven days | Brief: placeholders only until steps 4–5 | Yes |
+| First problem above Review change, in page order: name → name length → no conditions → more than four → per condition (no days, same times, last day before the first) → only-these-apps free time without apps → block needs a place/country → any-of block with days/dates → block without apps → anything else `isValid` refuses ("Check this rule's settings.") → no-op edit (no message) | R12; the editor can never offer a draft the engine refuses | Yes — harness table |
+| **Block outcome is in the editor with its v1 limits explained, but can't be saved yet**: `isValid` needs a place or country for a block, and those arrive in steps 4–5. The problem line says so and suggests a repeating block | Brief asked for the block outcome and its limits in-editor; the engine encodes them | Limit — worth your eye |
+| "Everything" free time saves an empty selection | Stray picks don't travel with it (as Block now's Free) | Yes |
+| New drafts: `addedAt` = when the page opened, `revision` 0. Edits keep ID, `addedAt` and revision (the engine bumps it). The editor reads the live rule and won't review if the rule is gone or a change to it waits | Brief; a stale sheet can't recreate a removed rule | Yes |
+| Summary sheet: **If (all of)/(any of)** with one row per condition (symbol + words; a place adds "within 250 m"), **Then** in two lines (opens the apps page when apps are chosen), **Today "1 of 1 left"** only for a saved free-time rule with a known count that can still hold today (same rule as the chip); **Check in shown switched off** with "Check in arrives in a later update."; **Edit** (secondary) and **Remove rule** (quiet) through the receipt | §5.4; Check in is step 3 | Yes |
+| "Check in" is translated as "verify" (Comprobar, Vérifier, Verificar, Sprawdź, Kontrol et); German "Einchecken", Hindi "चेक इन" | The action checks your conditions; "register" words read wrong | Worth your eye |
+| Fixed two existing Hindi strings with stray Chinese/Korean characters ("Apps to unblock", shown in this editor, and "Unlock viewing the stored passcode"); the new harness rejects CJK in the Hindi table | Visible on the new page | Yes |
+| `FromToRows` (time rows) is now shared instead of private | Reuse the repeating editor's From/To rows (§7) | Yes |
+| No change to the engine, model, capacity or any existing rule's behaviour | Brief | Preserved |
+
+## When & where step 2 review fixes
+A fresh reviewer read `79e51ba` and the spec with none of the lead's
+conclusions. It found **no bypass**: every add, edit and remove goes through
+the receipt, the editor never queues, Check in can't start anything, and
+owned windows can't be edited, removed or prioritised outside their rule.
+Fixed in `af71cf8`, each with a check in `Tests/WhenWhereRulesHarness.py`
+(the two behavioural ones were mutation-checked: they fail without the fix):
+
+| Finding | Fix | Check |
+| --- | --- | --- |
+| **Medium (unverified on a device):** condition cards used `ForEach($conditions)` index bindings; deleting a card while a date/time picker was still committing could crash ("Index out of range") or write to the card that moved into its place | Each card's binding finds its condition by ID on every read and write; a removed card reads a harmless value and writes nothing | Source guard: no `ForEach($conditions)`, ID binding with a guarded write |
+| The sheet's **Today "1 of 1 left"** showed on a day the rule can't hold, while the card showed nothing; an all-of rule whose same-day window had ended still showed "1 left today" | One helper (`ConditionalText.usedForToday`) for chip and sheet; an ended non-wrapping window rules the day out (a 22:00–06:00 window doesn't) | Chip before/inside/after a 09:00–10:00 window, a wrapping window, helper table |
+| A stale editor (opened while an edit waited, edit then landed) enabled Review on the old draft: a silent revert, still delayed | The page says "This rule changed while you were editing. Close it and open it again." and won't review; Cancel now also asks after an all-of/any-of or block-end change | Source guards |
+| A sheet opened from an owned window (Today, Calendar) would read "removed" after a time edit changed the window's ID | The sheet remembers the owning rule | Source guard |
+| Uses chip and Today row could stay on yesterday's count past midnight | Rules and the sheet re-read live state when the day key changes | Source guard |
+| A Block draft asked for apps before saying a block needs a place (impossible in this build) | Place/country and any-of problems come before apps | Table: no place + no apps → place first |
+| The harness's translation scan was partly hand-listed | It now scans every `tr()` in the editor, sheet and Rules tab and every editor problem message | 167 strings × 7 tables |
+
+Left as limits: the chip's "can it hold today" reads the wall clock and the
+current zone only (the engine uses the guarded clock and every recent zone),
+so after a zone change a card can say "1 left today" when a check-in would be
+refused; the chip never claims conditions are met, and the check-in decides.
+Nothing in step 2 was rendered or tapped on a screen.
+
+Verification on `af71cf8`: all 36 `Tests/*Harness.py` (new
+`WhenWhereRulesHarness`: 112 checks, a 21,450-draft validity table, source
+guards, 167 strings × 7 tables; `WhenWhereHarness` unchanged and passing),
+both Swift harnesses, both localization checks, `git diff --check`, then
+sequential unsigned arm64 Debug and Release builds with stable Xcode 27.0
+(27A266a), no warnings. Not installed; no simulator runtime on this Mac.
+
+### When & where step 2: what to try on the phone
+1. **Rules → New rule**: a seventh row **When & where** ("Free time or a
+   block that depends on place, day or time"). On an iPhone SE check that
+   all seven rows fit or the sheet scrolls.
+2. Name it "Sunday in Mexico". **Add condition**: Place and Country are
+   greyed with "Arrives in a later update."; Days, Time and Dates show an
+   example line. Pick **Days** (weekends preselected), leave only Sunday.
+3. **Then → Free time**, **Everything** (note about lifting every block),
+   **Up to** 1 hr, **Times a day** 1. Clear the name: "Give it a name." shows
+   above **Review change**, which is off.
+4. Review change → the receipt says **Looser change** with "Add When & where
+   rule: Sunday in Mexico. If on Sun: 60 min free, once a day." Hold.
+5. Rules now has **When & where** after Schedules, with a dashed card and
+   "Added in …". Once it lands (or **Skip delay (dev)**), the card reads
+   "On Sun · 1 hr free"; on a Sunday the chip says **1 left today**, on other
+   days there is no chip.
+6. Open it: **If (all of)** with a calendar icon line, **Then** "Free time,
+   up to 1 hr / Once a day · everything unblocked", **Today 1 of 1 left**
+   (Sundays only). **Check in** is visibly off with "Check in arrives in a
+   later update." **Edit** and **Remove rule** sit under it.
+7. Edit → add a **Time** condition (22:00–00:00, "After 22:00" shortcut),
+   switch to **Any of these**: the small labels between cards change from
+   "and" to "or". Review change: always **Looser change**. The card shows
+   "Loosens in …" and the sheet's Edit/Remove are off until it lands.
+8. Add four conditions: **Add condition** greys out with "You can add up to
+   four conditions." Delete cards from the middle, including one whose date
+   picker is open: no crash, the others keep their values.
+9. Switch **Then** to **Block**: the notes explain the v1 limits and the
+   problem line says a block needs a place or country, so it can't be saved
+   in this build (expected until steps 4–5).
+10. **Remove rule** → receipt: removing free time is **stricter** (one-tap
+    Confirm with your stricter wait).
+11. Make five rules: the chooser row reads "You can have up to five When &
+    where rules." and is off.
+12. Languages: German, Polish and Hindi card lines truncate at one line on the
+    card and wrap on the sheet; country/weekday names follow the app language.
+
+### What step 3 needs (check-in with day/time + Today rows)
+- **Switch Check in on** in `RuleSummarySheet` (now
+  `primary(tr("Check in")) {}.disabled(true)`, pinned by
+  `WhenWhereRulesHarness` — update that guard) and remove the two "arrives in
+  a later update" notes (sheet and editor's free-time note).
+- Build `CheckInSheet` on `ConditionalClockInput.current(for:)`,
+  `ConditionEvaluator.evaluate(…, location: .notRead)`,
+  `ConditionalCheckInStamp.make` and `ChangeEngine.startConditionalSessionOffMain`;
+  map `ConditionalStartRefusal` and `ConditionReason` to copy (none exists yet).
+  `ConditionRow` (read-only symbol + words) is ready to gain a ✓/✗/? status.
+- Today rows (`ConditionalAvailability.todayRows`, spec §5.3) under extra time;
+  `RuleLiveReads.conditionalUsed` already gives the engine's count per rule.
+- Decide where a **running conditional session** shows: today `RuleCatalog`
+  also lists every running `BlockSession` under **Planned**, so a check-in
+  session would appear twice (When & where chip "Free until" and a Planned
+  card with End early). Recommended: hide sessions with `conditionalRuleID`
+  from Planned and put **End early** on the When & where sheet.
+- A waiting check-in block (step 6) has no card line (`RulePending` maps
+  `.startConditionalSession` to nil); add one with step 6 if wanted.

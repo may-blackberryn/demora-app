@@ -81,7 +81,7 @@ You**. Read before any redesign work:
 | Widgets | Display/navigation and approved read-only wake reminder built, independently reviewed and verified: 33 Python harnesses, existing Swift harnesses, both localization generators and unsigned Debug/Release/signed Debug. Reader/publisher fixtures pass 903/742 assertions per environment. Device timing remains unverified; see dated follow-up |
 | Four-tab switch (drop Delays/Schedules tabs, move badges, retire the legacy tutorial and its dormant code, restyle Calendar) | Built (Codex start, Claude finish), freshly reviewed and fixed, verified; signed Debug built but not installed (phone unavailable on 2026-11-11): `748c488..afcf685` + docs; see `docs/redesign-review.md` → Four-tab switch. Nothing seen on a screen yet |
 | Device test pass | Partial (owner tried Today) |
-| When & where rules (`docs/conditional-sessions-redesign.md`, approved) | Step 1 of 6 built: engine only (model, evaluator, check-in starts, uses, capacity), `9151393..da7fe64`, reviewed and verified; see `docs/redesign-review.md` → When & where step 1. Steps 2–6 (editor, check-in, places, countries, block outcome) not started |
+| When & where rules (`docs/conditional-sessions-redesign.md`, approved) | Steps 1–2 of 6 built: engine (`9151393..da7fe64`) and editor, Rules card, summary sheet (`79e51ba..af71cf8`), each reviewed and verified; see `docs/redesign-review.md` → When & where step 1 / step 2. Check in is shown switched off; block rules can't be saved until places arrive. Steps 3–6 (check-in, places, countries, block outcome) not started |
 
 ### Open items to do first
 
