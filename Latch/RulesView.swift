@@ -216,7 +216,8 @@ struct RulesView: View {
                             summary: RuleSummaryLine.text(RuleSummaryLine.parts(for: card.ref, state: state),
                                                           translate: tr, locale: locale, calendar: calendar),
                             chip: card.isAddition ? nil : chip.map { ChipText.make($0, now: now, calendar: calendar, locale: locale) },
-                            pending: pending[card.ref].map { ($0, RulePending.label(change: $0, state: state)) },
+                            pending: RulePending.cardChange(for: card.ref, in: pending, state: state, now: now)
+                                .map { ($0, RulePending.label(change: $0, state: state)) },
                             isAddition: card.isAddition,
                             onOpen: { open(card.ref) },
                             onPending: { change in path.append(.ledger(change.id)) })

@@ -1607,6 +1607,7 @@ let turkishStrings: [String: String] = [
     "Can't tell": "Belli değil",
     "Ends at %@ · %d of %d today": "Bitiş: %@ · bugün %d / %d",
     "Hold to start free time": "Serbest zamanı başlatmak için basılı tut",
+    "Checked again. Hold again to start.": "Yeniden kontrol edildi. Başlatmak için yeniden basılı tut.",
     "Start free time now?": "Serbest zaman şimdi başlasın mı?",
     "Not now": "Şimdi değil",
     "You start it with Check in on the rule or on Today.": "Bunu kuralda veya Bugün'de Kontrol et ile başlatırsın.",

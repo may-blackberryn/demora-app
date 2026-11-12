@@ -1607,6 +1607,7 @@ let polishStrings: [String: String] = [
     "Can't tell": "Nie wiadomo",
     "Ends at %@ · %d of %d today": "Koniec: %@ · %d z %d dzisiaj",
     "Hold to start free time": "Przytrzymaj, aby zacząć wolny czas",
+    "Checked again. Hold again to start.": "Sprawdzono ponownie. Przytrzymaj jeszcze raz, aby zacząć.",
     "Start free time now?": "Zacząć wolny czas teraz?",
     "Not now": "Nie teraz",
     "You start it with Check in on the rule or on Today.": "Uruchamiasz go przyciskiem Sprawdź, w zasadzie lub w Dzisiaj.",

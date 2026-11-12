@@ -154,6 +154,16 @@ enum RulePending {
 
     enum Label: Equatable { case loosens, tightens, removed, added, starts }
 
+    /// The change a card shows: its own, else (a When & where rule) a waiting
+    /// End early of its running check-in session, which has no card of its own.
+    static func cardChange(for ref: RuleRef, in index: [RuleRef: PendingChange],
+                           state: LatchState, now: Date) -> PendingChange? {
+        if let own = index[ref] { return own }
+        guard case .conditional(let id) = ref else { return nil }
+        return state.sessions.filter { $0.conditionalRuleID == id && $0.endsAt > now }
+            .compactMap { index[.session($0.id)] }.min { $0.appliesAt < $1.appliesAt }
+    }
+
     /// "Removed in", "Added in", "Starts in", otherwise by direction.
     static func label(change: PendingChange, state: LatchState) -> Label {
         switch change.action {
@@ -1653,7 +1663,8 @@ enum ConditionalCheckIn {
     static func screen(check: CheckInResult?, live: ConditionalRule?, sessions: [BlockSession],
                        attempt: CheckInAttempt?, now: Date) -> CheckInScreen {
         guard let live else { return .gone }
-        if case .started(let until)? = attempt, until > now { return .running(until: until) }
+        // Only saved state says free time is on: a start that was ended
+        // elsewhere (housekeeping, another process) no longer reads as running.
         if let running = sessions.filter({ $0.conditionalRuleID == live.id && $0.endsAt > now })
             .map(\.endsAt).max() {
             return .running(until: running)
@@ -1708,8 +1719,21 @@ enum ConditionalCheckIn {
         else { return true }
         let age = clock.guardedNow.timeIntervalSince(check.stamp.guardedAt)
         guard age >= -5, age <= freshness else { return true }
+        // The window that allowed it has closed since: the ✓ rows are out of date.
+        if let end = check.evaluation.windowEnd, end <= clock.guardedNow { return true }
         return check.stamp.timeZoneID != clock.calendar.timeZone.identifier
             || check.stamp.dayKey != ConditionalUses.dayKey(for: clock.guardedNow, calendar: clock.calendar)
+    }
+
+    /// A hold on a check that only aged past its freshness may send the
+    /// check run in its place: same rule version, same day and zone, and met
+    /// again now. Anything else (midnight, a zone change, an edit) is shown
+    /// and needs a new hold.
+    static func mayStartAfterRecheck(old: CheckInResult, fresh: CheckInResult, live: ConditionalRule?,
+                                     sessions: [BlockSession], now: Date) -> Bool {
+        fresh.rule.revision == old.rule.revision && fresh.rule.sameConfiguration(as: old.rule)
+            && fresh.stamp.dayKey == old.stamp.dayKey && fresh.stamp.timeZoneID == old.stamp.timeZoneID
+            && screen(check: fresh, live: live, sessions: sessions, attempt: nil, now: now).canStart
     }
 
     // MARK: Words (translation keys and formatted lines)

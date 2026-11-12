@@ -107,6 +107,7 @@ func screen(_ rule: ConditionalRule, _ wall: Date, state: LatchState? = nil, gua
 }
 let home = ConditionalPlace(name: "Home", latitude: 19.43, longitude: -99.13, radiusMeters: 250)
 let sundays = free("Sundays", .all, [.days([1])])
+let everyDayRule = free("Every day", .all, [.days(Set(1...7))])
 let lateSunday = free("Late Sunday", .all, [.days([1]), .time(start: 22 * 60, end: 0)])
 let mexicoSunday = free("Sunday in Mexico", .all, [.country("MX"), .days([1])])
 let mexicoOrSunday = free("Mexico or Sunday", .any, [.country("MX"), .days([1])])
@@ -230,8 +231,12 @@ check(ConditionalCheckIn.screen(check: met, live: sundays, sessions: [], attempt
       "an unexpected queued start isn't shown as free time")
 check(ConditionalCheckIn.heroKey(.queued) == "Free time didn't start.", "queued wording")
 let until = sundayNoon.addingTimeInterval(1800)
+// Review fix: only saved state says free time is on (a start ended elsewhere doesn't linger).
+var started = running; started.endsAt = until
+check(ConditionalCheckIn.screen(check: met, live: sundays, sessions: [started], attempt: .started(until: until), now: sundayNoon)
+      == .running(until: until), "started and saved")
 check(ConditionalCheckIn.screen(check: met, live: sundays, sessions: [], attempt: .started(until: until), now: sundayNoon)
-      == .running(until: until), "started")
+      != .running(until: until), "started but no longer in saved state: not shown as running")
 check(ConditionalCheckIn.screen(check: met, live: sundays, sessions: [], attempt: .started(until: until),
       now: until.addingTimeInterval(1)) == .met(cap: 60), "an ended start no longer reads as running")
 check(ConditionalCheckIn.screen(check: met, live: nil, sessions: [], attempt: .started(until: until), now: sundayNoon) == .gone,
@@ -252,6 +257,30 @@ if case .failure(let refusal) = ConditionalStart.plan(request(beforeMidnight, mi
                                                        clock: clock(at(11, 16, 0, 0, 20))) {
     check(refusal == .wrongDay || refusal == .conditionsNotMet, "engine refuses it too: \(refusal)")
 } else { check(false, "engine refuses yesterday's check") }
+// Review fix: a check whose window has closed since is run again (its ✓ rows are out of date).
+let lunch = free("Lunch", .all, [.days([1]), .time(start: 12 * 60, end: 12 * 60 + 30)])
+let lunchCheck = CheckInResult.make(rule: lunch, state: stateWith([lunch]), clock: clock(at(11, 15, 12, 29, 30)))
+check(lunchCheck.evaluation.isMet, "met at 12:29:30")
+check(!ConditionalCheckIn.needsRecheck(lunchCheck, live: lunch, clock: clock(at(11, 15, 12, 29, 50))), "still inside")
+check(ConditionalCheckIn.needsRecheck(lunchCheck, live: lunch, clock: clock(at(11, 15, 12, 30, 10))), "window closed: re-check")
+// Review fix: a hold on a check that only aged sends the re-run check; midnight, an edit or a new verdict never do.
+let aged = CheckInResult.make(rule: sundays, state: sundayState, clock: clock(sundayNoon.addingTimeInterval(115)))
+check(ConditionalCheckIn.mayStartAfterRecheck(old: met, fresh: aged, live: sundays, sessions: [],
+      now: sundayNoon.addingTimeInterval(115)), "aged only: send the fresh check")
+check(aged.stamp.checkInID != met.stamp.checkInID, "with a new stamp")
+let afterMidnight = CheckInResult.make(rule: everyDayRule, state: stateWith([everyDayRule]), clock: clock(at(11, 16, 0, 0, 30)))
+let beforeMidnightEvery = CheckInResult.make(rule: everyDayRule, state: stateWith([everyDayRule]), clock: clock(at(11, 15, 23, 59, 30)))
+check(afterMidnight.evaluation.isMet && beforeMidnightEvery.evaluation.isMet, "every day: met on both sides")
+check(!ConditionalCheckIn.mayStartAfterRecheck(old: beforeMidnightEvery, fresh: afterMidnight, live: everyDayRule, sessions: [],
+      now: at(11, 16, 0, 0, 30)), "after midnight: shown, needs a new hold")
+let editedFresh = CheckInResult.make(rule: edited, state: stateWith([edited]), clock: clock(sundayNoon.addingTimeInterval(115)))
+check(!ConditionalCheckIn.mayStartAfterRecheck(old: met, fresh: editedFresh, live: edited, sessions: [],
+      now: sundayNoon.addingTimeInterval(115)), "edited: needs a new hold")
+let mondayFresh = CheckInResult.make(rule: sundays, state: sundayState, clock: clock(mondayNoon))
+check(!ConditionalCheckIn.mayStartAfterRecheck(old: met, fresh: mondayFresh, live: sundays, sessions: [], now: mondayNoon),
+      "not met any more: never")
+check(!ConditionalCheckIn.mayStartAfterRecheck(old: met, fresh: aged, live: sundays, sessions: [running],
+      now: sundayNoon.addingTimeInterval(115)), "already running: never")
 var madrid = mx; madrid.timeZone = TimeZone(identifier: "Europe/Madrid")!
 check(ConditionalCheckIn.needsRecheck(met, live: sundays,
       clock: ConditionalClockInput(guardedNow: sundayNoon, wallNow: sundayNoon, calendar: madrid,
@@ -336,6 +365,23 @@ check(RuleCatalog.resolve(.session(running.id), state: orphan, remembered: nil) 
 check(RuleCatalog.resolve(.session(blockNow.id), state: planned, remembered: nil) == .session(blockNow.id), "Block now stays itself")
 check(RuleChip.live(ref: .conditional(sundays.id), state: planned, blockedLimitIDs: [], conditionalUsed: [sundays.id: 1],
                     now: sundayNoon.addingTimeInterval(60), calendar: mx) == .freeUntil(running.endsAt), "card chip: Free until")
+// Review fix: a waiting End early of a check-in session shows on its rule's card.
+var ending = planned
+let endEarly = PendingChange(createdAt: sundayNoon, appliesAt: sundayNoon.addingTimeInterval(600), direction: .lenient,
+                             summary: "x", action: .endSessionEarly(id: running.id))
+ending.pending = [endEarly]
+let index = RulePending.index(ending.pending)
+check(RulePending.cardChange(for: .conditional(sundays.id), in: index, state: ending, now: sundayNoon.addingTimeInterval(60))?.id
+      == endEarly.id, "the card shows the waiting End early")
+check(RulePending.cardChange(for: .conditional(sundays.id), in: index, state: ending, now: running.endsAt.addingTimeInterval(1)) == nil,
+      "not after the session ended")
+var editedChange = sundays; editedChange.name = "Sundays 2"
+let own = PendingChange(createdAt: sundayNoon, appliesAt: sundayNoon.addingTimeInterval(9000), direction: .lenient,
+                        summary: "y", action: .updateConditionalRule(editedChange))
+ending.pending.append(own)
+check(RulePending.cardChange(for: .conditional(sundays.id), in: RulePending.index(ending.pending), state: ending,
+      now: sundayNoon.addingTimeInterval(60))?.id == own.id, "the rule's own change first")
+check(RulePending.cardChange(for: .limit(UUID()), in: index, state: ending, now: sundayNoon) == nil, "other refs: their own only")
 print("When & where check-in presentation passed: \(checks) checks")
 '''
 
@@ -370,11 +416,13 @@ for forbidden in ('CoreLocation', 'CLLocation', 'requestLocation', 'model.queue(
 start = declaration(sheet, 'private func start(cap: Int)')
 assert start.count('ChangeEngine.startConditionalSessionOffMain(request)') == 1
 assert sheet.count('startConditionalSessionOffMain(') == 1, 'one start path'
-assert start.index('guard !starting, let check else { return }') < start.index('starting = true') < start.index('Task {'), \
+assert start.index('guard !starting, var check else { return }') < start.index('starting = true') < start.index('Task {'), \
     'the in-flight flag is set on the main actor before the request leaves it (double tap)'
 assert '.canStart else { return }' in start, 'only a met screen sends'
 assert start.index('ConditionalCheckIn.needsRecheck(check, live: live') < start.index('starting = true'), \
     'a stale check (midnight, edit, 2 min) is run again, never sent'
+assert 'ConditionalCheckIn.mayStartAfterRecheck(old: check, fresh: fresh' in start
+assert start.index('checkedAgain = true\n                return') < start.index('starting = true'), 'a re-check that changed is shown, not sent'
 assert 'stamp: check.stamp' in start and 'revision: check.rule.revision' in start, 'the shown check, its rule version'
 assert 'ConditionalCheckIn.requestMinutes(chosen: minutes, cap: cap)' in start
 assert 'case .refused(let refusal):\n                attempt = .refused(refusal)' in start
@@ -390,7 +438,8 @@ assert 'primary(tr("Check in")) { editor = .checkIn(id) }' in actions and '.disa
 assert 'case .checkIn(let id): CheckInSheet(ruleID: id)' in summary
 running_src = declaration(summary, 'private func runningSession(of ruleID: UUID')
 assert 'receipt = ChangeReceiptRequest(action: .endSessionEarly(id: session.id))' in running_src, 'End early waits, as any session'
-assert 'pendingBlock(ending' in running_src
+assert 'pendingBlock(ending' in running_src and 'Date()' not in running_src, 'End early follows the sheet clock'
+assert 'RulePending.cardChange(for: card.ref, in: pending, state: state, now: now)' in (ROOT / 'Latch/RulesView.swift').read_text()
 assert 'model.state.conditionalRules.contains(where: { $0.id == owner })' in summary
 
 home = (ROOT / 'Latch/HomeView.swift').read_text()

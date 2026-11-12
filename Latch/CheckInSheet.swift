@@ -33,6 +33,9 @@ struct CheckInSheet: View {
     /// Set before the start leaves the main actor, so a second hold or a
     /// confirmation tap can't send another request.
     @State private var starting = false
+    /// A hold landed on a check that had to be run again (midnight, a zone
+    /// change, an edit): the new result is shown and needs a new hold.
+    @State private var checkedAgain = false
 
     private var live: ConditionalRule? { model.state.conditionalRules.first { $0.id == ruleID } }
 
@@ -90,6 +93,12 @@ struct CheckInSheet: View {
                     .foregroundStyle(heroColor(screen))
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
+                if checkedAgain, screen.canStart {
+                    Text(tr("Checked again. Hold again to start."))
+                        .demoraType(.meta)
+                        .foregroundStyle(Ink.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if let detail = ConditionalCheckIn.detailKey(screen) {
                     Text(tr(detail))
                         .demoraType(.meta)
@@ -184,6 +193,7 @@ struct CheckInSheet: View {
                 // around a condition, only checking again.
                 primary(tr("Try again")) {
                     attempt = nil
+                    checkedAgain = false
                     runCheck(model.state, announce: true)
                 }
                 quiet(tr("Done")) { dismiss() }
@@ -242,16 +252,33 @@ struct CheckInSheet: View {
     /// Sends the shown check, once. A stale check is run again instead and
     /// needs a new hold; the engine validates the request again regardless.
     private func start(cap: Int) {
-        guard !starting, let check else { return }
+        guard !starting, var check else { return }
         let state = model.state
         let live = state.conditionalRules.first { $0.id == ruleID }
+        var cap = cap
         guard ConditionalCheckIn.screen(check: check, live: live, sessions: state.sessions,
                                         attempt: attempt, now: Date()).canStart else { return }
-        if ConditionalCheckIn.needsRecheck(check, live: live, clock: ConditionalClockInput.current(for: state)) {
-            runCheck(state, announce: true)
-            return
+        let clock = ConditionalClockInput.current(for: state)
+        if ConditionalCheckIn.needsRecheck(check, live: live, clock: clock) {
+            // The hold was the deliberate act: a check that only aged is run
+            // again and, if it still holds on the same day for the same rule,
+            // sent in its place. Anything else is shown and needs a new hold.
+            guard let rule = live else { runCheck(state, announce: false); return }
+            let fresh = CheckInResult.make(rule: rule, state: state, clock: clock)
+            guard ConditionalCheckIn.mayStartAfterRecheck(old: check, fresh: fresh, live: live,
+                                                          sessions: state.sessions, now: Date()),
+                  case .met(let freshCap) = ConditionalCheckIn.screen(check: fresh, live: live,
+                      sessions: state.sessions, attempt: nil, now: Date()) else {
+                self.check = fresh
+                checkedAgain = true
+                return
+            }
+            self.check = fresh
+            check = fresh
+            cap = freshCap
         }
         starting = true
+        checkedAgain = false
         let request = ConditionalStartRequest(ruleID: check.rule.id, revision: check.rule.revision,
                                               minutes: ConditionalCheckIn.requestMinutes(chosen: minutes, cap: cap),
                                               stamp: check.stamp)

@@ -1607,6 +1607,7 @@ let hindiStrings: [String: String] = [
     "Can't tell": "पता नहीं",
     "Ends at %@ · %d of %d today": "खत्म: %@ · आज %d/%d",
     "Hold to start free time": "मुक्त समय शुरू करने के लिए दबाकर रखें",
+    "Checked again. Hold again to start.": "फिर से जाँचा गया। शुरू करने के लिए फिर से दबाकर रखें।",
     "Start free time now?": "मुक्त समय अभी शुरू करें?",
     "Not now": "अभी नहीं",
     "You start it with Check in on the rule or on Today.": "आप इसे नियम में या आज में चेक इन से शुरू करते हैं।",

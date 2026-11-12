@@ -1606,6 +1606,7 @@ let frenchStrings: [String: String] = [
     "Can't tell": "Incertain",
     "Ends at %@ · %d of %d today": "Fin : %@ · %d sur %d aujourd'hui",
     "Hold to start free time": "Maintenez pour lancer le temps libre",
+    "Checked again. Hold again to start.": "Vérifié à nouveau. Maintenez encore pour lancer.",
     "Start free time now?": "Lancer le temps libre maintenant ?",
     "Not now": "Pas maintenant",
     "You start it with Check in on the rule or on Today.": "Vous le démarrez avec Vérifier, dans la règle ou sur Aujourd'hui.",

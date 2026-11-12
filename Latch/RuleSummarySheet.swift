@@ -185,7 +185,7 @@ struct RuleSummarySheet: View {
                     dashed
                     pendingBlock(pending, now: now)
                 }
-                actions(state: state)
+                actions(state: state, now: now)
             }
         }
     }
@@ -497,7 +497,7 @@ struct RuleSummarySheet: View {
 
     private var canEdit: Bool { !RulePending.blocksEdit(of: ref, pending: model.state.pending) }
 
-    @ViewBuilder private func actions(state: LatchState) -> some View {
+    @ViewBuilder private func actions(state: LatchState, now: Date) -> some View {
         let blocked = !canEdit
         VStack(alignment: .leading, spacing: DemoraSpace.s) {
             if blocked {
@@ -560,7 +560,7 @@ struct RuleSummarySheet: View {
                     // enforced rule keeps working until the edit lands (§5.4).
                     primary(tr("Check in")) { editor = .checkIn(id) }
                     secondary(tr("Edit")) { editor = .conditional(rule) }.disabled(blocked)
-                    runningSession(of: id, state: state)
+                    runningSession(of: id, state: state, now: now)
                     quiet(tr("Remove rule")) { receipt = ChangeReceiptRequest(action: .removeConditionalRule(id: id)) }
                         .disabled(blocked)
                 }
@@ -574,14 +574,14 @@ struct RuleSummarySheet: View {
     /// A running check-in session ends early only through the delayed
     /// `.endSessionEarly`, as any session (spec §5.2, Q1); a waiting end shows
     /// its change instead of a second button.
-    @ViewBuilder private func runningSession(of ruleID: UUID, state: LatchState) -> some View {
-        if let session = state.sessions.filter({ $0.conditionalRuleID == ruleID && $0.endsAt > Date() })
+    @ViewBuilder private func runningSession(of ruleID: UUID, state: LatchState, now: Date) -> some View {
+        if let session = state.sessions.filter({ $0.conditionalRuleID == ruleID && $0.endsAt > now })
             .max(by: { $0.endsAt < $1.endsAt }) {
             if let ending = state.pending.first(where: {
                 if case .endSessionEarly(let sessionID) = $0.action { return sessionID == session.id }
                 return false
             }) {
-                pendingBlock(ending, now: Date())
+                pendingBlock(ending, now: now)
             } else {
                 quiet(tr("End early")) { receipt = ChangeReceiptRequest(action: .endSessionEarly(id: session.id)) }
             }

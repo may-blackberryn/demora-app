@@ -1689,6 +1689,7 @@ let spanishStrings: [String: String] = [
     "Can't tell": "No se sabe",
     "Ends at %@ · %d of %d today": "Termina: %@ · %d de %d hoy",
     "Hold to start free time": "Mantén para empezar el tiempo libre",
+    "Checked again. Hold again to start.": "Se comprobó de nuevo. Mantén otra vez para empezar.",
     "Start free time now?": "¿Empezar el tiempo libre ahora?",
     "Not now": "Ahora no",
     "You start it with Check in on the rule or on Today.": "Lo empiezas con Comprobar, en la regla o en Hoy.",

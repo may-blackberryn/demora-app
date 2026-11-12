@@ -1614,6 +1614,7 @@ let germanStrings: [String: String] = [
     "Can't tell": "Unklar",
     "Ends at %@ · %d of %d today": "Ende: %@ · %d von %d heute",
     "Hold to start free time": "Halten, um freie Zeit zu starten",
+    "Checked again. Hold again to start.": "Erneut geprüft. Halte noch einmal, um zu starten.",
     "Start free time now?": "Freie Zeit jetzt starten?",
     "Not now": "Jetzt nicht",
     "You start it with Check in on the rule or on Today.": "Du startest sie mit Einchecken, in der Regel oder unter Heute.",
