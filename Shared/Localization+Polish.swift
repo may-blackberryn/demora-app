@@ -1666,4 +1666,8 @@ let polishStrings: [String: String] = [
     "Review": "Sprawdź",
     "Then runs until %@.": "Potem trwa do %@.",
     "starts a block": "zaczyna blokadę",
+    "This block won't start.": "Ta blokada się nie rozpocznie.",
+    "This window closes before your stricter wait ends.": "To okno kończy się, zanim minie twoje bardziej rygorystyczne opóźnienie.",
+    "A change to this rule lands first. Check in after it lands.": "Najpierw wejdzie zmiana tej zasady. Sprawdź po niej.",
+    "Its rule changed while it waited. Cancel it in Changes, then check in again.": "Jej zasada zmieniła się podczas czekania. Anuluj ją w Zmianach i sprawdź ponownie.",
 ]

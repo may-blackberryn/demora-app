@@ -190,7 +190,8 @@ struct CheckInSheet: View {
 
     private func showsRows(_ screen: CheckInScreen) -> Bool {
         switch screen {
-        case .gone, .changed, .running, .checking, .refused, .queued, .blockRunning, .blockWaiting: return false
+        case .gone, .changed, .running, .checking, .refused, .queued, .blockRunning, .blockWaiting,
+             .blockWontWait(.staleWaiting): return false
         default: return true
         }
     }
@@ -235,7 +236,7 @@ struct CheckInSheet: View {
                     .disabled(starting || receipt != nil)
                 if starting { ProgressView().frame(maxWidth: .infinity) }
                 quiet(tr("Not now")) { dismiss() }
-            case .running, .gone, .queued, .blockRunning, .blockWaiting:
+            case .running, .gone, .queued, .blockRunning, .blockWaiting, .blockWontWait(.staleWaiting):
                 primary(tr("Done")) { dismiss() }
             case .checking, .locating:
                 ProgressView().frame(maxWidth: .infinity, minHeight: 44)

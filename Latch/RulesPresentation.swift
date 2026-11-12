@@ -1610,13 +1610,18 @@ struct CheckInResult: Equatable {
     /// True when this check used a location read (a fix or "unavailable").
     /// Such a check is never refreshed without reading again (C8, C9).
     var readLocation = false
-    /// A met block check (step 6): when the block would end if it started
-    /// now, from the engine's own `ConditionalStart.plan` on this check's
-    /// clock and stamp, or why the engine would refuse it.
+    /// A met block check (step 6): when the block would end, from the
+    /// engine's own `ConditionalStart.plan` for this check's stamp, run where
+    /// the engine runs it: now to queue, then again when the stricter wait
+    /// ends (review fix: a block that waits is planned from when it lands, so
+    /// "until 07:00" checked in at 06:30 with a 1 h wait runs until 07:00 the
+    /// next day). Or why the engine would refuse it.
     var blockEnd: Date? = nil
     var blockRefusal: ConditionalStartRefusal? = nil
     /// The block runs for the rule's whole duration (not cut by a window end).
     var blockRunsFullDuration = false
+    /// The stricter wait the block's start would follow (C4), from saved state.
+    var blockWait: TimeInterval = 0
 
     /// `location` is what this check read: `.notRead` unless the sheet read
     /// one fix in the foreground for it (C8). The stamp comes from this very
@@ -1638,15 +1643,26 @@ struct CheckInResult: Equatable {
                                    readLocation: readLocation)
         if case .block(_, _, let until) = rule.outcome, evaluation.isMet {
             let request = ConditionalStartRequest(ruleID: rule.id, revision: rule.revision, minutes: 1, stamp: stamp)
-            switch ConditionalStart.plan(request, state: state, clock: clock) {
-            case .success(let plan):
+            let wait = state.delayPolicy.delay(for: .stricter)
+            result.blockWait = wait
+            var landing = clock
+            landing.guardedNow = clock.guardedNow.addingTimeInterval(wait)
+            landing.wallNow = clock.wallNow.addingTimeInterval(wait)
+            // Queued now (fresh), then applied when the wait ends.
+            let queued = ConditionalStart.plan(request, state: state, clock: clock)
+            let applied = wait > 0 ? ConditionalStart.plan(request, state: state, clock: landing, phase: .apply) : queued
+            switch (queued, applied) {
+            case (.failure(let refusal), _):
+                result.blockRefusal = refusal
+            case (.success, .failure):
+                // Its window closes before the wait ends: the engine would drop it.
+                result.blockRefusal = .windowEnded
+            case (.success, .success(let plan)):
                 result.blockEnd = plan.session.endsAt
                 if case .duration(let minutes) = until {
                     result.blockRunsFullDuration = plan.session.endsAt.timeIntervalSince(plan.session.startedAt)
                         >= TimeInterval(minutes) * 60 - 1
                 }
-            case .failure(let refusal):
-                result.blockRefusal = refusal
             }
         }
         return result
@@ -1697,6 +1713,8 @@ enum CheckInScreen: Equatable {
     case blockOnItsOwn(until: Date)
     /// A check-in block of this rule waits its stricter delay.
     case blockWaiting(startsAt: Date)
+    /// Met, but the engine would drop the block when its wait ends (review fix).
+    case blockWontWait(BlockWaitProblem)
 
     var canStart: Bool {
         switch self {
@@ -1704,6 +1722,16 @@ enum CheckInScreen: Equatable {
         default: return false
         }
     }
+}
+
+/// Why a met block can't be started, or a waiting one won't start (review fix).
+enum BlockWaitProblem: Equatable {
+    /// Its all-of window closes before the stricter wait ends.
+    case windowCloses
+    /// A waiting edit or removal of the rule lands first, which drops the start.
+    case ruleChangesFirst
+    /// A waiting start was made for an older version of the rule.
+    case staleWaiting
 }
 
 /// Where the sheet is in its one location read; held by the view, never saved.
@@ -1738,13 +1766,18 @@ enum ConditionalCheckIn {
         guard let live else { return .gone }
         // Only saved state says free time is on: a start that was ended
         // elsewhere (housekeeping, another process) no longer reads as running.
+        // What runs is the session's own kind (review fix: an edit can switch
+        // the rule's outcome while a session of it keeps running).
         if let running = sessions.filter({ $0.conditionalRuleID == live.id && $0.endsAt > now })
-            .map(\.endsAt).max() {
-            return live.isFreeTime ? .running(until: running) : .blockRunning(until: running)
+            .max(by: { $0.endsAt < $1.endsAt }) {
+            return running.kind == .block ? .blockRunning(until: running.endsAt) : .running(until: running.endsAt)
         }
         // A check-in block waiting its stricter delay: one at a time (C4).
-        if !live.isFreeTime, let waiting = RulePending.waitingStart(of: live.id, in: pending) {
-            return .blockWaiting(startsAt: waiting.appliesAt)
+        if let waiting = RulePending.waitingStart(of: live.id, in: pending) {
+            if case .startConditionalSession(let request) = waiting.action, request.revision != live.revision {
+                return .blockWontWait(.staleWaiting)
+            }
+            if !live.isFreeTime { return .blockWaiting(startsAt: waiting.appliesAt) }
         }
         switch attempt {
         case .refused(let refusal)?: return .refused(refusal)
@@ -1757,7 +1790,14 @@ enum ConditionalCheckIn {
         guard check.rule.revision == live.revision, check.rule.sameConfiguration(as: live)
         else { return .changed }
         guard case .freeTime(_, _, let maxMinutes, let usesPerDay) = live.outcome else {
-            return blockScreen(check, location: location)
+            let screen = blockScreen(check, location: location)
+            // Review fix: a waiting edit or removal of this rule that lands
+            // before the block would makes the engine drop the start.
+            if case .blockMet = screen, let change = RulePending.index(pending)[.conditional(live.id)],
+               change.appliesAt <= check.stamp.guardedAt.addingTimeInterval(check.blockWait) {
+                return .blockWontWait(.ruleChangesFirst)
+            }
+            return screen
         }
         guard check.clockAgrees else { return .clockChanged }
         let evaluation = check.evaluation
@@ -1793,7 +1833,8 @@ enum ConditionalCheckIn {
         let placeMet = pairs.contains { $0.0.usesLocation && $0.1.status == .met }
         if evaluation.isMet && (rule.match == .all || placeMet) {
             if let end = check.blockEnd { return .blockMet(endsAt: end) }
-            return check.blockRefusal == .windowEnded ? .windowEnding : .notMet
+            guard check.blockRefusal == .windowEnded else { return .notMet }
+            return check.blockWait > 0 ? .blockWontWait(.windowCloses) : .windowEnding
         }
         if !check.readLocation, fixCouldDecide(rule, evaluation: evaluation) {
             switch location {
@@ -1989,6 +2030,8 @@ enum ConditionalCheckIn {
         case .blockRunning: return "The block is on until %@."
         case .blockOnItsOwn: return "This block is on until %@."
         case .blockWaiting: return "The block starts at %@."
+        case .blockWontWait(.staleWaiting): return "This block won't start."
+        case .blockWontWait: return "Not right now."
         }
     }
 
@@ -2027,6 +2070,9 @@ enum ConditionalCheckIn {
         case .blockMet, .blockRunning: return "Leaving doesn't end it. Ending it early waits like any looser change."
         case .blockOnItsOwn: return "Its time blocks on its own, without a check-in."
         case .blockWaiting: return "It waits your stricter delay, like Block now. It's in Changes."
+        case .blockWontWait(.windowCloses): return "This window closes before your stricter wait ends."
+        case .blockWontWait(.ruleChangesFirst): return "A change to this rule lands first. Check in after it lands."
+        case .blockWontWait(.staleWaiting): return "Its rule changed while it waited. Cancel it in Changes, then check in again."
         case .checking, .gone, .changed, .running, .met, .notMet, .locating: return nil
         }
     }

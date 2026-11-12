@@ -1666,4 +1666,8 @@ let hindiStrings: [String: String] = [
     "Review": "देखें",
     "Then runs until %@.": "फिर %@ तक चलेगा।",
     "starts a block": "ब्लॉक शुरू करता है",
+    "This block won't start.": "यह ब्लॉक शुरू नहीं होगा।",
+    "This window closes before your stricter wait ends.": "यह समय आपकी सख्त देरी ख़त्म होने से पहले बंद हो जाता है।",
+    "A change to this rule lands first. Check in after it lands.": "पहले इस नियम का एक बदलाव लागू होगा। उसके बाद चेक इन करें।",
+    "Its rule changed while it waited. Cancel it in Changes, then check in again.": "इंतज़ार के दौरान इसका नियम बदल गया। इसे बदलावों में रद्द करें, फिर से चेक इन करें।",
 ]

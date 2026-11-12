@@ -1666,4 +1666,8 @@ let turkishStrings: [String: String] = [
     "Review": "Gözden geçir",
     "Then runs until %@.": "Sonra %@ saatine kadar sürer.",
     "starts a block": "engel başlatır",
+    "This block won't start.": "Bu engel başlamayacak.",
+    "This window closes before your stricter wait ends.": "Bu zaman aralığı, daha katı bekleme süren bitmeden kapanıyor.",
+    "A change to this rule lands first. Check in after it lands.": "Önce bu kurala bir değişiklik uygulanacak. Uygulandıktan sonra kontrol et.",
+    "Its rule changed while it waited. Cancel it in Changes, then check in again.": "Kuralı beklerken değişti. Değişiklikler'de iptal et, sonra yeniden kontrol et.",
 ]

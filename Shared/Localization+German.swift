@@ -1673,4 +1673,8 @@ let germanStrings: [String: String] = [
     "Review": "Prüfen",
     "Then runs until %@.": "Läuft dann bis %@.",
     "starts a block": "startet eine Sperre",
+    "This block won't start.": "Diese Sperre beginnt nicht.",
+    "This window closes before your stricter wait ends.": "Dieses Zeitfenster endet, bevor deine strengere Wartezeit vorbei ist.",
+    "A change to this rule lands first. Check in after it lands.": "Zuerst greift eine Änderung dieser Regel. Checke danach ein.",
+    "Its rule changed while it waited. Cancel it in Changes, then check in again.": "Ihre Regel hat sich beim Warten geändert. Brich sie unter Änderungen ab und checke erneut ein.",
 ]

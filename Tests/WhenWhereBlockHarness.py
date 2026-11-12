@@ -432,6 +432,60 @@ check(RulePending.cardChange(for: .conditional(instagram.id), in: index, state: 
       == waitingChange.id, "the card shows the waiting block")
 check(RulePending.label(change: waitingChange, state: withWaiting) == .starts, "Starts in")
 check(!RulePending.blocksEdit(of: .conditional(instagram.id), pending: withWaiting.pending), "edit stays available")
+
+// MARK: Review fixes (each fails without its fix)
+// 1. With a stricter wait the end shown is the engine's end when the block lands.
+let placeOnly = blockRule(.all, [.place(home)], until: .time(7 * 60))
+var waitHour = stateWith([placeOnly])
+waitHour.delayPolicy = DelayPolicy(mode: .separate, strictDelay: 3_600, lenientDelay: 7_200)
+let early = checkIn(placeOnly, at(11, 16, 6, 30), fixAt(atHome, wall: at(11, 16, 6, 30)), state: waitHour)
+check(early.blockWait == 3_600 && screen(early, state: waitHour) == .blockMet(endsAt: at(11, 17, 7)),
+      "06:30 + 1 h wait: the block lands at 07:30 and runs until 07:00 the next day → \(screen(early, state: waitHour))")
+let landing = ConditionalClockInput(guardedNow: at(11, 16, 7, 30), wallNow: at(11, 16, 7, 30), calendar: mx,
+                                    recentTimeZoneIDs: ["America/Mexico_City"])
+let earlyRequest = ConditionalStartRequest(ruleID: placeOnly.id, revision: 0, minutes: 1, stamp: early.stamp)
+if case .success(let plan) = ConditionalStart.plan(earlyRequest, state: waitHour, clock: landing, phase: .apply) {
+    check(plan.session.endsAt == early.blockEnd, "the engine ends it where the sheet says")
+} else { check(false, "the engine dropped the waiting block") }
+check(screen(checkIn(placeOnly, at(11, 16, 6, 30), fixAt(atHome, wall: at(11, 16, 6, 30)))) == .blockMet(endsAt: at(11, 16, 7)),
+      "no wait: until 07:00 today")
+var schoolWait = stateWith([school])
+schoolWait.delayPolicy = waitHour.delayPolicy
+let lateSchool = checkIn(school, at(11, 16, 14, 30), fixAt(atHome, wall: at(11, 16, 14, 30)), state: schoolWait)
+check(screen(lateSchool, state: schoolWait) == .blockWontWait(.windowCloses) && !screen(lateSchool, state: schoolWait).canStart,
+      "all of: the window closes before the wait ends → never offered")
+check(ConditionalCheckIn.detailKey(.blockWontWait(.windowCloses)) == "This window closes before your stricter wait ends.", "says why")
+// 2. A waiting edit or removal that lands first would drop the start: not offered; a stale waiting start says so.
+let editFirst = PendingChange(createdAt: sundayNoon.addingTimeInterval(-600), appliesAt: sundayNoon.addingTimeInterval(180),
+                              direction: .lenient, summary: "Edit", action: .updateConditionalRule(instagram))
+var withEdit = stateWith([instagram]); withEdit.pending = [editFirst]
+withEdit.delayPolicy = DelayPolicy(mode: .separate, strictDelay: 300, lenientDelay: 900)
+let beforeEdit = checkIn(instagram, sundayNoon, fixAt(atHome), state: withEdit)
+check(screen(beforeEdit, state: withEdit) == .blockWontWait(.ruleChangesFirst), "an edit landing first: not offered")
+var editLater = withEdit; editLater.pending[0].appliesAt = sundayNoon.addingTimeInterval(900)
+check(screen(checkIn(instagram, sundayNoon, fixAt(atHome), state: editLater), state: editLater).canStart,
+      "an edit landing after the block: fine (the block applies first)")
+var removalFirst = withEdit
+removalFirst.pending = [PendingChange(createdAt: sundayNoon, appliesAt: sundayNoon.addingTimeInterval(60), direction: .lenient,
+                                      summary: "Remove", action: .removeConditionalRule(id: instagram.id))]
+check(screen(checkIn(instagram, sundayNoon, fixAt(atHome), state: removalFirst), state: removalFirst)
+      == .blockWontWait(.ruleChangesFirst), "a removal landing first: not offered")
+var edited = instagram; edited.revision = 1
+var staleWait = stateWith([edited]); staleWait.pending = [waitingChange]
+check(ConditionalCheckIn.screen(check: nil, live: edited, sessions: [], attempt: nil, now: sundayNoon,
+                                pending: staleWait.pending) == .blockWontWait(.staleWaiting),
+      "a waiting start for an older version: 'This block won't start.'")
+check(ConditionalCheckIn.heroKey(.blockWontWait(.staleWaiting)) == "This block won't start.", "stale words")
+// 3. The running screen follows the session's kind, not the rule's current outcome.
+var freeSession = running; freeSession.kind = .free
+var blockNowFree = stateWith([instagram]); blockNowFree.sessions = [freeSession]
+check(screen(metHome, state: blockNowFree) == .running(until: at(11, 16, 7)), "free time running under a block rule")
+let sundayFree = ConditionalRule(name: "Sundays", match: .all, conditions: [.days([1])],
+    outcome: .freeTime(kind: .free, selection: FamilyActivitySelection(), maxMinutes: 60, usesPerDay: 1), addedAt: at(11, 1))
+var freeNowBlock = stateWith([sundayFree]); var blockSession = running; blockSession.conditionalRuleID = sundayFree.id
+freeNowBlock.sessions = [blockSession]
+check(ConditionalCheckIn.screen(check: nil, live: sundayFree, sessions: freeNowBlock.sessions, attempt: nil, now: sundayNoon)
+      == .blockRunning(until: at(11, 16, 7)), "a block running under a free-time rule")
 '''
 
 # --- Build and run ----------------------------------------------------------
@@ -536,7 +590,10 @@ keys = ["Close enough to %@ to count for a block", "The block didn't start.", "B
         "Its time blocks on its own, without a check-in.",
         "It waits your stricter delay, like Block now. It's in Changes.", "A block from this rule is already on.",
         "The block couldn't start safely. iOS may not be able to track another session right now. Nothing changed.",
-        "Review", "Then runs until %@.", "starts a block"]
+        "Review", "Then runs until %@.", "starts a block",
+        "This block won't start.", "This window closes before your stricter wait ends.",
+        "A change to this rule lands first. Check in after it lands.",
+        "Its rule changed while it waited. Cancel it in Changes, then check in again."]
 presentation_now = current["RulesPresentation.swift"]
 for key in keys:
     assert f'"{key}"' in presentation_now + sheet + today, f"unused key: {key}"

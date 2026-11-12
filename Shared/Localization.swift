@@ -1748,4 +1748,8 @@ let spanishStrings: [String: String] = [
     "Review": "Revisar",
     "Then runs until %@.": "Luego dura hasta %@.",
     "starts a block": "empieza un bloqueo",
+    "This block won't start.": "Este bloqueo no empezará.",
+    "This window closes before your stricter wait ends.": "Este horario termina antes de que acabe tu demora más estricta.",
+    "A change to this rule lands first. Check in after it lands.": "Antes llega un cambio a esta regla. Comprueba cuando se aplique.",
+    "Its rule changed while it waited. Cancel it in Changes, then check in again.": "Su regla cambió mientras esperaba. Cancélalo en Cambios y vuelve a comprobar.",
 ]

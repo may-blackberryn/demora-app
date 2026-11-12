@@ -1665,4 +1665,8 @@ let frenchStrings: [String: String] = [
     "Review": "Vérifier",
     "Then runs until %@.": "Dure ensuite jusqu'à %@.",
     "starts a block": "lance un blocage",
+    "This block won't start.": "Ce blocage ne commencera pas.",
+    "This window closes before your stricter wait ends.": "Cette plage se termine avant la fin de votre délai plus strict.",
+    "A change to this rule lands first. Check in after it lands.": "Un changement de cette règle s'applique d'abord. Vérifiez après son application.",
+    "Its rule changed while it waited. Cancel it in Changes, then check in again.": "Sa règle a changé pendant l'attente. Annulez-le dans Changements, puis vérifiez à nouveau.",
 ]
