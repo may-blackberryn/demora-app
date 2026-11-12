@@ -261,7 +261,7 @@ struct CountryPicker: View {
             let borders = CountryBorders.bundled
             let lookup: LocationTrust.CountryAt? = borders.map { b in { b.lookup(latitude: $0, longitude: $1) } }
             let result = LocationTrust.countryHere(outcome, wallNow: Date(), country: lookup)
-            if !precise, LocationTrust.countryHereWantsPrecise(outcome, result: result) {
+            if !precise, LocationTrust.countryHereWantsPrecise(outcome, result: result, country: lookup) {
                 read(precise: true)
                 return
             }

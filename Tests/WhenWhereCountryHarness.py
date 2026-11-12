@@ -133,9 +133,9 @@ python_inside = {name: python_contains(*point) for name, point in PROBES.items()
 enclaves = [(name[1:-1], lat, lon, radius) for name, lat, lon, radius in re.findall(
     r"""\(("[^"]+"|'[^']+'), (-?[\d.]+), (-?[\d.]+), ([\d_]+)\)""",
     generator.split('MISSING_ENCLAVES = (', 1)[1].split('\n)', 1)[0])]
-assert len(enclaves) == 10, enclaves
+assert len(enclaves) == 8, enclaves
 assert any('Baarle' in name for name, *_ in enclaves) and any('Büsingen' in name for name, *_ in enclaves)
-assert 'ten small enclaves the dataset leaves out' in attribution
+assert 'eight small enclaves the dataset leaves out' in attribution
 
 # Review fix: an independent distance for sampled points near land borders.
 # Python measures each edge on a plane local to the point; Swift's lower
@@ -152,9 +152,10 @@ for code, rings in entries.items():
         for point in ring:
             shared.setdefault(point, set()).add(code)
 border_points = sorted(p for p, owners in shared.items() if len(owners) > 1 and '~~' not in owners)
+coast_points = sorted(p for p, owners in shared.items() if len(owners) == 1 and '~~' not in owners)
 rng = random.Random(5)
 samples = []
-for lon, lat in rng.sample(border_points, 160):
+for lon, lat in rng.sample(border_points, 160) + rng.sample(coast_points, 80):
     angle, r = rng.random() * 2 * math.pi, 1_000 + 4_000 * rng.random()
     samples.append((lat + r * math.sin(angle) / METRES, lon + r * math.cos(angle) / (METRES * math.cos(math.radians(lat)))))
 
@@ -191,7 +192,7 @@ for lat, lon in samples:
         others = [v for c, v in near.items() if c != inside[0]]
         if others and min(others) < 50_000:
             python_samples.append((lat, lon, inside[0], min(others)))
-assert len(python_samples) > 100, len(python_samples)
+assert len(python_samples) > 120, len(python_samples)
 expected_inside = {'mexicoCity': ['MX'], 'tijuanaSouth': ['MX'], 'tijuanaCentre': ['MX'], 'sanYsidroSouth': ['MX'],
                    'sanYsidroNorth': ['US'], 'sanDiego': ['US'], 'suva': ['FJ'], 'chukotkaWest': ['RU'],
                    'chukotkaEast': ['RU'], 'lesotho': ['LS'], 'bloemfontein': ['ZA'], 'maseru': ['LS'],
@@ -462,6 +463,10 @@ check(countryRow(free("Netherlands", .all, [.country("NL")]), sample((51.4419, 4
       "Baarle-Hertog (BE) is never ✓ Netherlands")
 check(at((51.5555, 5.0913)).regionCode == "NL" && at((51.5555, 5.0913)).borderDistanceMeters > 5_000, "Tilburg still clearly NL")
 check(at((47.5596, 7.5886)).regionCode == "CH", "Basel still Switzerland")
+// Lugano centre stays Switzerland, outside Campione's zone (it was swallowed by the first, wider
+// zone); it is still within the doubt band (~1.85 km after the allowance), logged as a limit.
+check(at((46.0037, 8.9511)).regionCode == "CH" && at((46.0037, 8.9511)).borderDistanceMeters > 1_500,
+      "Lugano: Switzerland, outside Campione's zone: \(at((46.0037, 8.9511)))")
 
 // Review fix: approximate Location near a border asks once more, with precise.
 func outcome(_ p: (Double, Double), precise: Bool, accuracy: Double = 1_500) -> LocationReadOutcome {
@@ -471,22 +476,28 @@ func viaApproximate(_ rule: ConditionalRule, _ p: (Double, Double), precise: Boo
     let o = outcome(p, precise: precise)
     let r = CheckInResult.make(rule: rule, state: stateWith(rule), clock: clock(sundayNoon),
                                location: LocationTrust.checkInInput(o, wallNow: sundayNoon, country: realLookup))
-    return ConditionalCheckIn.wantsPreciseRetry(r, outcome: o)
+    return ConditionalCheckIn.wantsPreciseRetry(r, outcome: o, country: realLookup)
 }
 check(viaApproximate(mexicoSunday, tijuanaSouth, precise: false), "approximate, too close: read again with precise")
 check(!viaApproximate(mexicoSunday, tijuanaSouth, precise: true), "precise already: no second read")
 check(!viaApproximate(mexicoSunday, mexicoCity, precise: false), "approximate but clear: no second read")
 check(!viaApproximate(mexicoSunday, (0, -140), precise: false), "at sea, clearly not Mexico: no second read")
+check(!viaApproximate(mexicoSunday, tijuanaCentre, precise: false), "within the margin even when precise: no prompt")
+check(!viaApproximate(free("Cyprus", .all, [.country("CY")]), northCyprus, precise: false), "disputed area: no prompt")
+check(!viaApproximate(free("Belgium", .all, [.country("BE")]), (51.4419, 4.9285), precise: false), "Baarle: no prompt")
 let homeInMexico = free("Home in Mexico", .all, [.country("MX"), .place(ConditionalPlace(name: "Home", latitude: 32.49,
                         longitude: -117.03, radiusMeters: 250))])
 check(!viaApproximate(homeInMexico, tijuanaSouth, precise: false), "a place already asked for precise: no second read")
-check(LocationTrust.countryHereWantsPrecise(outcome(tijuanaSouth, precise: false),
-      result: LocationTrust.countryHere(outcome(tijuanaSouth, precise: false), wallNow: sundayNoon, country: realLookup)),
-      "the country I'm in: approximate and too close → once more with precise")
-check(!LocationTrust.countryHereWantsPrecise(outcome(tijuanaSouth, precise: true),
-      result: LocationTrust.countryHere(outcome(tijuanaSouth, precise: true), wallNow: sundayNoon, country: realLookup)),
-      "…not when precise")
-check(!LocationTrust.countryHereWantsPrecise(outcome(mexicoCity, precise: false), result: .success("MX")), "…not when found")
+func hereRetry(_ p: (Double, Double), precise: Bool) -> Bool {
+    LocationTrust.countryHereWantsPrecise(outcome(p, precise: precise),
+        result: LocationTrust.countryHere(outcome(p, precise: precise), wallNow: sundayNoon, country: realLookup),
+        country: realLookup)
+}
+check(hereRetry(tijuanaSouth, precise: false), "the country I'm in: approximate and too close → once more with precise")
+check(!hereRetry(tijuanaSouth, precise: true), "…not when precise")
+check(!hereRetry(tijuanaCentre, precise: false) && !hereRetry(northCyprus, precise: false), "…not where precise can't help")
+check(!LocationTrust.countryHereWantsPrecise(outcome(mexicoCity, precise: false), result: .success("MX"), country: realLookup),
+      "…not when found")
 
 // Review fix: Swift's distances never exceed an independent measurement.
 var compared = 0, worstOver = -Double.infinity, worstUnder = 0.0
@@ -501,7 +512,7 @@ for line in sampleLines {
 }
 check(worstOver <= 1, "Swift never reports more than the independent distance (worst +\(worstOver) m)")
 check(worstUnder <= 1_000, "…nor grossly less (worst −\(worstUnder) m)")
-print("Independent distances compared at \(compared) points near land borders: worst +\(Int(worstOver.rounded())) m, −\(Int(worstUnder.rounded())) m")
+print("Independent distances compared at \(compared) points near land borders and coasts: worst +\(Int(worstOver.rounded())) m, −\(Int(worstUnder.rounded())) m")
 
 // Damaged data is refused, never half-read.
 check(CountryBorders(data: data.prefix(data.count - 1)) == nil, "truncated")
@@ -589,10 +600,10 @@ assert 'selected = code' in read_src and 'latitude' not in read_src.replace('loo
 row_src = declaration(picker, 'private func row(_ choice: CountryChoices.Choice)')
 assert row_src.index('generation += 1') < row_src.index('locator.cancel()') < row_src.index('selected = choice.code'), \
     'a pick by hand cancels a read on its way (review fix)'
-assert read_src.index('LocationTrust.countryHereWantsPrecise(outcome, result: result)') < read_src.index('read(precise: true)') \
+assert read_src.index('LocationTrust.countryHereWantsPrecise(outcome, result: result, country: lookup)') < read_src.index('read(precise: true)') \
     < read_src.index('switch result {'), 'one more read with precise before showing "too close"'
 sheet_read = declaration(sheet, 'private func readLocation(announce: Bool, precise: Bool)')
-assert sheet_read.index('if !precise, ConditionalCheckIn.wantsPreciseRetry(result, outcome: outcome) {') \
+assert sheet_read.index('if !precise, ConditionalCheckIn.wantsPreciseRetry(result, outcome: outcome,') \
     < sheet_read.index('readLocation(announce: announce, precise: true)') < sheet_read.index('check = result'), \
     'the sheet retries once with precise before showing the result'
 for state_line in re.findall(r'@State private var [^\n]+', picker):

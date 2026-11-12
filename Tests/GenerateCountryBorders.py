@@ -69,19 +69,19 @@ COAST_TOLERANCE_M = 1000.0
 UNITS = 10_000
 UNIDENTIFIED = '~~'
 EARTH_M = 6_371_008.8
-# (name, latitude, longitude, radius in metres): enclaves missing from the
-# source, each read as "can't tell" (the radius covers the whole enclave).
+# (name, latitude, longitude, radius in metres): enclaves the source has no
+# polygon for, each read as "can't tell". The radius is the enclave's own
+# extent plus a few hundred metres (the lookup's allowance and the engine's
+# margin add more), so nearby towns such as Lugano still read clearly.
 MISSING_ENCLAVES = (
-    ('Baarle-Hertog / Baarle-Nassau (BE/NL)', 51.4419, 4.9285, 4_000),
-    ('Büsingen am Hochrhein (DE in CH)', 47.6966, 8.6900, 3_000),
-    ("Campione d'Italia (IT in CH)", 45.9690, 8.9707, 2_000),
-    ('Dahagram-Angarpota (BD in IN)', 26.2758, 88.9437, 4_000),
-    ('Nahwa (AE in OM)', 25.2690, 56.2890, 3_000),
-    ('Shakhimardan (UZ in KG)', 39.9833, 71.8000, 6_000),
-    ('Yukhari Askipara / Barkhudarly (AZ in AM)', 41.1000, 45.0500, 6_000),
-    ('Karki (AZ in AM)', 39.7880, 45.0070, 4_000),
-    ('Sankovo-Medvezhye (RU in BY)', 52.4700, 31.5700, 3_000),
-    ('Sastavci (BA in RS)', 43.4100, 19.4200, 4_000),
+    ('Baarle-Hertog / Baarle-Nassau (BE/NL)', 51.4419, 4.9285, 3_500),
+    ('Büsingen am Hochrhein (DE in CH)', 47.6966, 8.6900, 2_500),
+    ("Campione d'Italia (IT in CH)", 45.9690, 8.9707, 1_300),
+    ('Dahagram-Angarpota (BD in IN)', 26.2758, 88.9437, 3_000),
+    ('Nahwa (AE in OM)', 25.2690, 56.2890, 1_500),
+    ('Karki (AZ in AM)', 39.7880, 45.0070, 3_000),
+    ('Sankovo-Medvezhye (RU in BY)', 52.4700, 31.5700, 2_000),
+    ('Sastavci (BA in RS)', 43.4100, 19.4200, 2_000),
 )
 MAGIC = b'DMCB'
 VERSION = 1

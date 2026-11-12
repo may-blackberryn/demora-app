@@ -317,7 +317,8 @@ struct CheckInSheet: View {
                                                                                  country: Self.countryLookup(for: rule)))
             // Approximate Location left a country too close to tell: the same
             // tap reads once more, letting iOS ask for precise location.
-            if !precise, ConditionalCheckIn.wantsPreciseRetry(result, outcome: outcome) {
+            if !precise, ConditionalCheckIn.wantsPreciseRetry(result, outcome: outcome,
+                                                              country: Self.countryLookup(for: rule)) {
                 readLocation(announce: announce, precise: true)
                 return
             }

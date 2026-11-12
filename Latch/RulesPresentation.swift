@@ -1778,10 +1778,14 @@ enum ConditionalCheckIn {
 
     /// One more read, asking iOS for temporary precise location, when an
     /// approximate fix left a country "too close to tell" and no place had
-    /// asked for precise already (review fix): the same tap, at most once.
-    static func wantsPreciseRetry(_ result: CheckInResult, outcome: LocationReadOutcome) -> Bool {
-        guard case .sample(_, precise: false) = outcome, !wantsPrecise(result.rule), !result.evaluation.isMet,
-              result.evaluation.results.count == result.rule.conditions.count else { return false }
+    /// asked for precise already (review fix): the same tap, at most once,
+    /// and only when a precise fix there could pass (the point is in a
+    /// country and more than the 2 km margin from any other).
+    static func wantsPreciseRetry(_ result: CheckInResult, outcome: LocationReadOutcome,
+                                  country: LocationTrust.CountryAt?) -> Bool {
+        guard case .sample(let sample, precise: false) = outcome, !wantsPrecise(result.rule),
+              !result.evaluation.isMet, result.evaluation.results.count == result.rule.conditions.count,
+              LocationTrust.preciseCouldDecide(sample, country: country) else { return false }
         return zip(result.rule.conditions, result.evaluation.results).contains { condition, row in
             if case .country = condition { return row.reason == .unknown(.nearBorder) }
             return false
@@ -2120,11 +2124,21 @@ enum LocationTrust {
     }
 
     /// "Use the country I'm in" reads once more with precise location when
-    /// an approximate fix was too close to a border to tell (review fix).
-    static func countryHereWantsPrecise(_ outcome: LocationReadOutcome,
-                                        result: Result<String, CountryHereProblem>) -> Bool {
-        guard case .sample(_, precise: false) = outcome, case .failure(let problem) = result else { return false }
-        return problem.reason == .nearBorder
+    /// an approximate fix was too close to a border to tell and a precise
+    /// one there could pass (review fix).
+    static func countryHereWantsPrecise(_ outcome: LocationReadOutcome, result: Result<String, CountryHereProblem>,
+                                        country: CountryAt?) -> Bool {
+        guard case .sample(let sample, precise: false) = outcome, case .failure(let problem) = result,
+              problem.reason == .nearBorder else { return false }
+        return preciseCouldDecide(sample, country: country)
+    }
+
+    /// A precise fix at this point could clear the margin: it is inside a
+    /// country and farther than 2 km from any other (Baarle, North Cyprus or
+    /// a point right on a border never get iOS's precise prompt).
+    static func preciseCouldDecide(_ sample: LocationSample, country: CountryAt?) -> Bool {
+        guard let found = country?(sample.latitude, sample.longitude), found.regionCode != nil else { return false }
+        return found.borderDistanceMeters > ConditionEvaluator.borderMargin
     }
 
     /// A place's centre from "Set to where I am now" (C12): a fresh, precise,
