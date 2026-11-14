@@ -756,7 +756,7 @@ struct GrantProfileView: View {
                 } else {
                     Button(tr("Add as trusted contact")) { addAsContact() }
                 }
-                Text(tr("They'll get a request to accept before they can approve for you. Adding a contact goes through a delay."))
+                Text(tr("They get a request to accept right away. They can approve for you once the wait ends."))
                     .font(.footnote).foregroundStyle(Ink.faint)
             }
             .demoraSurface()
@@ -803,7 +803,7 @@ struct GrantProfileView: View {
         receipt = ChangeReceiptBatchRequest(
             actions: actions,
             lines: actions.count > 1 ? [tr("Also turns on contact approvals")] : [],
-            note: String(format: tr("%@ must also accept before they can approve."),
+            note: String(format: tr("%@ gets the request now and can approve once they accept and the wait ends."),
                          displayName.isEmpty ? tr("This contact") : displayName))
     }
 }

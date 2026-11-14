@@ -9,7 +9,9 @@ empty and fifty items, legacy contacts without `allowed`; the permission
 summary for all 2⁷ capability sets; skip eligibility against the real
 `hasOverride` (non-empty exactly when it is true); where the Skip the wait
 sheet opens; the add plan (Y3); and the receipt direction and commit for
-override actions (add, narrow, widen, remove, pause, resume).
+override actions (add, narrow, widen, remove, pause, resume). F2: a contact
+saved while their add waits (Shared/ContactActivation.swift) shows "Can
+approve from …", opens its detail page, and is never an eligible way.
 Presentation only: no iOS build, simulator, saved state, relay or secret.
 """
 from pathlib import Path
@@ -248,6 +250,46 @@ check(SkipWayList.pendingChange(for: mine.id, kind: .phrase, pending: [pwChange,
       == phraseRemoval.id, "pending for phrase")
 check(SkipWayList.pendingChange(for: alex.id, kind: .contact, pending: [narrow, removeSam]) == nil, "other contact")
 
+// MARK: F2 — saved now, approves after the wait
+var kimWaiting = contact("Kim", code: "KIM004", accepted: false)
+kimWaiting.awaitingActivation = true
+var leeWaiting = contact("Lee W", code: "LEE009", accepted: true)
+leeWaiting.awaitingActivation = true
+let addKimWaiting = change(.addContact(kimWaiting), in: 4)
+let addLeeWaiting = change(.addContact(leeWaiting), in: 5)
+var waitingConfig = config
+waitingConfig.contacts = [alex, kimWaiting, leeWaiting]
+list = SkipWayList.make(overrides: waitingConfig, pending: [addKimWaiting, addLeeWaiting], unavailableCodes: [])
+check(list.rows(of: .contact).map(\.name) == ["Alex", "Kim", "Lee W"], "a waiting contact is one saved row, not a second addition")
+check(list.rows[1].chip == .canApproveFrom(addKimWaiting.appliesAt, accepted: false)
+      && list.rows[1].pendingChangeID == addKimWaiting.id && !list.rows[1].isPendingAddition,
+      "not accepted yet: waiting to accept · can approve from, opens the detail page")
+check(list.rows[2].chip == .canApproveFrom(addLeeWaiting.appliesAt, accepted: true), "accepted: can approve from")
+check(list.rows[0].chip == nil, "an active contact is unchanged")
+var waitingPaused = waitingConfig
+waitingPaused.contactsEnabled = false
+list = SkipWayList.make(overrides: waitingPaused, pending: [addKimWaiting, addLeeWaiting], unavailableCodes: ["KIM004"])
+check(list.rows[1].chip == .canApproveFrom(addKimWaiting.appliesAt, accepted: false),
+      "the activation time outranks unreachable and paused")
+check(SkipWayList.pendingChange(for: kimWaiting.id, kind: .contact, pending: [narrow, addKimWaiting])?.id
+      == addKimWaiting.id, "the detail page's strip is the activation")
+check(SkipWayList.queuedEdit(of: kimWaiting.id, kind: .contact, pending: [addKimWaiting]) == nil,
+      "activation is not a permission edit")
+// Orphan (repair runs at the next housekeeping): no activation chip.
+list = SkipWayList.make(overrides: waitingConfig, pending: [], unavailableCodes: [])
+check(list.rows[1].chip == .waitingToAccept && list.rows[1].pendingChangeID == nil, "orphan falls back")
+let onlyWaiting: OverridesConfig = { var c = OverridesConfig(); c.contactsEnabled = true
+    c.contacts = [leeWaiting]; return c }()
+check(SkipWayEligibility.ways(for: [change(.removeLimit(id: UUID()))], overrides: onlyWaiting,
+                              unavailableCodes: [], emailAvailable: true).isEmpty,
+      "an accepted contact still waiting is never a way to skip")
+check(SkipWayEligibility.extraTimeContacts(overrides: { var c = onlyWaiting
+    c.contacts[0].allowed = all; return c }(), unavailableCodes: [], emailAvailable: true).isEmpty,
+      "nor for extra time")
+check(SkipWayEligibility.ways(for: [addLeeWaiting], overrides: { var c = onlyWaiting
+    c.contacts.append(alex); return c }(), unavailableCodes: [], emailAvailable: true).map(\.id) == [alex.id],
+      "an existing contact may skip a new contact's activation; the new one can't (Q2)")
+
 // MARK: Eligibility (§5.13, Y4) against the real hasOverride
 func state(_ overrides: OverridesConfig) -> LatchState { var s = LatchState(); s.overrides = overrides; return s }
 let sample: [ChangeAction] = [
@@ -257,7 +299,7 @@ let sample: [ChangeAction] = [
     .upsertPasswordPolicy(work), .removePasswordPolicy(id: work.id), .upsertPhrasePolicy(mine),
     .removePhrasePolicy(id: mine.id), .setContactPermissions(id: alex.id, allowed: all),
 ]
-let configs: [OverridesConfig] = [config, paused, many, legacyConfig, OverridesConfig(), {
+let configs: [OverridesConfig] = [config, paused, many, legacyConfig, OverridesConfig(), waitingConfig, onlyWaiting, {
     var c = OverridesConfig(); c.contactsEnabled = true; c.contacts = [sam]; return c }(), {
     var c = OverridesConfig(); c.phrasePolicies = [mine]; return c }(), {
     var c = OverridesConfig(); c.passwordPolicies = [password("Only waits", [.delayChanges])]; return c }()]
@@ -465,12 +507,13 @@ with tempfile.TemporaryDirectory(prefix='demora-you-') as directory:
     (folder / 'SharedModels.swift').write_text(models)
     (folder / 'TodayPresentation.swift').write_text(today)
     (folder / 'YouPresentation.swift').write_text(presentation)
+    (folder / 'ContactActivation.swift').write_text((ROOT / 'Shared/ContactActivation.swift').read_text())
     (folder / 'main.swift').write_text(driver)
     binary = folder / 'you'
     subprocess.run(['xcrun', 'swiftc', '-swift-version', '5',
                     *(str(folder / name) for name in ('Infrastructure.swift', 'SharedModels.swift',
                                                       'TodayPresentation.swift', 'YouPresentation.swift',
-                                                      'main.swift')),
+                                                      'ContactActivation.swift', 'main.swift')),
                     '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
 

@@ -24,6 +24,10 @@ enum SkipWayChip: Equatable {
     case changes(Date)
     /// Still waiting to be added: "Added Tue 14:32".
     case added(Date)
+    /// Saved and paired, but their add hasn't landed (F2): "Can approve
+    /// from Tue 14:32", or "Waiting to accept · can approve from …" when
+    /// they haven't accepted yet.
+    case canApproveFrom(Date, accepted: Bool)
     /// A contact who hasn't accepted (or confirmed by email) yet.
     case waitingToAccept
     /// A Demora contact the relay can't find right now.
@@ -88,6 +92,10 @@ struct SkipWayList: Equatable {
             let (chip, changeID) = savedChip(
                 mine, isRemoval: { if case .removeContact = $0 { return true }; return false },
                 fallback: {
+                    if contact.awaitingActivation,
+                       let add = ContactActivation.pendingAdd(for: contact.id, in: pending) {
+                        return .canApproveFrom(add.appliesAt, accepted: contact.accepted)
+                    }
                     if !contact.accepted { return .waitingToAccept }
                     if let code = contact.latchUserCode, unavailableCodes.contains(code) {
                         return .cantReach
@@ -95,9 +103,11 @@ struct SkipWayList: Equatable {
                     if !overrides.contactsEnabled { return .paused }
                     return nil
                 })
+            let activation = contact.awaitingActivation
+                ? ContactActivation.pendingAdd(for: contact.id, in: pending)?.id : nil
             rows.append(SkipWayRow(id: contact.id, kind: .contact, name: contact.name,
                                    allowed: contact.allowed, phrase: nil, chip: chip,
-                                   pendingChangeID: changeID, isPendingAddition: false))
+                                   pendingChangeID: changeID ?? activation, isPendingAddition: false))
         }
         for change in pending {
             guard case .addContact(let contact) = change.action,
@@ -181,7 +191,10 @@ struct SkipWayList: Equatable {
     /// the engine refuses another, so the detail page disables its actions.
     static func pendingChange(for id: UUID, kind: SkipWayKind,
                               pending: [PendingChange]) -> PendingChange? {
-        pending.first { change in
+        if kind == .contact, let add = ContactActivation.pendingAdd(for: id, in: pending) {
+            return add
+        }
+        return pending.first { change in
             switch kind {
             case .contact: return targets(change.action, contact: id)
             case .password: return targets(change.action, password: id)

@@ -191,7 +191,7 @@ struct AddSkipWaySheet: View {
     private func contactNote(_ draft: SkipWayDraft) -> String? {
         guard case .contact(let contact) = draft else { return nil }
         let name = contact.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return String(format: tr("%@ must also accept before they can approve."),
+        return String(format: tr("%@ gets the request now and can approve once they accept and the wait ends."),
                       name.isEmpty ? tr("This contact") : name)
     }
 }
@@ -495,6 +495,13 @@ struct SkipWayDetailView: View {
     @State private var loadedFor: Set<OverrideCapability>?
     @State private var receipt: ChangeReceiptRequest?
     @State private var closeAfterReceipt = false
+    @State private var confirmImmediateRemoval = false
+
+    /// F2: saved and paired, but their add hasn't landed yet.
+    private var awaitingContact: TrustedContact? {
+        guard kind == .contact else { return nil }
+        return model.state.overrides.contacts.first { $0.id == id && $0.awaitingActivation }
+    }
 
     private var current: Set<OverrideCapability>? {
         switch kind {
@@ -617,7 +624,10 @@ struct SkipWayDetailView: View {
         calendar.locale = locale
         let when = TodayTimeText.short(change.appliesAt, now: Date(), calendar: calendar, locale: locale)
         let text: String
-        if let edit = SkipWayList.queuedEdit(of: id, kind: kind, pending: model.state.pending),
+        if case .addContact = change.action, let contact = awaitingContact {
+            text = SkipWayRowText.canApproveFrom(change.appliesAt, accepted: contact.accepted,
+                                                 now: Date(), locale: locale)
+        } else if let edit = SkipWayList.queuedEdit(of: id, kind: kind, pending: model.state.pending),
            edit.change.id == change.id {
             text = String(format: tr("From %@: %@"), when,
                           SkipWayPermissionText.summary(edit.allowed, translate: tr))
@@ -682,15 +692,30 @@ struct SkipWayDetailView: View {
                 }
             }
             Button {
-                closeAfterReceipt = true
-                receipt = ChangeReceiptRequest(action: removal)
+                if awaitingContact != nil {
+                    confirmImmediateRemoval = true
+                } else {
+                    closeAfterReceipt = true
+                    receipt = ChangeReceiptRequest(action: removal)
+                }
             } label: {
                 YouRowLabel(title: tr("Remove…"), chevron: false, titleColor: loosen)
             }
             .buttonStyle(.plain)
-            .disabled(pending != nil)
+            // Before their add lands, removing is stricter and immediate (F2).
+            .disabled(pending != nil && awaitingContact == nil)
         }
         .paperCard(padding: 0)
+        .confirmationDialog(tr("Remove this contact now?"), isPresented: $confirmImmediateRemoval,
+                            titleVisibility: .visible) {
+            Button(tr("Remove"), role: .destructive) {
+                model.removeAwaitingContact(id: id)
+                dismiss()
+            }
+            Button(tr("Cancel"), role: .cancel) {}
+        } message: {
+            Text(tr("They can't approve yet, so this happens right away and cancels the waiting add."))
+        }
     }
 
     private var removal: ChangeAction {
