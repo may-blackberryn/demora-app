@@ -1451,6 +1451,7 @@ enum ChangeEngine {
         rolloverIfNewDay()
         observeTimeZone()
         applyDueChanges()
+        rescheduleApplyActivities(state: SharedStore.loadState())
         pruneExpiredSessions()
         prunePastPlanned()
         reconcileFreeWindow()
@@ -2433,7 +2434,9 @@ enum ChangeEngine {
     /// A one-shot DeviceActivity interval starting at `appliesAt` so the
     /// monitor extension wakes up in the background and applies the change
     /// even if the app is never opened.
-    private static func scheduleApplyActivity(for change: PendingChange) {
+    private static func scheduleApplyActivity(for change: PendingChange,
+                                              wallNow: Date = Date(),
+                                              guardedNow: Date = TimeGuard.now()) {
         let cal = Calendar.current
         // Round the start UP to the next whole minute. A truncated (minute-
         // granular) intervalStart fires a few seconds BEFORE appliesAt, so
@@ -2442,7 +2445,12 @@ enum ChangeEngine {
         // app is next opened. Rounding up guarantees the callback lands at-or-
         // after appliesAt, so the change (e.g. a session starting) applies in the
         // background on its own.
-        let start = ceilToMinute(max(change.appliesAt, Date().addingTimeInterval(60)), cal)
+        //
+        // appliesAt is on TimeGuard's clock but DeviceActivity runs on the wall
+        // clock, so convert first, like GlobalWake.scheduleRelease. Scheduling
+        // the raw appliesAt fired early whenever the two disagreed (F1).
+        let start = ApplyActivityTiming.start(appliesAt: change.appliesAt, guardedNow: guardedNow,
+                                              wallNow: wallNow, calendar: cal)
         let end = start.addingTimeInterval(30 * 60) // ≥15 min interval required
         let schedule = DeviceActivitySchedule(
             intervalStart: cal.dateComponents([.year, .month, .day, .hour, .minute],
@@ -2457,6 +2465,31 @@ enum ChangeEngine {
                 DeviceActivityName(change.activityName), during: schedule)
         } catch {
             print("Demora: failed to schedule apply activity: \(error)")
+        }
+    }
+
+    /// Re-register the apply activity of every change that isn't due yet when
+    /// its registered start no longer matches the guarded deadline on the
+    /// wall clock: missing, firing before the change is due (the callback
+    /// then finds nothing to apply and never fires again), or much later
+    /// (the guarded clock caught up after a network sync). Each waiting
+    /// change already reserves its own activity name in MonitoringBudget, and
+    /// a re-registration replaces that name, so this never takes extra
+    /// capacity. A healthy registration is left alone.
+    static func rescheduleApplyActivities(state: LatchState) {
+        let guardedNow = TimeGuard.now(), wallNow = Date(), cal = Calendar.current
+        let waiting = state.pending.filter { $0.appliesAt > guardedNow }
+        guard !waiting.isEmpty else { return }
+        let center = DeviceActivityCenter()
+        let running = Set(center.activities.map(\.rawValue))
+        for change in waiting {
+            let name = DeviceActivityName(change.activityName)
+            let registered = running.contains(name.rawValue)
+                ? center.schedule(for: name).flatMap { cal.date(from: $0.intervalStart) } : nil
+            guard ApplyActivityTiming.needsReschedule(
+                registeredStart: registered, appliesAt: change.appliesAt,
+                guardedNow: guardedNow, wallNow: wallNow, calendar: cal) else { continue }
+            scheduleApplyActivity(for: change, wallNow: wallNow, guardedNow: guardedNow)
         }
     }
 
@@ -2505,11 +2538,48 @@ enum ChangeEngine {
         content.body = change.summary
         content.sound = .default
         let trigger = UNTimeIntervalNotificationTrigger(
-            timeInterval: max(1, change.appliesAt.timeIntervalSinceNow),
+            // Guarded remaining time; the trigger itself counts real time.
+            timeInterval: max(1, change.appliesAt.timeIntervalSince(TimeGuard.now())),
             repeats: false
         )
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: change.id.uuidString,
                                   content: content, trigger: trigger))
+    }
+}
+
+/// Pure timing for one-shot apply activities. `appliesAt` and `guardedNow` are
+/// on TimeGuard's clock; the returned dates and `registeredStart` are on the
+/// wall clock that DeviceActivity schedules use.
+enum ApplyActivityTiming {
+    /// When the guarded deadline lands on the wall clock.
+    static func wallDue(appliesAt: Date, guardedNow: Date, wallNow: Date) -> Date {
+        wallNow.addingTimeInterval(max(0, appliesAt.timeIntervalSince(guardedNow)))
+    }
+
+    /// Interval start: the wall-clock landing rounded UP to a whole minute (a
+    /// truncated minute-granular start would fire a few seconds early), and
+    /// at least a minute ahead.
+    static func start(appliesAt: Date, guardedNow: Date, wallNow: Date,
+                      calendar: Calendar) -> Date {
+        let due = wallDue(appliesAt: appliesAt, guardedNow: guardedNow, wallNow: wallNow)
+        let future = max(due, wallNow.addingTimeInterval(60))
+        let floored = calendar.date(from: calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute], from: future)) ?? future
+        return floored >= future ? floored : floored.addingTimeInterval(60)
+    }
+
+    /// Lateness tolerated before re-registering: two minutes.
+    static let lateSlack: TimeInterval = 120
+
+    static func needsReschedule(registeredStart: Date?, appliesAt: Date, guardedNow: Date,
+                                wallNow: Date, calendar: Calendar) -> Bool {
+        guard let registered = registeredStart else { return true }
+        let due = wallDue(appliesAt: appliesAt, guardedNow: guardedNow, wallNow: wallNow)
+        // One second absorbs reading the two clocks a moment apart.
+        if registered.addingTimeInterval(1) < due { return true }
+        let wanted = start(appliesAt: appliesAt, guardedNow: guardedNow,
+                           wallNow: wallNow, calendar: calendar)
+        return registered > wanted.addingTimeInterval(lateSlack)
     }
 }

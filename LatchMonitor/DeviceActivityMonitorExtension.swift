@@ -62,6 +62,11 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         }
         // Covers one-shot apply activities and schedule/session windows too.
         ChangeEngine.applyDueChanges()
+        // An apply activity that started before its change was due would never
+        // fire again. Give any such change a new wall-clock start (F1).
+        if raw.hasPrefix(LatchConstants.applyActivityPrefix) {
+            ChangeEngine.rescheduleApplyActivities(state: SharedStore.loadState())
+        }
         // A midnight rollover clears daily usage bookkeeping, including the
         // free-window marker. Reconcile immediately so a free period spanning
         // midnight resumes its protection before any threshold can block.

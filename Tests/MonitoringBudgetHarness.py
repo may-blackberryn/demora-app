@@ -534,6 +534,7 @@ helpers = (
 '''
     + "enum LimitFeatures {\n" + block(features, "static func expectedSplitActivityNames(") + "\n}\n"
     + "enum DayNightWake {\n" + block(day_night, "static func boundaryMinutes(") + "\n}\n"
+    + block(engine, "enum ApplyActivityTiming {") + "\n"
 )
 source = "\n".join([
     infrastructure,

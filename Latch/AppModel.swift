@@ -64,6 +64,10 @@ final class AppModel: ObservableObject {
 
     private var timer: AnyCancellable?
     private var housekeepingInFlight = false
+    /// Process-local floor between forced time syncs (seconds of uptime), so
+    /// a lasting disagreement (clock really changed, or offline) can't send a
+    /// request on every 30 s tick.
+    private var lastForcedTimeSync: TimeInterval?
 
     init() {
         // A replay interrupted by a force-quit: restore the user's real setup
@@ -105,7 +109,13 @@ final class AppModel: ObservableObject {
         guard !setupStorageUnavailable else { return }
         guard !housekeepingInFlight else { return }
         housekeepingInFlight = true
+        // Wall and guarded clocks more than 5 min apart: the guarded clock may
+        // be behind real time (an anchor migrated from 2.0's sleep-blind
+        // clock), which would hold due changes back. Re-sync first, skipping
+        // the hourly limit, so they apply now (F1).
+        let forceSync = TimeGuard.clocksDisagree(guarded: TimeGuard.now()) && allowForcedTimeSync()
         Task { [weak self] in
+            if forceSync { await TimeGuard.syncWithNetwork(force: true) }
             await ChangeEngine.housekeepingOffMain()
             guard let self else { return }
             self.housekeepingInFlight = false
@@ -117,6 +127,13 @@ final class AppModel: ObservableObject {
             self.refreshIncomingInviteCount()
             await TimeGuard.syncWithNetwork()
         }
+    }
+
+    private func allowForcedTimeSync() -> Bool {
+        let uptime = ProcessInfo.processInfo.systemUptime
+        if let last = lastForcedTimeSync, uptime - last < 60 { return false }
+        lastForcedTimeSync = uptime
+        return true
     }
 
     /// Demora-user contacts must accept an invite before they can approve for

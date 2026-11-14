@@ -66,7 +66,7 @@ def source_checks(app, baseline):
     # This covers setup/reset, migration, retry recovery, authorization, timing,
     # accounting access, and the actual asynchronous delayed-apply path.
     exceptions = {"queue", "refreshAfterExternalApply", "restoreFromReplay", "debugFullReset",
-                  "refreshIncomingInviteCount"}
+                  "refreshIncomingInviteCount", "tick"}
     unchanged = 0
     for match in re.finditer(r"^    (?:(?:private|nonisolated|static) )*func (\w+)\(",
                              baseline, re.MULTILINE):
@@ -102,6 +102,22 @@ def source_checks(app, baseline):
     assert expected_invites != original_invites, "baseline invite fetch changed"
     equal_source(block(app, "func refreshIncomingInviteCount()"), expected_invites,
                  "refreshIncomingInviteCount (keep last count on failure only)")
+
+    # F1 (docs/fixes-2.0-batch.md): a forced time re-sync before housekeeping
+    # when the clocks disagree. Only these lines may be added to tick().
+    original_tick = block(baseline, "func tick()")
+    expected_tick = original_tick.replace(
+        "        Task { [weak self] in\n            await ChangeEngine.housekeepingOffMain()\n",
+        "        // Wall and guarded clocks more than 5 min apart: the guarded clock may\n"
+        "        // be behind real time (an anchor migrated from 2.0's sleep-blind\n"
+        "        // clock), which would hold due changes back. Re-sync first, skipping\n"
+        "        // the hourly limit, so they apply now (F1).\n"
+        "        let forceSync = TimeGuard.clocksDisagree(guarded: TimeGuard.now()) && allowForcedTimeSync()\n"
+        "        Task { [weak self] in\n"
+        "            if forceSync { await TimeGuard.syncWithNetwork(force: true) }\n"
+        "            await ChangeEngine.housekeepingOffMain()\n", 1)
+    assert expected_tick != original_tick, "baseline tick changed"
+    equal_source(block(app, "func tick()"), expected_tick, "tick (F1 forced re-sync only)")
 
     original_init = block(baseline, "    init()")
     expected_init = original_init.replace("        isReplay = SharedStore.isReplaying\n", "", 1)
