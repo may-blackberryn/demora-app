@@ -1799,3 +1799,55 @@ pins the new tick lines.
    working and doesn't stall; back online it re-syncs once, not every
    minute. A looser change queued while offline after a reboot still waits
    its full delay once back online.
+
+## F2: trusted contacts pair now, approve after the wait (2026-11-14)
+Step F2 of the approved `docs/fixes-2.0-batch.md`, with the owner's Q2
+answer (an existing trusted contact may still skip a new contact's
+activation wait). Before: the contact existed only inside the pending
+`.addContact`, so no invite, email code or safety code could go out until it
+landed. Now the contact is saved at once with `awaitingActivation`; only
+their approvals wait. Evidence: new `Tests/ContactActivationHarness.py`
+(real models + the new pure `Shared/ContactActivation.swift`, wiring guards,
+strings), five F2 scenarios in `Tests/WhenWhereHarness.py` on the real
+queue/apply/due/cancel/remove/repair bodies with stubbed storage, and F2
+rows in `Tests/YouPresentationHarness.py`. No phone, no second phone.
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| `TrustedContact.awaitingActivation` (decodes false); `isUsable = accepted && !awaitingActivation`; `isValidInitialSetup` rejects it | One property already guards every approval path (`contactPermitted`, `hasOverride`, skip eligibility, extra time, rule editors), so a waiting contact, even accepted, can never approve, including its own activation | Yes |
+| The F2 state steps are one pure enum, **`ContactActivation`**, in a new `Shared/ContactActivation.swift` (Shared is a synchronized group: Latch, LatchMonitor, LatchShieldUI, same as the engine) | Harnesses compile it unchanged; the engine keeps only one call per site. Nothing in it reads a clock or touches `id`/`createdAt`/`appliesAt` | Yes |
+| Queue: `prepareQueue` runs inside `queueCoordinated` after the conflict check and before classify/admission/save, so the contact and its pending add are **one save**; refused if that id is already saved | Same write as the spec asks; a failed admission or save writes neither | Yes |
+| Engine also refuses `.setContactPermissions` for a waiting contact | The detail page disables the checklist; the engine agrees so a stale UI can't queue one. Narrower than the spec text, flagged | Yes |
+| Apply: a saved contact with the same id has its flag cleared (keeps `accepted`, `allowed`, name, avatar); a flagged copy with no saved contact does nothing; an unflagged (legacy) copy appends as before, and never duplicates an id that is already saved | Apply now goes through the same `applyDueChanges` path, so the existing skip gate covers it (Q2) | Yes |
+| Remove before activation: `ChangeEngine.removeAwaitingContact` drops contact + pending add in one coordinated write, then stops the add's activity/notification; AppModel clears the add's sent relay request. The detail page's Remove… asks once ("Remove this contact now?") instead of opening the receipt | Stricter, so immediate. An active contact is untouched by this path; its removal still goes through the receipt and wait | Yes |
+| A decline (relay `inviteResponse` false) of a waiting contact uses the same drop. If they had accepted and then revoked, the existing "removed their permission" notice still shows | Spec: a decline also drops the pending add | Yes |
+| `cancel` (Changes) now runs in one coordinated write and, for a new-style add, also drops its still-waiting contact | A cancelled add must not leave a paired contact behind | Yes |
+| Housekeeping `repairContactActivation()` (before `applyDueChanges`, under `coordinateStateMutation`, skipped when state needs recovery): migrates each pending legacy add whose contact isn't saved (save flagged, rewrite the copy), then prunes flagged contacts whose add is gone | One-shot by construction (a rewritten copy carries the flag, so it never matches again) and idempotent: a second run writes nothing. No marker key needed. Prune is fail-closed: never activates | Yes |
+| You list chip `.canApproveFrom(date, accepted:)`: "Can approve from %@" / "Waiting to accept · can approve from %@"; it outranks waiting/unreachable/paused but not a queued removal or edit. The row opens the detail page (it's saved), not the ledger | The spec's wording; a waiting contact is one row, never also an "Added …" row | Yes |
+| Detail page: the activation is the pending change, so the existing `pendingStrip` shows the same wording + countdown + "See in Changes", and the checklist is disabled | Reuses the strip as asked | Yes |
+| Times shown are `appliesAt` as stored, like the existing Added/Removed chips | Consistent with the neighbouring chips; F1's `ClockReading` stays in the ledger/Today card. If the guarded and wall clocks disagree by > 5 min the chip can differ from the ledger's landing time until the forced sync | Yes, flagged |
+| Copy: "Adding a contact goes through a delay" → "They get a request to accept right away. They can approve for you once the wait ends."; the receipt note → "%@ gets the request now and can approve once they accept and the wait ends." Old keys replaced in all seven tables (no orphans); four new keys added. German uses *du* like the newer You strings | Spec item 7; all 8 languages | Yes |
+| Harness intent updates: `WakeWidgetReadOnlyHarness` undoes the exact F2 engine edits (`F2_EDITS`) before its baseline comparison; `LegacyReplayRecoveryHarness` pins the new decline branch of `resolveInvite`; `ScheduleSelectionHarness`/`WhenWhereHarness`/`YouPresentationHarness` compile `ContactActivation.swift` | Brief | Yes |
+| Not changed: backend, Worker, CloudKit schema, invite/email loops (they already send for `!accepted`), `ContactsRelay.reconcileSentInvites` (cleans up a dropped contact's invite), build number | Spec item 8 | — |
+
+### F2: what to try on two phones
+1. Phone A: You → Add a way → Someone you trust → B's Demora code. The
+   receipt says they get the request now. After confirming, the You row
+   reads "Waiting to accept · can approve from …" immediately.
+2. Phone B gets the invite within a tick (30 s with the app open) and
+   accepts; on A the row turns to "Can approve from …". Safety codes can be
+   compared now.
+3. While it waits: open A's detail page: strip with the time, countdown and
+   See in Changes; the checklist is greyed. From A, ask to skip any change:
+   B is **not** offered. An existing contact allowed Trusted contacts can
+   approve the add's own wait (Q2); then B's approvals count at once.
+4. At the deadline (or Apply now): the chip disappears and B can approve.
+5. Repeat and Remove… before the deadline: one confirmation, contact and
+   the Changes entry gone at once; B's pending invite disappears on the
+   next reconcile. Repeat with B declining instead: same result on A.
+6. Repeat and Cancel the add in Changes: the contact goes too.
+7. Email contact (if this build has email): the code email arrives right
+   after adding; entering it shows Confirmed, approvals still wait.
+8. Upgrade path: with a contact add pending from the current dev build,
+   install this one: the contact appears at once with the same "can approve
+   from" time as the old pending add.
