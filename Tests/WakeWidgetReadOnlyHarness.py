@@ -9,6 +9,10 @@ Apple tokens, coordination, monitors and shields are counted fakes. Date()/uptim
 inputs are injected, not the production decision logic. Runtime types, keys,
 filenames, JSON encoders/decoders and status bodies come from owning sources.
 This is not protected-file, cross-process locking, WidgetKit or device delivery QA.
+F1 (docs/fixes-2.0-batch.md, 2026-11-13) rewrote TimeGuard on a sleep-inclusive
+clock, so it is no longer pinned to BASELINE here; Tests/TimeGuardHarness.py
+covers it. This harness still runs the real display/now() bodies with one
+elapsed clock (no sleep modeled).
 """
 from pathlib import Path
 import difflib
@@ -70,10 +74,55 @@ def without_when_where_insertions(old, restored):
     return result
 
 
+# F1 (docs/fixes-2.0-batch.md, approved 2026-11-13): exact engine edits for
+# the wall-time apply schedule. Each (current, baseline) pair must occur once.
+F1_EDITS = [
+    ("""        applyDueChanges()
+        rescheduleApplyActivities(state: SharedStore.loadState())
+        pruneExpiredSessions()
+""", """        applyDueChanges()
+        pruneExpiredSessions()
+"""),
+    ("""    private static func scheduleApplyActivity(for change: PendingChange,
+                                              wallNow: Date = Date(),
+                                              guardedNow: Date = TimeGuard.now()) {
+""", """    private static func scheduleApplyActivity(for change: PendingChange) {
+"""),
+    ("""        //
+        // appliesAt is on TimeGuard's clock but DeviceActivity runs on the wall
+        // clock, so convert first, like GlobalWake.scheduleRelease. Scheduling
+        // the raw appliesAt fired early whenever the two disagreed (F1).
+        let start = ApplyActivityTiming.start(appliesAt: change.appliesAt, guardedNow: guardedNow,
+                                              wallNow: wallNow, calendar: cal)
+""", """        let start = ceilToMinute(max(change.appliesAt, Date().addingTimeInterval(60)), cal)
+"""),
+    ("""            // Guarded remaining time; the trigger itself counts real time.
+            timeInterval: max(1, change.appliesAt.timeIntervalSince(TimeGuard.now())),
+""", """            timeInterval: max(1, change.appliesAt.timeIntervalSinceNow),
+"""),
+]
+
+
+def without_f1_changes(text):
+    """Undo exactly the approved F1 edits and remove its two new declarations;
+    GlobalWake and the display readers must still match byte for byte."""
+    for current, baseline in F1_EDITS:
+        assert text.count(current) == 1, "F1 engine edit changed:\n" + current
+        text = text.replace(current, baseline)
+    doc = "    /// Re-register the apply activity of every change that isn't due yet"
+    begin = text.index(doc)
+    _, finish = span(text, "static func rescheduleApplyActivities(")
+    assert text[finish:finish + 2] == "\n\n"
+    text = text[:begin] + text[finish + 2:]
+    begin = text.index("\n/// Pure timing for one-shot apply activities.")
+    _, finish = span(text, "enum ApplyActivityTiming {")
+    assert not text[finish:].strip(), "ApplyActivityTiming stays the file's last declaration"
+    return text[:begin]
+
+
 def guard_originals():
     """All changed structural ranges must be approved insertions, never edits."""
     specs = {
-        "TimeGuard.swift": "static func nowForDisplay(",
         "ChangeEngine.swift": "static func statusForDisplay(",
         "DayNightWake.swift": "static func statusForDisplay(",
         "LimitFeatures.swift": "static func wakeStateForDisplay(",
@@ -103,11 +152,13 @@ def guard_originals():
         for a, b in sorted(allowed, reverse=True):
             del restored[a:b]
         if name == "ChangeEngine.swift":
+            restored = without_f1_changes("".join(restored)).splitlines(keepends=True)
             restored = without_when_where_insertions(old, restored)
         assert "".join(restored) == old, f"{path}: removal did not exactly restore baseline\n" + "".join(
             difflib.unified_diff(old.splitlines(True), restored))
         sources[name] = new
-    print("Source guard: four engine files exactly match verified baseline after approved additions are removed", flush=True)
+    print("Source guard: three engine files exactly match verified baseline after approved additions are removed", flush=True)
+    sources["TimeGuard.swift"] = (ROOT / "Shared/TimeGuard.swift").read_text()
     return sources
 
 
@@ -122,6 +173,7 @@ def inputs(source):
     # copied into a fake and none of the display bodies is replaced.
     return (source.replace("Date()", "TestClock.wall")
             .replace("ProcessInfo.processInfo.systemUptime", "TestClock.uptime")
+            .replace("clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW)", "TestClock.continuousNanos")
             .replace("FileManager.default.containerURL(", "TestContainer.containerURL(")
             .replace("NSFileCoordinator()", "TestCoordinator()"))
 
@@ -135,7 +187,11 @@ struct FamilyActivitySelection: Codable, Equatable {
     var webDomainTokens: Set<String> = []
 }
 func tr(_ value: String) -> String { value }
-enum TestClock { static var wall = Date(timeIntervalSince1970: 1_800_000_000); static var uptime: TimeInterval = 10000 }
+enum TestClock {
+    static var wall = Date(timeIntervalSince1970: 1_800_000_000); static var uptime: TimeInterval = 10000
+    /// No sleep modeled here: the continuous clock equals uptime.
+    static var continuousNanos: UInt64 { UInt64(uptime * 1_000_000_000) }
+}
 final class MemoryDefaults {
     var values: [String: Any] = [:]
     var writes = 0
@@ -200,8 +256,7 @@ enum SharedStore {
 BRIDGES = r'''
 extension TimeGuard {
     static func seed(wall: Date, uptime: Double) {
-        SharedStore.defaults.set(wall.timeIntervalSince1970, forKey: anchorWallKey)
-        SharedStore.defaults.set(uptime, forKey: anchorUptimeKey)
+        anchor(Anchor(wall: wall.timeIntervalSince1970, continuous: uptime, uptime: uptime))
     }
 }
 extension GlobalWake {
@@ -413,7 +468,7 @@ for bad in [Data("not json".utf8), Data("{\"broken\":{}}".utf8)] {
         try readOnly("corrupt runtime, degraded=\(degraded)") {
             check(DayNightWake.statusForDisplay(group: named, at: monday, guardedNow: monday) == nil, "corrupt named not nil")
             check(LimitFeatures.wakeStateForDisplay(for: legacy, at: monday, guardedNow: monday) == nil, "corrupt limit not nil")
-            check(TimeGuard.nowForDisplay(at: monday, uptime: 10000) == monday, "missing display anchor not wall")
+            check(TimeGuard.nowForDisplay(at: monday, continuous: 10000, uptime: 10000) == monday, "missing display anchor not wall")
         }
     }
 }
@@ -459,9 +514,9 @@ for delta in [-301.0, -300.001, -300, -299.999, 0, 299.999, 300, 300.001, 301] {
     TimeGuard.seed(wall: derived.addingTimeInterval(-100), uptime: 9900)
     let expected = abs(delta) > 300 ? derived : monday
     try readOnly("clock threshold \(delta)") {
-        check(abs(TimeGuard.nowForDisplay(at: monday, uptime: 10000).timeIntervalSince(expected)) < 0.00001,
+        check(abs(TimeGuard.nowForDisplay(at: monday, continuous: 10000, uptime: 10000).timeIntervalSince(expected)) < 0.00001,
               "threshold derivation wrong")
-        check(TimeGuard.nowForDisplay(at: monday, uptime: 10000) == TimeGuard.now(), "display clock differs from original")
+        check(TimeGuard.nowForDisplay(at: monday, continuous: 10000, uptime: 10000) == TimeGuard.now(), "display clock differs from original")
     }
 }
 for reason in ["missing", "reboot", "invalid anchor"] {
@@ -470,11 +525,11 @@ for reason in ["missing", "reboot", "invalid anchor"] {
     if reason == "reboot" { TimeGuard.seed(wall: monday.addingTimeInterval(-500), uptime: 20000) }
     if reason == "invalid anchor" { TimeGuard.seed(wall: Date(timeIntervalSince1970: 0), uptime: 9900) }
     try readOnly("clock \(reason)") {
-        check(TimeGuard.nowForDisplay(at: monday, uptime: 10000) == monday, "unusable anchor not wall")
+        check(TimeGuard.nowForDisplay(at: monday, continuous: 10000, uptime: 10000) == monday, "unusable anchor not wall")
     }
     let writes = SharedStore.defaults.writes
     check(TimeGuard.now() == monday, "original fallback clock not wall")
-    check(SharedStore.defaults.writes == writes + 2, "original anchoring positive control failed")
+    check(SharedStore.defaults.writes == writes + 1, "original anchoring positive control failed")
 }
 // Positive controls: prove the fakes detect original repair behavior.
 try reset(monday)
@@ -494,11 +549,9 @@ print("Limits: fake Apple tokens/monitors/shields/coordination; no WidgetKit, lo
 def main():
     sources = guard_originals()
     clock = sources["TimeGuard.swift"]
-    # Exclude the network method entirely; preserve the actual clock constants,
-    # both derivations and original anchoring implementation.
-    clock = "enum TimeGuard {\n" + "\n".join(re.findall(r"    private static let [^\n]+", clock)) + "\n" + "\n".join(
-        block(clock, sig) for sig in ["static func now()", "static func nowForDisplay(", "private static func anchor("]
-    ) + "\n}"
+    # The whole real clock enum; the network method lives in a separate
+    # extension and is excluded.
+    clock = block(clock, "enum TimeGuard {")
     features = sources["LimitFeatures.swift"]
     limit_prefix = features[features.index("enum LimitFeatures {"):features.index("    /// Enabling a previously disabled group gate")]
     limits = limit_prefix + block(features, "static func wakeUp(") + r'''

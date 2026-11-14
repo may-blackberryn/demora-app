@@ -49,8 +49,9 @@
 				<string>1C8F.1</string>
 			</array>
 		</dict>
-		<!-- systemUptime in TimeGuard, to measure elapsed time for delay
-		     countdowns. Boot time is never sent off device. -->
+		<!-- systemUptime and clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) in
+		     TimeGuard, to measure elapsed time for delay countdowns. Boot
+		     time is never sent off device. -->
 		<dict>
 			<key>NSPrivacyAccessedAPIType</key>
 			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
