@@ -1148,6 +1148,9 @@ enum ChangeEngine {
         let key = conflictKey(action)
         guard !state.pending.contains(where: { conflictKey($0.action) == key })
         else { return nil }
+        // F2: a new contact is saved now, flagged, in this same write; only
+        // their approvals wait for the change to land.
+        guard let action = ContactActivation.prepareQueue(action, state: &state) else { return nil }
         let direction = classify(action, state: state)
         let delay = state.delayPolicy.delay(for: direction)
         // A loosening wait starts at the later of the guarded and wall clocks,
@@ -1212,12 +1215,49 @@ enum ChangeEngine {
     }
 
     static func cancel(_ change: PendingChange) {
-        var state = SharedStore.loadState()
-        state.pending.removeAll { $0.id == change.id }
-        SharedStore.save(state)
+        // F2: cancelling a new-style add also drops its waiting contact, in
+        // the same coordinated write.
+        _ = SharedStore.coordinateStateMutation { () -> Bool in
+            var state = SharedStore.loadState()
+            ContactActivation.cancel(change.id, state: &state)
+            return SharedStore.save(state)
+        }
         DeviceActivityCenter().stopMonitoring([DeviceActivityName(change.activityName)])
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: [change.id.uuidString])
+    }
+
+    /// F2: remove a contact whose add hasn't landed (or whose invite was
+    /// declined). Stricter, so immediate: the contact and its pending add go
+    /// in one coordinated write, then the add's activity and notification.
+    /// An active contact is untouched; its removal waits as usual.
+    @discardableResult
+    static func removeAwaitingContact(id: UUID) -> Bool {
+        let dropped = SharedStore.coordinateStateMutation { () -> [PendingChange]? in
+            var state = SharedStore.loadState()
+            guard !SharedStore.stateRecoveryNeeded,
+                  let removed = ContactActivation.dropAwaiting(contactID: id, state: &state),
+                  SharedStore.save(state) else { return nil }
+            return removed
+        }
+        guard let removed = dropped ?? nil else { return false }
+        if !SharedStore.simulating, !removed.isEmpty {
+            DeviceActivityCenter().stopMonitoring(removed.map { DeviceActivityName($0.activityName) })
+        }
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: removed.map(\.id.uuidString))
+        return true
+    }
+
+    /// F2 housekeeping: migrate adds queued before F2 and prune flagged
+    /// contacts whose add is gone (ContactActivation.repair), one write.
+    static func repairContactActivation() {
+        _ = SharedStore.coordinateStateMutation { () -> Bool in
+            var state = SharedStore.loadState()
+            guard !SharedStore.stateRecoveryNeeded,
+                  ContactActivation.repair(&state) else { return false }
+            return SharedStore.save(state)
+        }
     }
 
     /// Apply `change` immediately — caller must have passed an override gate first.
@@ -1455,6 +1495,7 @@ enum ChangeEngine {
     static func housekeeping() {
         rolloverIfNewDay()
         observeTimeZone()
+        repairContactActivation()
         applyDueChanges()
         rescheduleApplyActivities(state: SharedStore.loadState())
         pruneExpiredSessions()
@@ -1603,7 +1644,7 @@ enum ChangeEngine {
         case .removeDayNightGroup(let id):
             state.dayNightGroups.removeAll { $0.id == id }
         case .addContact(let contact):
-            state.overrides.contacts.append(contact)
+            ContactActivation.apply(contact, to: &state)
         case .removeContact(let id):
             state.overrides.contacts.removeAll { $0.id == id }
         case .setContactPermissions(let id, let allowed):

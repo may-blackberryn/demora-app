@@ -12,7 +12,8 @@ This is not protected-file, cross-process locking, WidgetKit or device delivery 
 F1 (docs/fixes-2.0-batch.md, 2026-11-13) rewrote TimeGuard on a sleep-inclusive
 clock, so it is no longer pinned to BASELINE here; Tests/TimeGuardHarness.py
 covers it. This harness still runs the real display/now() bodies with one
-elapsed clock (no sleep modeled).
+elapsed clock (no sleep modeled). F2 (same batch) edits the contact queue,
+apply, cancel and housekeeping lines; F2_EDITS undoes exactly those.
 """
 from pathlib import Path
 import difflib
@@ -119,9 +120,91 @@ F1_EDITS = [
 ]
 
 
+# F2 (docs/fixes-2.0-batch.md, approved 2026-11-13): trusted contacts are
+# saved when their add is queued and activated when it lands. Exact engine
+# edits and the two new entry points; each (current, before) pair occurs once.
+# The pure steps live in Shared/ContactActivation.swift, outside this guard.
+F2_EDITS = [
+    ("""        else { return nil }
+        // F2: a new contact is saved now, flagged, in this same write; only
+        // their approvals wait for the change to land.
+        guard let action = ContactActivation.prepareQueue(action, state: &state) else { return nil }
+        let direction = classify(action, state: state)
+""", """        else { return nil }
+        let direction = classify(action, state: state)
+"""),
+    ("""    static func cancel(_ change: PendingChange) {
+        // F2: cancelling a new-style add also drops its waiting contact, in
+        // the same coordinated write.
+        _ = SharedStore.coordinateStateMutation { () -> Bool in
+            var state = SharedStore.loadState()
+            ContactActivation.cancel(change.id, state: &state)
+            return SharedStore.save(state)
+        }
+""", """    static func cancel(_ change: PendingChange) {
+        var state = SharedStore.loadState()
+        state.pending.removeAll { $0.id == change.id }
+        SharedStore.save(state)
+"""),
+    ("""    /// F2: remove a contact whose add hasn't landed (or whose invite was
+    /// declined). Stricter, so immediate: the contact and its pending add go
+    /// in one coordinated write, then the add's activity and notification.
+    /// An active contact is untouched; its removal waits as usual.
+    @discardableResult
+    static func removeAwaitingContact(id: UUID) -> Bool {
+        let dropped = SharedStore.coordinateStateMutation { () -> [PendingChange]? in
+            var state = SharedStore.loadState()
+            guard !SharedStore.stateRecoveryNeeded,
+                  let removed = ContactActivation.dropAwaiting(contactID: id, state: &state),
+                  SharedStore.save(state) else { return nil }
+            return removed
+        }
+        guard let removed = dropped ?? nil else { return false }
+        if !SharedStore.simulating, !removed.isEmpty {
+            DeviceActivityCenter().stopMonitoring(removed.map { DeviceActivityName($0.activityName) })
+        }
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: removed.map(\\.id.uuidString))
+        return true
+    }
+
+    /// F2 housekeeping: migrate adds queued before F2 and prune flagged
+    /// contacts whose add is gone (ContactActivation.repair), one write.
+    static func repairContactActivation() {
+        _ = SharedStore.coordinateStateMutation { () -> Bool in
+            var state = SharedStore.loadState()
+            guard !SharedStore.stateRecoveryNeeded,
+                  ContactActivation.repair(&state) else { return false }
+            return SharedStore.save(state)
+        }
+    }
+
+""", """"""),
+    ("""        observeTimeZone()
+        repairContactActivation()
+        applyDueChanges()
+""", """        observeTimeZone()
+        applyDueChanges()
+"""),
+    ("""        case .addContact(let contact):
+            ContactActivation.apply(contact, to: &state)
+""", """        case .addContact(let contact):
+            state.overrides.contacts.append(contact)
+""")
+]
+
+
+def without_f2_changes(text):
+    for current, before in F2_EDITS:
+        assert text.count(current) == 1, "F2 engine edit changed:\n" + current
+        text = text.replace(current, before)
+    return text
+
+
 def without_f1_changes(text):
     """Undo exactly the approved F1 edits and remove its two new declarations;
     GlobalWake and the display readers must still match byte for byte."""
+    text = without_f2_changes(text)
     for current, baseline in F1_EDITS:
         assert text.count(current) == 1, "F1 engine edit changed:\n" + current
         text = text.replace(current, baseline)

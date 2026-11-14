@@ -66,7 +66,7 @@ def source_checks(app, baseline):
     # This covers setup/reset, migration, retry recovery, authorization, timing,
     # accounting access, and the actual asynchronous delayed-apply path.
     exceptions = {"queue", "refreshAfterExternalApply", "restoreFromReplay", "debugFullReset",
-                  "refreshIncomingInviteCount", "tick"}
+                  "refreshIncomingInviteCount", "tick", "resolveInvite"}
     unchanged = 0
     for match in re.finditer(r"^    (?:(?:private|nonisolated|static) )*func (\w+)\(",
                              baseline, re.MULTILINE):
@@ -129,6 +129,23 @@ def source_checks(app, baseline):
         "            self.enforcementDegraded = SharedStore.enforcementDegraded\n", 1)
     assert expected_tick != original_tick, "baseline tick changed"
     equal_source(block(app, "func tick()"), expected_tick, "tick (F1 forced re-sync only)")
+
+    # F2 (docs/fixes-2.0-batch.md): a decline before the contact's add lands
+    # drops the contact and its pending add together. Only this branch is new.
+    original_resolve = block(baseline, "private func resolveInvite(")
+    expected_resolve = original_resolve.replace(
+        "        } else {\n            // declined (was pending), or permission revoked (was active).\n",
+        "        } else if s.overrides.contacts[idx].awaitingActivation {\n"
+        "            // F2: declined before their add landed: drop the contact and the\n"
+        "            // pending add together.\n"
+        "            ContactsRelay.recordSentRequest(code: code, name: name, status: \"denied\")\n"
+        "            removeAwaitingContact(id: contactID)\n"
+        "            if wasActive { notifyContactRevoked(name: name) }\n"
+        "            return\n"
+        "        } else {\n            // declined (was pending), or permission revoked (was active).\n", 1)
+    assert expected_resolve != original_resolve, "baseline resolveInvite changed"
+    equal_source(block(app, "private func resolveInvite("), expected_resolve,
+                 "resolveInvite (F2 decline-before-activation branch only)")
 
     original_init = block(baseline, "    init()")
     expected_init = original_init.replace("        isReplay = SharedStore.isReplaying\n", "", 1)

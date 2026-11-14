@@ -1257,7 +1257,9 @@ SharedStore.blockedIDs = []; DeviceActivityCenter.running = [LatchConstants.dail
 print("Real queue budget checks passed: \(queueBudgetCases) cases; 20/21, save failure, recovery, stale occupancy, delay-safe repairs and pending conjunction")
 '''
 
-source = (infrastructure + models + phrases + budget + precedence + admission + feature_logic
+# F2: the engine's queue/apply/cancel call the pure contact-activation steps.
+contact_activation = (ROOT / "Shared/ContactActivation.swift").read_text()
+source = (infrastructure + models + contact_activation + phrases + budget + precedence + admission + feature_logic
           + block(engine, "func mathStrictnessScore(")
           + "\nenum ChangeEngine {\n" + block(engine, "enum ContactApprovalSource")
           + "\n" + methods + driver + monitor_checks + "\n}\n" + checks + delay_checks

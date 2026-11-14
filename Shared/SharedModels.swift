@@ -141,6 +141,11 @@ struct TrustedContact: Codable, Equatable, Identifiable {
     /// pending-change permissions they already had; extra time is opt-in.
     var allowed: Set<OverrideCapability> = Set(
         OverrideCapability.allCases.filter { $0 != .extraTime })
+    /// True from the moment a delayed `.addContact` is queued until it lands
+    /// (F2). The contact is saved at once so pairing and verification can
+    /// start, but their approvals don't count until the wait ends. Decodes as
+    /// false, so contacts saved before this field existed stay active.
+    var awaitingActivation: Bool = false
 
     enum Kind: Codable, Equatable {
         case email(String)
@@ -150,13 +155,15 @@ struct TrustedContact: Codable, Equatable, Identifiable {
     init(id: UUID = UUID(), name: String, kind: Kind,
          accepted: Bool = true, inviteId: String = "",
          allowed: Set<OverrideCapability> = Set(
-             OverrideCapability.allCases.filter { $0 != .extraTime })) {
+             OverrideCapability.allCases.filter { $0 != .extraTime }),
+         awaitingActivation: Bool = false) {
         self.id = id
         self.name = name
         self.kind = kind
         self.accepted = accepted
         self.inviteId = inviteId
         self.allowed = allowed
+        self.awaitingActivation = awaitingActivation
     }
 
     /// Tolerant decode: contacts saved before these fields existed keep working.
@@ -170,6 +177,7 @@ struct TrustedContact: Codable, Equatable, Identifiable {
         avatar = try c.decodeIfPresent(ContactAvatar.self, forKey: .avatar)
         allowed = try c.decodeIfPresent(Set<OverrideCapability>.self, forKey: .allowed)
             ?? Set(OverrideCapability.allCases.filter { $0 != .extraTime })
+        awaitingActivation = try c.decodeIfPresent(Bool.self, forKey: .awaitingActivation) ?? false
     }
 
     var detail: String {
@@ -191,8 +199,8 @@ struct TrustedContact: Codable, Equatable, Identifiable {
     /// (Contacts saved before `accepted` existed decode as true, so they
     /// stay active.)
     var isPending: Bool { !accepted }
-    /// Usable as an approver right now.
-    var isUsable: Bool { accepted }
+    /// Usable as an approver right now: accepted, and their add has landed.
+    var isUsable: Bool { accepted && !awaitingActivation }
 }
 
 struct OverridesConfig: Codable, Equatable {
@@ -233,7 +241,8 @@ struct OverridesConfig: Codable, Equatable {
               Set(phrasePolicies.map(\.id)).count == phrasePolicies.count else { return false }
         var destinations = Set<String>()
         for contact in contacts {
-            guard !contact.accepted, UUID(uuidString: contact.inviteId) != nil,
+            guard !contact.accepted, !contact.awaitingActivation,
+                  UUID(uuidString: contact.inviteId) != nil,
                   !contact.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             else { return false }
             let destination: String

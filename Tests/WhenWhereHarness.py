@@ -11,6 +11,11 @@ Only opaque Screen Time tokens, storage, the guarded clock, file coordination
 and monitor/notification XPC are substituted. No production branch is
 rewritten.
 
+F2 (docs/fixes-2.0-batch.md) reuses the same real queue/apply/due path for
+trusted contacts: an add saves the contact at once, flagged, and only its
+approvals wait. Its scenarios also compile the real cancel, immediate removal
+before activation and the housekeeping repair (Shared/ContactActivation.swift).
+
 A second binary compiles the SharedModels.swift of the commit before this
 step (b188742) and decodes blobs written by the new code, to show what an
 older build can still read.
@@ -248,6 +253,10 @@ methods = "\n".join(block(engine, signature) for signature in [
     "static func applyDueChanges(",
     "private static func preserveDailyMonitoringForWakeEdit(",
     "private static func dailyMonitorFingerprint(",
+    # F2: contact activation entry points.
+    "static func cancel(_ change: PendingChange)",
+    "static func removeAwaitingContact(",
+    "static func repairContactActivation(",
 ])
 
 admission = "\nenum MonitorRegistration {\n" + "\n".join(
@@ -1167,6 +1176,154 @@ scenario("review fix: block 'until' on the repeated fall hour") {
     expect(early.session.endsAt == date("2026-10-25T02:30:00+02:00"), "first occurrence not used")
 }
 
+// F2 (docs/fixes-2.0-batch.md): pair a contact now, approve after the wait.
+func f2Contact(_ name: String = "Kim", code: String = "KIM004", accepted: Bool = false) -> TrustedContact {
+    TrustedContact(name: name, kind: .latchUser(code: code), accepted: accepted,
+                   inviteId: UUID().uuidString)
+}
+func f2Bytes(_ state: LatchState) -> Data {
+    let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
+    return try! encoder.encode(state)
+}
+scenario("F2: queuing an add saves the flagged contact in the same write") {
+    SharedStore.state = engineState()
+    let kim = f2Contact()
+    let saves = SharedStore.saves
+    guard let change = ChangeEngine.queue(.addContact(kim)) else { expect(false, "add refused"); return }
+    expect(SharedStore.saves - saves == 1, "contact and pending add are one save")
+    let saved = SharedStore.state.overrides.contacts
+    expect(saved.count == 1 && saved[0].id == kim.id && saved[0].awaitingActivation && !saved[0].accepted
+           && saved[0].inviteId == kim.inviteId, "flagged contact saved at once, still to accept")
+    guard case .addContact(let copy) = change.action else { expect(false, "not an add"); return }
+    expect(copy.awaitingActivation && copy.id == kim.id, "the action's copy carries the flag")
+    expect(SharedStore.state.pending.map(\.id) == [change.id], "one pending add")
+    expect(change.direction == .lenient && change.appliesAt == change.createdAt.addingTimeInterval(900),
+           "the add still waits the looser delay")
+    expect(!saved[0].isUsable, "flagged contact is not usable")
+    // Accepted while waiting: still not usable, so it can't skip its own wait.
+    SharedStore.state.overrides.contacts[0].accepted = true
+    SharedStore.state.overrides.contactsEnabled = true
+    expect(!SharedStore.state.overrides.contacts[0].isUsable, "accepted but waiting: not usable")
+    expect(!SharedStore.state.overrides.anyEnabled, "a waiting contact is not a way to skip")
+    expect(!ChangeEngine.hasOverride(for: [change], state: SharedStore.state),
+           "a waiting contact can never approve its own activation")
+    // Owner answer Q2: an existing contact allowed Trusted contacts may skip it.
+    var withAlex = SharedStore.state
+    withAlex.overrides.contacts.append(f2Contact("Alex", code: "ALEX01", accepted: true))
+    expect(ChangeEngine.hasOverride(for: [change], state: withAlex), "existing contact may skip (Q2)")
+    let beforeRefusals = f2Bytes(SharedStore.state)
+    expect(ChangeEngine.queue(.setContactPermissions(id: kim.id, allowed: [.limitChanges])) == nil,
+           "no permission edits while waiting")
+    expect(ChangeEngine.queue(.addContact(kim)) == nil, "no second add for the same person")
+    expect(f2Bytes(SharedStore.state) == beforeRefusals, "refusals changed state")
+    TimeGuard.offset = 899; ChangeEngine.applyDueChanges()
+    expect(SharedStore.state.overrides.contacts[0].awaitingActivation, "activated early")
+    TimeGuard.offset = 901; ChangeEngine.applyDueChanges(); TimeGuard.offset = 0
+    let active = SharedStore.state.overrides.contacts
+    expect(active.count == 1 && !active[0].awaitingActivation && active[0].accepted
+           && active[0].allowed == kim.allowed && active[0].name == "Kim" && active[0].inviteId == kim.inviteId,
+           "apply clears only the flag")
+    expect(active[0].isUsable && SharedStore.state.pending.isEmpty, "usable once the wait ends")
+}
+scenario("F2: Apply now (marked due by the skip gate) clears the flag the same way") {
+    SharedStore.state = engineState()
+    let kim = f2Contact(accepted: true)
+    guard let change = ChangeEngine.queue(.addContact(kim)) else { expect(false, "add refused"); return }
+    SharedStore.state.overrides.contacts[0].avatar = ContactAvatar()
+    let avatar = SharedStore.state.overrides.contacts[0].avatar
+    SharedStore.state.pending[0].appliesAt = .distantPast
+    ChangeEngine.applyDueChanges()
+    let active = SharedStore.state.overrides.contacts
+    expect(active.count == 1 && !active[0].awaitingActivation && active[0].accepted
+           && active[0].avatar == avatar, "Apply now keeps acceptance and avatar")
+    expect(!SharedStore.state.pending.contains { $0.id == change.id }, "add consumed")
+}
+scenario("F2: removing before activation drops both; a late apply never brings it back") {
+    SharedStore.state = engineState()
+    let kim = f2Contact()
+    guard let change = ChangeEngine.queue(.addContact(kim)) else { expect(false, "add refused"); return }
+    let stalePending = SharedStore.state.pending
+    let saves = SharedStore.saves
+    expect(ChangeEngine.removeAwaitingContact(id: kim.id), "removed")
+    expect(SharedStore.saves - saves == 1, "one write")
+    expect(SharedStore.state.overrides.contacts.isEmpty && SharedStore.state.pending.isEmpty,
+           "contact and pending add dropped together")
+    expect(DeviceActivityCenter.stopped.contains(change.activityName), "the add's activity stopped")
+    expect(!ChangeEngine.removeAwaitingContact(id: kim.id), "nothing left to remove")
+    var state = SharedStore.state
+    ChangeEngine.applyForTest(change.action, state: &state)
+    expect(state.overrides.contacts.isEmpty, "a stale flagged copy resurrected the contact")
+    SharedStore.state.pending = stalePending
+    TimeGuard.offset = 901; ChangeEngine.applyDueChanges(); TimeGuard.offset = 0
+    expect(SharedStore.state.overrides.contacts.isEmpty && SharedStore.state.pending.isEmpty,
+           "a due add after removal resurrected the contact")
+    // An active contact is not dropped this way: its removal waits as usual.
+    SharedStore.state = engineState()
+    let lee = f2Contact("Lee", code: "LEE003", accepted: true)
+    SharedStore.state.overrides.contacts = [lee]
+    expect(!ChangeEngine.removeAwaitingContact(id: lee.id) && SharedStore.state.overrides.contacts == [lee],
+           "active contact kept")
+}
+scenario("F2: cancelling the add in Changes drops the waiting contact too") {
+    SharedStore.state = engineState()
+    let lee = f2Contact("Lee", code: "LEE003", accepted: true)
+    SharedStore.state.overrides.contacts = [lee]
+    let kim = f2Contact()
+    guard let add = ChangeEngine.queue(.addContact(kim)) else { expect(false, "add refused"); return }
+    guard let narrow = ChangeEngine.queue(.setContactPermissions(id: lee.id, allowed: [.limitChanges])) else {
+        expect(false, "narrowing refused"); return
+    }
+    ChangeEngine.cancel(narrow)
+    expect(SharedStore.state.overrides.contacts.map(\.id) == [lee.id, kim.id], "other cancels keep contacts")
+    ChangeEngine.cancel(add)
+    expect(SharedStore.state.overrides.contacts == [lee] && SharedStore.state.pending.isEmpty,
+           "cancel dropped add and waiting contact")
+    expect(DeviceActivityCenter.stopped.contains(add.activityName), "cancel stopped the activity")
+}
+scenario("F2: migration flags adds queued before F2 without moving any deadline") {
+    var state = engineState()
+    let legacy = f2Contact()
+    let now = TimeGuard.now()
+    let old = PendingChange(createdAt: now.addingTimeInterval(-100), appliesAt: now.addingTimeInterval(800),
+                            direction: .lenient, summary: "Add contact: Kim", action: .addContact(legacy))
+    state.pending = [old]
+    SharedStore.state = state
+    ChangeEngine.repairContactActivation()
+    let migrated = SharedStore.state
+    expect(migrated.overrides.contacts.count == 1 && migrated.overrides.contacts[0].awaitingActivation
+           && migrated.overrides.contacts[0].id == legacy.id, "contact saved, flagged")
+    let change = migrated.pending[0]
+    expect(change.id == old.id && change.createdAt == old.createdAt && change.appliesAt == old.appliesAt
+           && change.direction == old.direction && change.summary == old.summary,
+           "id, createdAt, appliesAt, direction and summary unchanged")
+    guard case .addContact(let copy) = change.action else { expect(false, "not an add"); return }
+    var unflagged = copy; unflagged.awaitingActivation = false
+    expect(copy.awaitingActivation && unflagged == legacy, "only the copy's flag changed")
+    let saves = SharedStore.saves, bytes = f2Bytes(SharedStore.state)
+    ChangeEngine.repairContactActivation()
+    expect(SharedStore.saves == saves && f2Bytes(SharedStore.state) == bytes, "second run: no write, no change")
+    TimeGuard.offset = 799; ChangeEngine.applyDueChanges()
+    expect(SharedStore.state.overrides.contacts[0].awaitingActivation, "migrated contact active early")
+    TimeGuard.offset = 801; ChangeEngine.applyDueChanges(); TimeGuard.offset = 0
+    expect(SharedStore.state.overrides.contacts.count == 1 && SharedStore.state.overrides.contacts[0].isUsable == false
+           && !SharedStore.state.overrides.contacts[0].awaitingActivation, "lands on the old deadline, still to accept")
+    // An unmigrated legacy copy keeps today's append.
+    var raw = engineState()
+    ChangeEngine.applyForTest(.addContact(legacy), state: &raw)
+    expect(raw.overrides.contacts == [legacy], "legacy append")
+    // Fail closed: a flagged contact whose add is gone is pruned, never activated.
+    var orphan = engineState()
+    var flagged = legacy; flagged.awaitingActivation = true
+    orphan.overrides.contacts = [flagged, f2Contact("Lee", code: "LEE003", accepted: true)]
+    SharedStore.state = orphan
+    ChangeEngine.repairContactActivation()
+    expect(SharedStore.state.overrides.contacts.map(\.name) == ["Lee"], "orphaned flagged contact pruned")
+    SharedStore.stateRecoveryNeeded = true
+    SharedStore.state = orphan
+    ChangeEngine.repairContactActivation()
+    expect(f2Bytes(SharedStore.state) == f2Bytes(orphan), "never writes over an unreadable setup")
+}
+
 for failure in failures { print("FAIL: \(failure)") }
 print("When & where checks: \(scenarios) scenarios, \(assertions) assertions, \(failures.count) failures")
 print("Real models/evaluator/plan, budget, queue/apply/due dispatcher; stubbed storage, clock, monitors and tokens")
@@ -1216,7 +1373,9 @@ func tr(_ key: String) -> String { key }
 enum TimeGuard { static func now() -> Date { Date() } }
 '''
 
-source = (infrastructure + models + phrases + budget + precedence + admission
+# F2: the engine's queue/apply/cancel call the pure contact-activation steps.
+contact_activation = (ROOT / "Shared/ContactActivation.swift").read_text()
+source = (infrastructure + models + contact_activation + phrases + budget + precedence + admission
           + block(engine, "func mathStrictnessScore(")
           + "\nenum ChangeEngine {\n" + methods + driver + "\n}\n" + checks)
 old_source = old_infrastructure + portable(baseline_models) + subprocess.run(

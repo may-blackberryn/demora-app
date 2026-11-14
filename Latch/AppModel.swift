@@ -251,6 +251,13 @@ final class AppModel: ObservableObject {
             guard !s.overrides.contacts[idx].accepted else { return } // already active
             s.overrides.contacts[idx].accepted = true
             ContactsRelay.recordSentRequest(code: code, name: name, status: "accepted")
+        } else if s.overrides.contacts[idx].awaitingActivation {
+            // F2: declined before their add landed: drop the contact and the
+            // pending add together.
+            ContactsRelay.recordSentRequest(code: code, name: name, status: "denied")
+            removeAwaitingContact(id: contactID)
+            if wasActive { notifyContactRevoked(name: name) }
+            return
         } else {
             // declined (was pending), or permission revoked (was active).
             s.overrides.contacts.remove(at: idx)
@@ -469,6 +476,17 @@ final class AppModel: ObservableObject {
     func cancel(_ change: PendingChange) {
         ChangeEngine.cancel(change)
         ContactsRelay.clearSent(change.id.uuidString)
+        state = SharedStore.loadState()
+    }
+
+    /// F2: remove a contact whose add hasn't landed yet. Stricter, so it
+    /// happens now: the contact and its pending add go in one write. The
+    /// CloudKit invite is cleaned up by the next invite reconcile.
+    func removeAwaitingContact(id: UUID) {
+        let add = ContactActivation.pendingAdd(for: id, in: SharedStore.loadState().pending)
+        if ChangeEngine.removeAwaitingContact(id: id), let add {
+            ContactsRelay.clearSent(add.id.uuidString)
+        }
         state = SharedStore.loadState()
     }
 
