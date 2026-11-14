@@ -334,7 +334,7 @@ print(f'Today source guards passed: receipt confirm/hold and adoption; {len(keys
 # --- Changes ledger (§5.9) --------------------------------------------------
 ledger = (ROOT / 'Latch/ChangesLedgerView.swift').read_text()
 row = section(ledger, 'struct ChangeRow: View {', '\n}\n')
-assert 'CountdownText(to: change.appliesAt)' in row
+assert 'CountdownText(to: change.appliesAt, guardedNow: clocks.guarded,' in row, 'one clock reading per card (F1)'
 assert 'Text(timerInterval:' not in row and 'TimeGuard.now()' not in row, \
     'projection must live only in CountdownProjection'
 assert row.index('if change.isDue') < row.index('CountdownText(to: change.appliesAt'), \
@@ -350,7 +350,10 @@ for callback in ('onCancel', 'onOverride', 'onDebugApply', 'onOpenRequest'):
     assert f'Button(action: {callback})' in row or f'Button(tr("Skip delay (dev)"), action: {callback})' in row \
         or f'action: {callback}' in row, ('normal row action retained', callback)
 ledger_view = section(ledger, 'struct ChangesLedgerView: View {', '\nprivate struct LedgerSection')
-assert 'LedgerGrouping.groups(model.state.pending, date: \\.appliesAt,' in ledger_view, 'stored appliesAt'
+# F1: groups use the same system-clock landing the rows show, from one reading.
+assert 'let clocks = ClockReading.current()' in ledger_view
+assert 'date: { clocks.landing(of: $0.appliesAt) },' in ledger_view and 'now: clocks.system, calendar: calendar)' in ledger_view
+assert 'row(change, clocks: clocks)' in ledger_view and 'clocks: clocks\n' in ledger_view, 'rows share the header reading'
 assert 'selection.formIntersection(pendingIDs)' in ledger_view
 assert 'if pendingIDs.isEmpty { selecting = false }' in ledger_view
 assert 'confirmBulkCancel = true' in ledger_view and '.confirmationDialog(tr("Cancel these changes?")' in ledger_view, \

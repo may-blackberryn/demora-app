@@ -165,6 +165,13 @@ enum CountdownProjection {
             remaining(until: deadline, guardedNow: guardedNow))
     }
 
+    /// Where a guarded deadline lands on the system clock: the moment the
+    /// countdown reaches zero. Equal to `deadline` when the clocks agree. Not
+    /// clamped, so a due change keeps a time in the past.
+    static func landing(of deadline: Date, guardedNow: Date, systemNow: Date) -> Date {
+        systemNow.addingTimeInterval(deadline.timeIntervalSince(guardedNow))
+    }
+
     /// Share of the wait already elapsed, 0...1. A zero-length or inverted
     /// wait counts as complete.
     static func progress(from start: Date, until deadline: Date,
@@ -172,6 +179,22 @@ enum CountdownProjection {
         let total = deadline.timeIntervalSince(start)
         guard total > 0 else { return 1 }
         return min(1, max(0, guardedNow.timeIntervalSince(start) / total))
+    }
+}
+
+/// One reading of both clocks, so everything a card shows about a deadline
+/// (landing time, group, countdown) agrees even when the clocks don't.
+struct ClockReading {
+    let guarded: Date
+    let system: Date
+
+    static func current() -> ClockReading {
+        ClockReading(guarded: TimeGuard.now(), system: Date.now)
+    }
+
+    /// `deadline` (on the guarded clock) as a system-clock time.
+    func landing(of deadline: Date) -> Date {
+        CountdownProjection.landing(of: deadline, guardedNow: guarded, systemNow: system)
     }
 }
 

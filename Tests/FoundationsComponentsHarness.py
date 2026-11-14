@@ -54,7 +54,21 @@ check(CountdownProjection.progress(from: start, until: end, guardedNow: system.a
 check(CountdownProjection.progress(from: start, until: end, guardedNow: system.addingTimeInterval(500)) == 1, "after end")
 check(CountdownProjection.progress(from: start, until: start, guardedNow: system) == 1, "zero-length wait complete")
 check(CountdownProjection.progress(from: end, until: start, guardedNow: system) == 1, "inverted wait complete")
-print("Countdown projection passed: clock skew, 1 s floor, progress clamps")
+// F1: the landing time is where the countdown reaches zero on the system clock.
+for skew in [-2263.0, 0.0, 3600.0] {
+    let guarded = system.addingTimeInterval(skew)
+    for wait in [104.0, 7200.0] {
+        let deadline = guarded.addingTimeInterval(wait)
+        let landing = CountdownProjection.landing(of: deadline, guardedNow: guarded, systemNow: system)
+        check(landing == system.addingTimeInterval(wait), "landing is system now + guarded remaining, skew \(skew)")
+        check(CountdownProjection.interval(until: deadline, guardedNow: guarded, systemNow: system).upperBound == landing,
+              "countdown ends at the landing time")
+    }
+    check(CountdownProjection.landing(of: guarded.addingTimeInterval(-60), guardedNow: guarded, systemNow: system)
+          == system.addingTimeInterval(-60), "due change keeps a past landing")
+}
+check(CountdownProjection.landing(of: system, guardedNow: system, systemNow: system) == system, "clocks agree: stored time")
+print("Countdown projection passed: clock skew, 1 s floor, progress clamps, landing")
 '''
 with tempfile.TemporaryDirectory(prefix='demora-foundations-') as directory:
     source = Path(directory) / 'Countdown.swift'
@@ -65,12 +79,20 @@ with tempfile.TemporaryDirectory(prefix='demora-foundations-') as directory:
 
 # 2. The real ledger row uses the same countdown, with due taking precedence.
 row = section(ledger, 'struct ChangeRow: View {', '\n}\n')
-assert 'CountdownText(to: change.appliesAt)' in row
+# F1: countdown, landing time and (in the ledger) group read one ClockReading.
+assert 'var clocks = ClockReading.current()' in row
+assert 'CountdownText(to: change.appliesAt, guardedNow: clocks.guarded,\n' in row \
+    and 'systemNow: clocks.system)' in row
+assert 'TodayTimeText.short(clocks.landing(of: change.appliesAt), now: clocks.system,' in row
+assert 'Date()' not in row, 'no second system-clock read on the card'
 assert 'Text(timerInterval:' not in row and 'TimeGuard.now()' not in row, \
     'projection must live only in CountdownProjection'
 assert row.index('if change.isDue') < row.index('CountdownText(to: change.appliesAt'), 'due → countdown order kept'
 assert 'frozenRemaining' not in row and 'TutorialCountdownText' not in row
 assert 'Text(tr("Applying…"))' in row
+reading = section(components, 'struct ClockReading {', '\n}\n')
+assert 'ClockReading(guarded: TimeGuard.now(), system: Date.now)' in reading, 'one read of each clock'
+assert 'CountdownProjection.landing(of: deadline, guardedNow: guarded, systemNow: system)' in reading
 countdown = section(components, 'struct CountdownText: View {', '\n}\n')
 assert 'guardedNow: Date = TimeGuard.now(), systemNow: Date = Date.now' in countdown
 assert 'countsDown: true' in countdown

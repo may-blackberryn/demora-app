@@ -45,6 +45,8 @@ struct ChangeRow: View {
     let onOverride: () -> Void
     let onDebugApply: () -> Void
     var onOpenRequest: () -> Void = {}
+    /// Read once per redraw; the ledger passes its own so headers agree.
+    var clocks = ClockReading.current()
 
     var body: some View {
         VStack(alignment: .leading, spacing: DemoraSpace.xs) {
@@ -57,7 +59,8 @@ struct ChangeRow: View {
                 } else {
                     // CountdownText projects the TimeGuard deadline onto the
                     // system clock (see CountdownProjection).
-                    CountdownText(to: change.appliesAt)
+                    CountdownText(to: change.appliesAt, guardedNow: clocks.guarded,
+                                  systemNow: clocks.system)
                         .foregroundStyle(Ink.ink)
                         .layoutPriority(1)
                 }
@@ -105,12 +108,12 @@ struct ChangeRow: View {
         .paperCard()
     }
 
-    /// The stored landing time, "Tue 14:32" (the countdown above is the
-    /// tamper-aware projection).
+    /// When the countdown above reaches zero, on the system clock,
+    /// "Tue 14:32". Same reading as the countdown, so the two always agree.
     private var landing: some View {
         var calendar = Calendar.current
         calendar.locale = locale
-        return Text(TodayTimeText.short(change.appliesAt, now: Date(),
+        return Text(TodayTimeText.short(clocks.landing(of: change.appliesAt), now: clocks.system,
                                         calendar: calendar, locale: locale))
             .demoraType(.meta)
             .foregroundStyle(Ink.inkSoft)
@@ -165,8 +168,11 @@ struct ChangesLedgerView: View {
     var body: some View {
         var calendar = Calendar.current
         calendar.locale = locale
-        let groups = LedgerGrouping.groups(model.state.pending, date: \.appliesAt,
-                                           now: Date(), calendar: calendar)
+        // Group by the same system-clock landing each row shows.
+        let clocks = ClockReading.current()
+        let groups = LedgerGrouping.groups(model.state.pending,
+                                           date: { clocks.landing(of: $0.appliesAt) },
+                                           now: clocks.system, calendar: calendar)
             .map { LedgerSection(bucket: $0.bucket, changes: $0.items) }
         return ScrollViewReader { proxy in ScrollView {
             VStack(alignment: .leading, spacing: DemoraSpace.sectionGap) {
@@ -183,7 +189,7 @@ struct ChangesLedgerView: View {
                     VStack(alignment: .leading, spacing: DemoraSpace.cardGap) {
                         SectionHeader(title(group.bucket))
                         ForEach(group.changes) { change in
-                            row(change)
+                            row(change, clocks: clocks)
                                 .id(change.id)
                                 .transition(reduceMotion ? .opacity
                                     : .move(edge: .trailing).combined(with: .opacity))
@@ -265,7 +271,7 @@ struct ChangesLedgerView: View {
         }
     }
 
-    @ViewBuilder private func row(_ change: PendingChange) -> some View {
+    @ViewBuilder private func row(_ change: PendingChange, clocks: ClockReading) -> some View {
         if selecting {
             Button {
                 if selection.contains(change.id) {
@@ -303,7 +309,8 @@ struct ChangesLedgerView: View {
                 onCancel: { model.cancel(change) },
                 onOverride: { skipTarget = .changes([change]) },
                 onDebugApply: { model.applyNow(change) },
-                onOpenRequest: { openRequest(waiting) }
+                onOpenRequest: { openRequest(waiting) },
+                clocks: clocks
             )
         }
     }
