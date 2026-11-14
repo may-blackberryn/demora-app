@@ -1756,7 +1756,31 @@ behaviour is still unproven until the owner locks the phone across a deadline.
 | `tick()`: if wall and guarded differ by > 5 min, `syncWithNetwork(force: true)` **before** housekeeping; at most once a minute per process | Due changes apply right after the correction. The floor stops a lasting disagreement (clock really changed, offline) from sending a request every 30 s tick | Yes |
 | Changes card: one `ClockReading` (guarded + system, read once) drives the countdown, the landing time (`CountdownProjection.landing`: system now + guarded remaining) and, in the ledger, the group headers | All three agree even when the clocks don't; equal to the stored time when they agree. Today's "Changing soon" rows read their own | Yes |
 | Harnesses updated to the new intent: `WakeWidgetReadOnlyHarness` (TimeGuard no longer pinned to `da9b6d3`; the F1 engine edits are undone exactly before comparing), `LegacyReplayRecoveryHarness` (tick's exact F1 lines), `MonitoringBudgetHarness` (compiles `ApplyActivityTiming`), `FoundationsComponentsHarness` and `TodayPresentationHarness` (card clock) | Brief | Yes |
-| Privacy manifest comment names `clock_gettime_nsec_np`; category (System boot time, 35F9.1) unchanged | Same purpose | Yes — the widget extension reads the clock too and has no manifest (true before F1); worth a follow-up |
+| Privacy manifest comment names `clock_gettime_nsec_np`; category (System boot time, 35F9.1) unchanged | Same purpose. Correction (review): the widget extension does **not** compile `TimeGuard` (`#if !WIDGET_EXTENSION` in `DemoraWidgetSnapshot.swift`); 35F9.1 is declared in the Latch, LatchMonitor and LatchShieldUI manifests, which are the targets that use it. No follow-up needed | Yes |
+
+## F1 review fixes
+A fresh reviewer read `92436de..bec93b0`. Confirmed fine: the
+`CLOCK_MONOTONIC_RAW` choice, migration direction, tamper rejection, the
+monitoring budget, the card's `ClockReading` and the manifests. Each fix has a
+regression check in `Tests/TimeGuardHarness.py` (now 181 assertions plus an
+unmocked boot-identity read on macOS) unless noted.
+
+| # | Finding | Fix | Regression check |
+| --- | --- | --- | --- |
+| 1 (high) | A change queued while the guarded clock is behind (inherited 2.0 lag while offline, a missed reboot, a corrupt record) got a shorter real wait once a sync corrected the clock | **Loosening** changes start at `TimeGuard.looseningStart` = later of guarded and wall clocks (`createdAt` and `appliesAt` both). A clock set forward only delays the user's own loosening. **Stricter** changes keep the guarded clock, so setting the clock forward can't postpone tightening. The zero-delay free-time check-in start keeps the guarded clock so it stays immediately due. Also a **boot identity** in the anchor from `sysctlbyname("kern.bootsessionuuid")`: read size-then-value, length-checked, must parse as a UUID, else nil; nil on either side falls back to the elapsed-clock check | Missed reboot a day behind → queue 24 h → sync: real wait ≥ 24 h (the old guarded base leaves < 10 min). Clock set back/forward/agree cases. Another boot is a reboot even when both clocks caught up; unreadable or malformed identity falls back without crashing. **Needs a device check**: whether iOS lets the app read `kern.bootsessionuuid` (if not, nil and the old check; nothing breaks). Not extended to wake taps and extra-time waits, which also start on the guarded clock (they're protected byte-for-byte by the widget harness): flagged for the main session |
+| 2 (med) | Clocks were sampled before the anchor was read; an `adopt()` in between looked like negative elapsed time → false reboot → forged wall clock adopted | `now()` reads the anchor (and marker) first, then samples. `derive` allows 1 s of apparent backwards time (clamped to 0); with the same boot identity it is never a reboot | Forged +2 h, anchor 0.5 s "newer" than the sample: guarded time kept, with and without identity; beyond 1 s without identity is still a reboot |
+| 3 (low–med) | An undecodable v2 record fell back to months-old 2.0 keys | 2.0 keys are read only on the very first migration: no record **and** no `latch.time.anchor.migrated` marker (set with the first v2 anchor or sync). An existing but unreadable record, or a record removed later, re-anchors on the wall clock like a reboot | Five bad records → wall (not 2.0's clock); record removed after migration → wall |
+| 4 (low) | An apply one-shot that started within 1 s before the landing counted as healthy and was never replaced | `needsReschedule` treats any registration whose start ≤ wall now as spent; the monitor's apply callback already re-runs the reschedule | Starts at −0.5 s and 0 s are replaced |
+| 5 (low) | Clocks hovering at the 300 s tolerance re-registered on every flip | Late slack raised 2 → 10 min (2× tolerance). Early registrations are still always replaced; a late one still gets its 5-min-before warning callback | 20 flips at ±301 s → exactly 1 re-registration, never left firing before due |
+| 6 (low) | Raw-clock drift after 50+ days without a sync can break "never shorter" | Documented honestly in `TimeGuard.swift`'s residual gaps: past the tolerance a fast raw clock runs ahead and a wait can end early by the drift (minutes); needs weeks offline without opening the app (it syncs hourly when opened online). No code change | — (documentation) |
+| 7 (low) | Forced sync sent a HEAD every 60 s offline or with a deliberately changed clock, and housekeeping waited up to 10 s on it | `ForcedTimeSyncPolicy` (pure, in `TimeGuard.swift`): only past the tolerance; a claimed attempt blocks a second tick; failures back off 1 → 2 → 4 → 8 → 15 min; after a sync that worked but still disagrees, not again until the offset moves > 1 min. `tick()` runs housekeeping **first** (never waits on the network, as before F1), then the forced sync, then housekeeping again only if the anchor changed | Policy table (backoff, settled offset, offset moved, agree clears); source guard on tick order. The pre-F1 hourly check still compares wall time, so a clock set far forward or back still syncs each tick as before F1: unchanged, noted |
+| 8 (low) | The "ready" notification wasn't moved after a sync | Re-added (same identifier, so it replaces the pending one) whenever the apply activity is re-registered. If it had already been delivered early, a second, correct one follows | Source guard |
+| — | Decision-log note about the widget manifest was wrong | Corrected above | — |
+
+Harness stubs gained the real `looseningStart` rule (`ScheduleSelectionHarness`,
+`WhenWhereHarness`); `WakeWidgetReadOnlyHarness` lists the queue edit among the
+exact F1 edits and fakes an unreadable boot identity; `LegacyReplayRecoveryHarness`
+pins the new tick lines.
 
 ### F1: what to try on the phone
 1. Install over the current dev build, open the app online once: an anchor
@@ -1771,3 +1795,7 @@ behaviour is still unproven until the owner locks the phone across a deadline.
 4. Settings → set the clock 2 h ahead (automatic off), offline: nothing
    becomes due early; online, the app re-syncs within a minute.
 5. Reboot with a change pending: it still lands on time.
+6. (Review fixes) Airplane mode with the clock 2 h ahead: the app keeps
+   working and doesn't stall; back online it re-syncs once, not every
+   minute. A looser change queued while offline after a reboot still waits
+   its full delay once back online.

@@ -73,6 +73,8 @@ func tr(_ key: String) -> String { key }
 enum TimeGuard {
     static var date = Date(timeIntervalSince1970: 2_000_000_000)
     static func now() -> Date { date }
+    /// Same rule as the real TimeGuard.looseningStart (F1 review).
+    static func looseningStart(guarded: Date = now(), wall: Date = Date()) -> Date { max(guarded, wall) }
 }
 enum Latency {
     static var cleanup: (() -> Void)?

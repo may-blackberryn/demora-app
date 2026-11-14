@@ -103,19 +103,30 @@ def source_checks(app, baseline):
     equal_source(block(app, "func refreshIncomingInviteCount()"), expected_invites,
                  "refreshIncomingInviteCount (keep last count on failure only)")
 
-    # F1 (docs/fixes-2.0-batch.md): a forced time re-sync before housekeeping
-    # when the clocks disagree. Only these lines may be added to tick().
+    # F1 (docs/fixes-2.0-batch.md) + its review fixes: a forced time sync
+    # after housekeeping when the clocks disagree, then housekeeping again.
+    # Only these lines may be added to tick().
     original_tick = block(baseline, "func tick()")
     expected_tick = original_tick.replace(
-        "        Task { [weak self] in\n            await ChangeEngine.housekeepingOffMain()\n",
+        "        Task { [weak self] in\n",
         "        // Wall and guarded clocks more than 5 min apart: the guarded clock may\n"
         "        // be behind real time (an anchor migrated from 2.0's sleep-blind\n"
-        "        // clock), which would hold due changes back. Re-sync first, skipping\n"
-        "        // the hourly limit, so they apply now (F1).\n"
-        "        let forceSync = TimeGuard.clocksDisagree(guarded: TimeGuard.now()) && allowForcedTimeSync()\n"
-        "        Task { [weak self] in\n"
-        "            if forceSync { await TimeGuard.syncWithNetwork(force: true) }\n"
-        "            await ChangeEngine.housekeepingOffMain()\n", 1)
+        "        // clock), which would hold due changes back. Force a sync past the\n"
+        "        // hourly limit, then apply what became due (F1). Housekeeping never\n"
+        "        // waits on the network.\n"
+        "        let forceSync = forcedTimeSync.begin(offset: Date().timeIntervalSince(TimeGuard.now()),\n"
+        "                                             uptime: ProcessInfo.processInfo.systemUptime)\n"
+        "        Task { [weak self] in\n", 1).replace(
+        "            await TimeGuard.syncWithNetwork()\n",
+        "            guard forceSync else { await TimeGuard.syncWithNetwork(); return }\n"
+        "            let synced = await TimeGuard.syncWithNetwork(force: true)\n"
+        "            self.forcedTimeSync.finish(succeeded: synced,\n"
+        "                                       offsetAfter: Date().timeIntervalSince(TimeGuard.now()),\n"
+        "                                       uptime: ProcessInfo.processInfo.systemUptime)\n"
+        "            guard synced else { return }\n"
+        "            await ChangeEngine.housekeepingOffMain()\n"
+        "            self.state = SharedStore.loadState()\n"
+        "            self.enforcementDegraded = SharedStore.enforcementDegraded\n", 1)
     assert expected_tick != original_tick, "baseline tick changed"
     equal_source(block(app, "func tick()"), expected_tick, "tick (F1 forced re-sync only)")
 

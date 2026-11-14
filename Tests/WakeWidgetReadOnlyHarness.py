@@ -77,6 +77,22 @@ def without_when_where_insertions(old, restored):
 # F1 (docs/fixes-2.0-batch.md, approved 2026-11-13): exact engine edits for
 # the wall-time apply schedule. Each (current, baseline) pair must occur once.
 F1_EDITS = [
+    ("""        let delay = state.delayPolicy.delay(for: direction)
+        // A loosening wait starts at the later of the guarded and wall clocks,
+        // so a guarded clock that is behind (corrected by a later sync) can't
+        // make it end early; stricter changes keep the guarded clock, so a
+        // clock set forward can't postpone tightening (F1 review).
+        let guardedNow = TimeGuard.now()
+        let start = direction == .lenient ? TimeGuard.looseningStart(guarded: guardedNow) : guardedNow
+        let change = PendingChange(
+            createdAt: start,
+            appliesAt: start.addingTimeInterval(delay),
+""", """        let delay = state.delayPolicy.delay(for: direction)
+        let now = TimeGuard.now()
+        let change = PendingChange(
+            createdAt: now,
+            appliesAt: now.addingTimeInterval(delay),
+"""),
     ("""        applyDueChanges()
         rescheduleApplyActivities(state: SharedStore.loadState())
         pruneExpiredSessions()
@@ -174,6 +190,7 @@ def inputs(source):
     return (source.replace("Date()", "TestClock.wall")
             .replace("ProcessInfo.processInfo.systemUptime", "TestClock.uptime")
             .replace("clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW)", "TestClock.continuousNanos")
+            .replace("sysctlbyname(", "testSysctlbyname(")
             .replace("FileManager.default.containerURL(", "TestContainer.containerURL(")
             .replace("NSFileCoordinator()", "TestCoordinator()"))
 
@@ -187,6 +204,9 @@ struct FamilyActivitySelection: Codable, Equatable {
     var webDomainTokens: Set<String> = []
 }
 func tr(_ value: String) -> String { value }
+/// Boot identity unreadable here: TimeGuard uses its elapsed-clock check.
+func testSysctlbyname(_ name: String, _ old: UnsafeMutableRawPointer?, _ size: UnsafeMutablePointer<Int>?,
+                      _ new: UnsafeMutableRawPointer?, _ newSize: Int) -> Int32 { -1 }
 enum TestClock {
     static var wall = Date(timeIntervalSince1970: 1_800_000_000); static var uptime: TimeInterval = 10000
     /// No sleep modeled here: the continuous clock equals uptime.
@@ -529,7 +549,7 @@ for reason in ["missing", "reboot", "invalid anchor"] {
     }
     let writes = SharedStore.defaults.writes
     check(TimeGuard.now() == monday, "original fallback clock not wall")
-    check(SharedStore.defaults.writes == writes + 1, "original anchoring positive control failed")
+    check(SharedStore.defaults.writes == writes + 2, "original anchoring positive control failed (record + marker)")
 }
 // Positive controls: prove the fakes detect original repair behavior.
 try reset(monday)

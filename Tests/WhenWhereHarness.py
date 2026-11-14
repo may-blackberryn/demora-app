@@ -120,6 +120,8 @@ enum TimeGuard {
     /// agree unless a scenario says otherwise.
     static var offset: TimeInterval = 0
     static func now() -> Date { Date().addingTimeInterval(offset) }
+    /// Same rule as the real TimeGuard.looseningStart (F1 review).
+    static func looseningStart(guarded: Date = now(), wall: Date = Date()) -> Date { max(guarded, wall) }
 }
 struct TestDefaults {
     static var values: [String: Any] = [:]

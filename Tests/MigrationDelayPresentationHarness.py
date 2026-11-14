@@ -81,7 +81,10 @@ class MigrationDelayPresentationTests(unittest.TestCase):
                         "private static func isValidLimit(")
         self.assertIn("let direction = classify(action, state: state)", queue)
         self.assertIn("let delay = state.delayPolicy.delay(for: direction)", queue)
-        self.assertIn("appliesAt: now.addingTimeInterval(delay)", queue)
+        # F1 review: the current policy's delay from one start (the later
+        # clock for loosening, the guarded clock for stricter changes).
+        self.assertIn("appliesAt: start.addingTimeInterval(delay)", queue)
+        self.assertIn("TimeGuard.looseningStart(guarded: guardedNow) : guardedNow", queue)
         self.assertIn("state.pending.append(change)", queue)
         self.assertNotIn(".appliesAt =", queue)
         self.assertNotIn("state.delayPolicy =", queue)
