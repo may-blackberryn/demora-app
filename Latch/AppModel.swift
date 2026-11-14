@@ -482,12 +482,17 @@ final class AppModel: ObservableObject {
     /// F2: remove a contact whose add hasn't landed yet. Stricter, so it
     /// happens now: the contact and its pending add go in one write. The
     /// CloudKit invite is cleaned up by the next invite reconcile.
-    func removeAwaitingContact(id: UUID) {
+    /// Returns false when nothing was removed, e.g. the add landed while the
+    /// page was open: the caller must then offer the normal removal.
+    @discardableResult
+    func removeAwaitingContact(id: UUID) -> Bool {
         let add = ContactActivation.pendingAdd(for: id, in: SharedStore.loadState().pending)
-        if ChangeEngine.removeAwaitingContact(id: id), let add {
+        let removed = ChangeEngine.removeAwaitingContact(id: id)
+        if removed, let add {
             ContactsRelay.clearSent(add.id.uuidString)
         }
         state = SharedStore.loadState()
+        return removed
     }
 
     func applyNow(_ change: PendingChange) {

@@ -496,6 +496,7 @@ struct SkipWayDetailView: View {
     @State private var receipt: ChangeReceiptRequest?
     @State private var closeAfterReceipt = false
     @State private var confirmImmediateRemoval = false
+    @State private var removalNotice: String?
 
     /// F2: saved and paired, but their add hasn't landed yet.
     private var awaitingContact: TrustedContact? {
@@ -626,6 +627,7 @@ struct SkipWayDetailView: View {
         let text: String
         if case .addContact = change.action, let contact = awaitingContact {
             text = SkipWayRowText.canApproveFrom(change.appliesAt, accepted: contact.accepted,
+                                                 paused: !model.state.overrides.contactsEnabled,
                                                  now: Date(), locale: locale)
         } else if let edit = SkipWayList.queuedEdit(of: id, kind: kind, pending: model.state.pending),
            edit.change.id == change.id {
@@ -708,13 +710,34 @@ struct SkipWayDetailView: View {
         .paperCard(padding: 0)
         .confirmationDialog(tr("Remove this contact now?"), isPresented: $confirmImmediateRemoval,
                             titleVisibility: .visible) {
-            Button(tr("Remove"), role: .destructive) {
-                model.removeAwaitingContact(id: id)
-                dismiss()
-            }
+            Button(tr("Remove"), role: .destructive) { removeNow() }
             Button(tr("Cancel"), role: .cancel) {}
         } message: {
             Text(tr("They can't approve yet, so this happens right away and cancels the waiting add."))
+        }
+        if let removalNotice {
+            Text(removalNotice)
+                .demoraType(.meta).foregroundStyle(Ink.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// F2 review: never close as if removed when nothing was. If the add
+    /// landed meanwhile they can approve now, so the normal removal receipt
+    /// (stricter, through the wait) opens instead.
+    private func removeNow() {
+        let removed = model.removeAwaitingContact(id: id)
+        let after = model.state.overrides.contacts.first { $0.id == id }
+        switch ImmediateRemoval.outcome(removed: removed, contactAfter: after) {
+        case .removed, .gone:
+            dismiss()
+        case .offerReceipt:
+            removalNotice = tr("Their wait has ended, so removing them now waits like any other removal.")
+            closeAfterReceipt = true
+            // After the dialog has gone, so the receipt sheet can present.
+            DispatchQueue.main.async { receipt = ChangeReceiptRequest(action: removal) }
+        case .retry:
+            removalNotice = tr("Couldn't remove this contact. Try again.")
         }
     }
 

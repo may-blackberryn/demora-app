@@ -1249,15 +1249,24 @@ enum ChangeEngine {
         return true
     }
 
-    /// F2 housekeeping: migrate adds queued before F2 and prune flagged
-    /// contacts whose add is gone (ContactActivation.repair), one write.
+    /// F2 housekeeping: migrate adds queued before F2, drop flagged adds
+    /// whose contact is gone and prune flagged contacts whose add is gone
+    /// (ContactActivation.repair), one write; then stop the dropped adds'
+    /// activities and notifications outside the lock.
     static func repairContactActivation() {
-        _ = SharedStore.coordinateStateMutation { () -> Bool in
+        let dropped = SharedStore.coordinateStateMutation { () -> [PendingChange] in
             var state = SharedStore.loadState()
             guard !SharedStore.stateRecoveryNeeded,
-                  ContactActivation.repair(&state) else { return false }
-            return SharedStore.save(state)
+                  let removed = ContactActivation.repair(&state),
+                  SharedStore.save(state) else { return [] }
+            return removed
+        } ?? []
+        guard !dropped.isEmpty else { return }
+        if !SharedStore.simulating {
+            DeviceActivityCenter().stopMonitoring(dropped.map { DeviceActivityName($0.activityName) })
         }
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: dropped.map(\.id.uuidString))
     }
 
     /// Apply `change` immediately — caller must have passed an override gate first.
@@ -1312,7 +1321,11 @@ enum ChangeEngine {
 
     /// Merge every due pending change into the active state, then
     /// reconfigure monitoring/shields. Safe to call from app or extensions.
-    static func applyDueChanges() {
+    static func applyDueChanges(attempt: Int = 0) {
+        // F2 review: the snapshot is read outside coordination (the work
+        // below touches Screen Time XPC, which must not run under the state
+        // lock), so the save is a compare-and-save against these bytes.
+        let snapshot = SharedStore.stateBlob()
         var state = SharedStore.loadState()
         let due = state.pending.filter(\.isDue).sorted { $0.appliesAt < $1.appliesAt }
         guard !due.isEmpty else { return }
@@ -1449,7 +1462,18 @@ enum ChangeEngine {
         // Persist the approved configuration before touching Apple's XPC
         // service. If Screen Time stalls or the process is interrupted, the
         // rule is still committed and the next maintenance pass can self-heal.
-        guard SharedStore.save(state) else { return }
+        // F2 review: another write since the snapshot (an immediate contact
+        // removal, a cancel, a decline) must not be undone. Treat it like an
+        // interrupted pass and re-read, at most twice more; the steps above
+        // are already safe to repeat.
+        let committed = SharedStore.coordinateStateMutation { () -> Bool in
+            guard SharedStore.stateBlob() == snapshot else { return false }
+            return SharedStore.save(state)
+        } ?? false
+        guard committed else {
+            if attempt < 2, SharedStore.stateBlob() != snapshot { applyDueChanges(attempt: attempt + 1) }
+            return
+        }
 
         if !dailyLimitsChanged, due.contains(where: {
             switch $0.action {

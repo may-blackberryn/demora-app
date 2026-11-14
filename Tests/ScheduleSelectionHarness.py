@@ -119,6 +119,8 @@ enum SharedStore {
         if rejectSave { return false }
         state = value; return true
     }
+    /// The saved bytes, for applyDueChanges' compare-and-save (F2 review).
+    static func stateBlob() -> Data? { try? JSONEncoder().encode(state) }
     static func mutateBlockedLimitIDs(_ edit: (inout Set<UUID>) -> Void) {
         usageResetCalls += 1; edit(&blockedIDs)
     }

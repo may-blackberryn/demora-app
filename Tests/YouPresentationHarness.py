@@ -11,7 +11,8 @@ summary for all 2⁷ capability sets; skip eligibility against the real
 sheet opens; the add plan (Y3); and the receipt direction and commit for
 override actions (add, narrow, widen, remove, pause, resume). F2: a contact
 saved while their add waits (Shared/ContactActivation.swift) shows "Can
-approve from …", opens its detail page, and is never an eligible way.
+approve from …" (or "Paused · …"), opens its detail page, and is never an
+eligible way; a failed immediate removal never closes the page as removed.
 Presentation only: no iOS build, simulator, saved state, relay or secret.
 """
 from pathlib import Path
@@ -261,16 +262,29 @@ var waitingConfig = config
 waitingConfig.contacts = [alex, kimWaiting, leeWaiting]
 list = SkipWayList.make(overrides: waitingConfig, pending: [addKimWaiting, addLeeWaiting], unavailableCodes: [])
 check(list.rows(of: .contact).map(\.name) == ["Alex", "Kim", "Lee W"], "a waiting contact is one saved row, not a second addition")
-check(list.rows[1].chip == .canApproveFrom(addKimWaiting.appliesAt, accepted: false)
+check(list.rows[1].chip == .canApproveFrom(addKimWaiting.appliesAt, accepted: false, paused: false)
       && list.rows[1].pendingChangeID == addKimWaiting.id && !list.rows[1].isPendingAddition,
       "not accepted yet: waiting to accept · can approve from, opens the detail page")
-check(list.rows[2].chip == .canApproveFrom(addLeeWaiting.appliesAt, accepted: true), "accepted: can approve from")
+check(list.rows[2].chip == .canApproveFrom(addLeeWaiting.appliesAt, accepted: true, paused: false), "accepted: can approve from")
 check(list.rows[0].chip == nil, "an active contact is unchanged")
 var waitingPaused = waitingConfig
 waitingPaused.contactsEnabled = false
 list = SkipWayList.make(overrides: waitingPaused, pending: [addKimWaiting, addLeeWaiting], unavailableCodes: ["KIM004"])
-check(list.rows[1].chip == .canApproveFrom(addKimWaiting.appliesAt, accepted: false),
-      "the activation time outranks unreachable and paused")
+check(list.rows[1].chip == .canApproveFrom(addKimWaiting.appliesAt, accepted: false, paused: true)
+      && list.rows[2].chip == .canApproveFrom(addLeeWaiting.appliesAt, accepted: true, paused: true),
+      "review fix 4: paused says so, with the activation time; outranks unreachable")
+// Review fix 2: a flagged copy whose contact is gone is not an addition row.
+list = SkipWayList.make(overrides: config, pending: [addKimWaiting], unavailableCodes: [])
+check(!list.rows.contains { $0.id == kimWaiting.id }, "a ghost flagged add is not shown as an addition")
+list = SkipWayList.make(overrides: config, pending: [addKim], unavailableCodes: [])
+check(list.rows.contains { $0.id == newContact.id && $0.isPendingAddition }, "a legacy unflagged add still is")
+// Review fix 1: never close as if removed when nothing was.
+var landed = kimWaiting; landed.awaitingActivation = false
+check(ImmediateRemoval.outcome(removed: true, contactAfter: nil) == .removed, "removed: close")
+check(ImmediateRemoval.outcome(removed: false, contactAfter: nil) == .gone, "already gone: close")
+check(ImmediateRemoval.outcome(removed: false, contactAfter: landed) == .offerReceipt,
+      "add landed meanwhile: offer the normal removal receipt")
+check(ImmediateRemoval.outcome(removed: false, contactAfter: kimWaiting) == .retry, "write failed: stay and retry")
 check(SkipWayList.pendingChange(for: kimWaiting.id, kind: .contact, pending: [narrow, addKimWaiting])?.id
       == addKimWaiting.id, "the detail page's strip is the activation")
 check(SkipWayList.queuedEdit(of: kimWaiting.id, kind: .contact, pending: [addKimWaiting]) == nil,

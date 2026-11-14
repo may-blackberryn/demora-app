@@ -15,7 +15,10 @@ Shared/ContactActivation.swift (unchanged) on macOS and checks:
 - source guards that the engine, AppModel and the detail page call these
   steps in the right places (Tests/WhenWhereHarness.py runs the real
   queue/apply/cancel/remove/repair bodies with stubbed storage);
-- every new or changed F2 string in all seven translation tables.
+- every new or changed F2 string in all seven translation tables;
+- the F2 review fixes: a failed immediate removal never closes the page as
+  removed, no delayed removal for a waiting contact, ghost adds dropped,
+  applyDueChanges' compare-and-save, and "Paused · can approve from …".
 
 No iOS build, saved state, relay, CloudKit or email. A two-phone pairing test
 is still needed on devices.
@@ -184,7 +187,7 @@ let sam = contact("Sam", code: "SAM002")
 let old2 = change(.addContact(sam), in: 1)
 migrating.pending = [old1, other, old2]
 migrating.overrides.contacts = [lee]
-check(ContactActivation.repair(&migrating), "migration changed state")
+check(ContactActivation.repair(&migrating) == [], "migration changed state, dropped nothing")
 check(migrating.overrides.contacts == [lee, flaggedKim, flag(sam)], "both legacy adds saved, flagged")
 check(migrating.pending.map(\.id) == [old1.id, other.id, old2.id]
       && migrating.pending.map(\.createdAt) == [old1.createdAt, other.createdAt, old2.createdAt]
@@ -193,16 +196,33 @@ check(migrating.pending.map(\.id) == [old1.id, other.id, old2.id]
       "id, createdAt, appliesAt and summary unchanged")
 check(bytes(migrating.pending[0].action) == bytes(ChangeAction.addContact(flaggedKim)), "copy rewritten with the flag")
 let once = bytes(migrating)
-check(!ContactActivation.repair(&migrating) && bytes(migrating) == once, "idempotent: second run changes nothing")
+check(ContactActivation.repair(&migrating) == nil && bytes(migrating) == once, "idempotent: second run changes nothing")
 var orphans = migrating
 orphans.pending.removeAll { $0.id == old2.id }
-check(ContactActivation.repair(&orphans) && orphans.overrides.contacts == [lee, flaggedKim],
+check(ContactActivation.repair(&orphans) == [] && orphans.overrides.contacts == [lee, flaggedKim],
       "a flagged contact whose add is gone is pruned, never activated")
 var savedAlready = LatchState()
 savedAlready.overrides.contacts = [lee]
 savedAlready.pending = [change(.addContact(lee))]
-check(!ContactActivation.repair(&savedAlready) && savedAlready.overrides.contacts == [lee],
+check(ContactActivation.repair(&savedAlready) == nil && savedAlready.overrides.contacts == [lee],
       "a legacy add whose id is already saved is left alone")
+
+// Review fix 2: no delayed removal for a waiting contact; ghost adds dropped.
+var waitingOnly = LatchState()
+_ = ContactActivation.prepareQueue(.addContact(kim), state: &waitingOnly)
+check(ContactActivation.prepareQueue(.removeContact(id: kim.id), state: &waitingOnly) == nil,
+      "a waiting contact's removal is immediate, never queued")
+var leeOnly = LatchState(); leeOnly.overrides.contacts = [lee]
+check(ContactActivation.prepareQueue(.removeContact(id: lee.id), state: &leeOnly).map { bytes($0) }
+      == bytes(ChangeAction.removeContact(id: lee.id)), "an active contact's removal still queues")
+var ghost = LatchState()
+let ghostAdd = change(.addContact(flaggedKim))
+ghost.pending = [ghostAdd, other]
+ghost.overrides.contacts = [lee]
+check(ContactActivation.repair(&ghost)?.map(\.id) == [ghostAdd.id]
+      && ghost.pending.map(\.id) == [other.id] && ghost.overrides.contacts == [lee],
+      "a flagged add whose contact is gone is dropped and returned for cleanup")
+check(ContactActivation.repair(&ghost) == nil, "ghost repair is idempotent")
 
 print("Contact activation passed: \(checks) checks — model, queue, apply, remove/decline/cancel, migration")
 '''
@@ -239,8 +259,20 @@ remove = declaration(engine, 'static func removeAwaitingContact(')
 assert 'ContactActivation.dropAwaiting(contactID: id, state: &state)' in remove
 assert remove.index('coordinateStateMutation') < remove.index('DeviceActivityCenter()'), 'XPC after the write'
 repair = declaration(engine, 'static func repairContactActivation(')
-assert 'coordinateStateMutation' in repair and 'ContactActivation.repair(&state)' in repair \
+assert 'coordinateStateMutation' in repair and 'let removed = ContactActivation.repair(&state)' in repair \
     and '!SharedStore.stateRecoveryNeeded' in repair
+assert repair.index('coordinateStateMutation') < repair.index('DeviceActivityCenter()'), 'ghost cleanup XPC after the write'
+# Review fix 3: applyDueChanges saves only if the bytes it read are unchanged.
+due = declaration(engine, 'static func applyDueChanges(attempt: Int = 0)')
+assert due.index('let snapshot = SharedStore.stateBlob()') < due.index('var state = SharedStore.loadState()')
+commit = due[due.index('let committed = SharedStore.coordinateStateMutation'):]
+assert commit.index('guard SharedStore.stateBlob() == snapshot else { return false }') \
+    < commit.index('return SharedStore.save(state)') < commit.index('DeviceActivityCenter()'), \
+    'compare-and-save under coordination, XPC after it'
+assert 'if attempt < 2, SharedStore.stateBlob() != snapshot { applyDueChanges(attempt: attempt + 1) }' in due, \
+    'bounded re-read only when another writer changed the state'
+assert due.count('SharedStore.save(') == 1, 'one save'
+assert 'static func stateBlob() -> Data?' in (ROOT / 'Shared/SharedStore.swift').read_text()
 housekeeping = declaration(engine, 'static func housekeeping(')
 assert housekeeping.index('repairContactActivation()') < housekeeping.index('applyDueChanges()')
 for name in ('private static func contactPermitted(', 'static func hasOverride('):
@@ -249,7 +281,8 @@ for name in ('private static func contactPermitted(', 'static func hasOverride('
 app = (ROOT / 'Latch/AppModel.swift').read_text()
 resolve = declaration(app, 'private func resolveInvite(')
 assert 'awaitingActivation' in resolve and 'removeAwaitingContact(id: contactID)' in resolve, 'decline drops the add'
-model_remove = declaration(app, 'func removeAwaitingContact(id: UUID)')
+model_remove = declaration(app, 'func removeAwaitingContact(id: UUID) -> Bool')
+assert 'return removed' in model_remove
 assert 'ChangeEngine.removeAwaitingContact(id: id)' in model_remove
 invites = declaration(app, 'private func checkContactInvites()')
 assert 'if contact.isPending {' in invites, 'invites go out while waiting (accepted is still false)'
@@ -261,10 +294,16 @@ detail = editors.split('struct SkipWayDetailView: View {', 1)[1].split('\n/// Av
 assert 'SkipPermissionsChecklist(allowed: $allowed, disabled: pending != nil)' in detail, \
     'the activation is the pending change: permission edits disabled'
 assert '.disabled(pending != nil && awaitingContact == nil)' in detail, 'remove stays available while waiting'
-assert 'model.removeAwaitingContact(id: id)' in detail and 'SkipWayRowText.canApproveFrom(' in detail
+assert 'let removed = model.removeAwaitingContact(id: id)' in detail and 'SkipWayRowText.canApproveFrom(' in detail
+remove_now = declaration(detail, 'private func removeNow()')
+assert 'ImmediateRemoval.outcome(removed: removed, contactAfter: after)' in remove_now
+assert remove_now.count('dismiss()') == 1 and 'case .removed, .gone:\n            dismiss()' in remove_now, \
+    'review fix 1: the page closes only when nothing is left to remove'
+assert 'receipt = ChangeReceiptRequest(action: removal)' in remove_now, 'landed meanwhile: the normal receipt'
+assert 'paused: !model.state.overrides.contactsEnabled' in detail, 'review fix 4: strip says paused'
 assert "SectionHeaderLink(title: tr(\"See in Changes\"))" in detail, 'the strip links to Changes'
 views = (ROOT / 'Latch/SkipWayViews.swift').read_text()
-assert 'case .canApproveFrom(let date, let accepted):' in views
+assert 'case .canApproveFrom(let date, let accepted, let paused):' in views and 'paused ? .neutral : .upcoming' in views
 contacts = (ROOT / 'Latch/ContactsOverrideViews.swift').read_text()
 for gone in ('Adding a contact goes through a delay', 'must also accept before they can approve'):
     for path in list((ROOT / 'Latch').glob('*.swift')) + [ROOT / 'Shared/SharedModels.swift']:
@@ -279,6 +318,9 @@ F2_STRINGS = [
     "They can't approve yet, so this happens right away and cancels the waiting add.",
     '%@ gets the request now and can approve once they accept and the wait ends.',
     'They get a request to accept right away. They can approve for you once the wait ends.',
+    'Paused · can approve from %@',
+    'Their wait has ended, so removing them now waits like any other removal.',
+    "Couldn't remove this contact. Try again.",
 ]
 latch = '\n'.join(p.read_text() for p in (ROOT / 'Latch').glob('*.swift'))
 for key in F2_STRINGS:

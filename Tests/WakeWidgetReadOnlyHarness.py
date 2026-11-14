@@ -123,6 +123,7 @@ F1_EDITS = [
 # F2 (docs/fixes-2.0-batch.md, approved 2026-11-13): trusted contacts are
 # saved when their add is queued and activated when it lands. Exact engine
 # edits and the two new entry points; each (current, before) pair occurs once.
+# F2 review: applyDueChanges' save became a compare-and-save (fix 3).
 # The pure steps live in Shared/ContactActivation.swift, outside this guard.
 F2_EDITS = [
     ("""        else { return nil }
@@ -168,18 +169,52 @@ F2_EDITS = [
         return true
     }
 
-    /// F2 housekeeping: migrate adds queued before F2 and prune flagged
-    /// contacts whose add is gone (ContactActivation.repair), one write.
+    /// F2 housekeeping: migrate adds queued before F2, drop flagged adds
+    /// whose contact is gone and prune flagged contacts whose add is gone
+    /// (ContactActivation.repair), one write; then stop the dropped adds'
+    /// activities and notifications outside the lock.
     static func repairContactActivation() {
-        _ = SharedStore.coordinateStateMutation { () -> Bool in
+        let dropped = SharedStore.coordinateStateMutation { () -> [PendingChange] in
             var state = SharedStore.loadState()
             guard !SharedStore.stateRecoveryNeeded,
-                  ContactActivation.repair(&state) else { return false }
-            return SharedStore.save(state)
+                  let removed = ContactActivation.repair(&state),
+                  SharedStore.save(state) else { return [] }
+            return removed
+        } ?? []
+        guard !dropped.isEmpty else { return }
+        if !SharedStore.simulating {
+            DeviceActivityCenter().stopMonitoring(dropped.map { DeviceActivityName($0.activityName) })
         }
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: dropped.map(\\.id.uuidString))
     }
 
 """, """"""),
+    ("""    static func applyDueChanges(attempt: Int = 0) {
+        // F2 review: the snapshot is read outside coordination (the work
+        // below touches Screen Time XPC, which must not run under the state
+        // lock), so the save is a compare-and-save against these bytes.
+        let snapshot = SharedStore.stateBlob()
+        var state = SharedStore.loadState()
+""", """    static func applyDueChanges() {
+        var state = SharedStore.loadState()
+"""),
+    ("""        // rule is still committed and the next maintenance pass can self-heal.
+        // F2 review: another write since the snapshot (an immediate contact
+        // removal, a cancel, a decline) must not be undone. Treat it like an
+        // interrupted pass and re-read, at most twice more; the steps above
+        // are already safe to repeat.
+        let committed = SharedStore.coordinateStateMutation { () -> Bool in
+            guard SharedStore.stateBlob() == snapshot else { return false }
+            return SharedStore.save(state)
+        } ?? false
+        guard committed else {
+            if attempt < 2, SharedStore.stateBlob() != snapshot { applyDueChanges(attempt: attempt + 1) }
+            return
+        }
+""", """        // rule is still committed and the next maintenance pass can self-heal.
+        guard SharedStore.save(state) else { return }
+"""),
     ("""        observeTimeZone()
         repairContactActivation()
         applyDueChanges()

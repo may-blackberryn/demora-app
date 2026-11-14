@@ -197,6 +197,13 @@ struct SharedStore {
         set { defaults.set(newValue, forKey: "latch.enforcementDegraded") }
     }
 
+    /// The saved state's raw bytes, for compare-and-save by a writer that
+    /// must read its snapshot outside coordination (applyDueChanges, F2
+    /// review). Read-only; nil before the first save.
+    static func stateBlob() -> Data? {
+        defaults.data(forKey: LatchConstants.stateKey)
+    }
+
     static func loadState() -> LatchState {
         guard let data = defaults.data(forKey: LatchConstants.stateKey) else {
             return LatchState()   // genuinely fresh install

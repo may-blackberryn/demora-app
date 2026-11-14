@@ -154,6 +154,8 @@ enum SharedStore {
         guard !stateRecoveryNeeded else { return false }
         saves += 1; state = value; return true
     }
+    /// The saved bytes, for applyDueChanges' compare-and-save (F2 review).
+    static func stateBlob() -> Data? { try? JSONEncoder().encode(state) }
     static func mutateBlockedLimitIDs(_ edit: (inout Set<UUID>) -> Void) { edit(&blockedIDs) }
     static func loadBlockedLimitIDs() -> Set<UUID> { blockedIDs }
     static func dayKey(for date: Date) -> String {
@@ -185,7 +187,12 @@ struct UNUserNotificationCenter {
 }
 enum GlobalWake { static func clearTap() {} }
 enum LimitFeatures {
-    static func prepareNewWakeGates(_ ids: Set<UUID>) -> Bool { true }
+    /// F2 review: a test hook for a write that lands between
+    /// applyDueChanges' snapshot and its save (this runs in between).
+    static var duringApply: (() -> Void)?
+    static func prepareNewWakeGates(_ ids: Set<UUID>) -> Bool {
+        let hook = duringApply; duringApply = nil; hook?(); return true
+    }
     static func resetEditedLimits(_ ids: Set<UUID>) {}
     static func clearSplitMarkers(for ids: Set<UUID>) {}
     static func reconfigureSplitMonitoring(state: LatchState) {}
@@ -1322,6 +1329,57 @@ scenario("F2: migration flags adds queued before F2 without moving any deadline"
     SharedStore.state = orphan
     ChangeEngine.repairContactActivation()
     expect(f2Bytes(SharedStore.state) == f2Bytes(orphan), "never writes over an unreadable setup")
+}
+
+// F2 review fixes ------------------------------------------------------------
+scenario("F2 review 2: a waiting contact can't get a delayed removal; ghost adds are dropped") {
+    SharedStore.state = engineState()
+    let kim = f2Contact()
+    guard let add = ChangeEngine.queue(.addContact(kim)) else { expect(false, "add refused"); return }
+    let before = f2Bytes(SharedStore.state)
+    expect(ChangeEngine.queue(.removeContact(id: kim.id)) == nil && f2Bytes(SharedStore.state) == before,
+           "delayed removal of a waiting contact refused (the immediate path covers it)")
+    // A ghost: the flagged add survives without its contact (e.g. a removal
+    // queued by an earlier build landed first). Repair drops it, stricter.
+    SharedStore.state.overrides.contacts = []
+    DeviceActivityCenter.stopped = []
+    ChangeEngine.repairContactActivation()
+    expect(SharedStore.state.pending.isEmpty && SharedStore.state.overrides.contacts.isEmpty, "ghost add dropped")
+    expect(DeviceActivityCenter.stopped == [add.activityName], "its activity stopped after the write")
+    let saves = SharedStore.saves
+    ChangeEngine.repairContactActivation()
+    expect(SharedStore.saves == saves, "nothing left: no write")
+    // An unflagged (legacy) add is migrated, never dropped as a ghost.
+    let legacy = f2Contact("Lee", code: "LEE003")
+    SharedStore.state.pending = [PendingChange(createdAt: TimeGuard.now(), appliesAt: TimeGuard.now().addingTimeInterval(60),
+                                               direction: .lenient, summary: "x", action: .addContact(legacy))]
+    ChangeEngine.repairContactActivation()
+    expect(SharedStore.state.pending.count == 1 && SharedStore.state.overrides.contacts.map(\.id) == [legacy.id],
+           "legacy add migrated, not dropped")
+}
+scenario("F2 review 3: a removal between applyDueChanges' read and save is not undone") {
+    SharedStore.state = engineState()
+    let kim = f2Contact()
+    guard let add = ChangeEngine.queue(.addContact(kim)) else { expect(false, "add refused"); return }
+    TimeGuard.offset = 901
+    LimitFeatures.duringApply = { _ = ChangeEngine.removeAwaitingContact(id: kim.id) }
+    ChangeEngine.applyDueChanges()
+    TimeGuard.offset = 0
+    expect(SharedStore.state.overrides.contacts.isEmpty, "a stale snapshot resurrected and activated the removed contact")
+    expect(!SharedStore.state.pending.contains { $0.id == add.id }, "removed add came back")
+    // An unrelated write in between: the pass re-reads and still lands the add.
+    SharedStore.state = engineState()
+    let lee = f2Contact("Lee", code: "LEE003", accepted: true)
+    guard let leeAdd = ChangeEngine.queue(.addContact(lee)) else { expect(false, "add refused"); return }
+    let other = PendingChange(createdAt: TimeGuard.now(), appliesAt: TimeGuard.now().addingTimeInterval(9000),
+                              direction: .lenient, summary: "y", action: .removeLimit(id: UUID()))
+    TimeGuard.offset = 901
+    LimitFeatures.duringApply = { var s = SharedStore.loadState(); s.pending.append(other); SharedStore.save(s) }
+    ChangeEngine.applyDueChanges()
+    TimeGuard.offset = 0
+    expect(SharedStore.state.overrides.contacts.first?.isUsable == true
+           && !SharedStore.state.pending.contains { $0.id == leeAdd.id }, "add landed on the re-read")
+    expect(SharedStore.state.pending.map(\.id) == [other.id], "the concurrent write kept")
 }
 
 for failure in failures { print("FAIL: \(failure)") }

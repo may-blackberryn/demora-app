@@ -268,8 +268,9 @@ enum SkipWayRowText {
                                       TodayTimeText.short(date, now: now, calendar: calendar, locale: locale)))
         case .changes(let date):
             return (.upcoming, String(format: tr("Changes in %@"), shortWait(until: date, locale: locale)))
-        case .canApproveFrom(let date, let accepted):
-            return (.upcoming, canApproveFrom(date, accepted: accepted, now: now, locale: locale))
+        case .canApproveFrom(let date, let accepted, let paused):
+            return (paused ? .neutral : .upcoming,
+                    canApproveFrom(date, accepted: accepted, paused: paused, now: now, locale: locale))
         case .waitingToAccept: return (.neutral, tr("Waiting to accept"))
         case .cantReach: return (.blocked, tr("Can't reach"))
         case .paused: return (.neutral, tr("Paused"))
@@ -277,13 +278,16 @@ enum SkipWayRowText {
     }
 
     /// F2: "Can approve from Tue 2:32 pm", or "Waiting to accept · can
-    /// approve from …" before they accept. The You chip and the detail strip.
-    static func canApproveFrom(_ date: Date, accepted: Bool, now: Date, locale: Locale) -> String {
+    /// approve from …" before they accept, or "Paused · can approve from …"
+    /// while contact approvals are off. The You chip and the detail strip.
+    static func canApproveFrom(_ date: Date, accepted: Bool, paused: Bool, now: Date,
+                               locale: Locale) -> String {
         var calendar = Calendar.current
         calendar.locale = locale
         let when = TodayTimeText.short(date, now: now, calendar: calendar, locale: locale)
-        return String(format: accepted ? tr("Can approve from %@")
-                                       : tr("Waiting to accept · can approve from %@"), when)
+        let format = paused ? tr("Paused · can approve from %@")
+            : accepted ? tr("Can approve from %@") : tr("Waiting to accept · can approve from %@")
+        return String(format: format, when)
     }
 
     /// "3h", "12m": the guarded wait, one unit, rounded up.

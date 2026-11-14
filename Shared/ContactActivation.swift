@@ -34,7 +34,9 @@ enum ContactActivation {
             contact.awaitingActivation = true
             state.overrides.contacts.append(contact)
             return .addContact(contact)
-        case .setContactPermissions(let id, _):
+        case .setContactPermissions(let id, _), .removeContact(let id):
+            // A waiting contact is removed at once (dropAwaiting), never by a
+            // delayed removal that could land first and orphan its add.
             let waiting = state.overrides.contacts.first { $0.id == id }?.awaitingActivation == true
             return waiting ? nil : action
         default:
@@ -89,9 +91,11 @@ enum ContactActivation {
     /// before F2 (no flag, contact not saved) saves its contact now, flagged,
     /// and its copy is rewritten with the flag; the change keeps its id,
     /// createdAt and appliesAt, so invites go out earlier but nobody can
-    /// approve sooner. (2) Fail closed: a flagged contact whose pending add no
-    /// longer exists is pruned, never activated. Returns whether it changed.
-    static func repair(_ state: inout LatchState) -> Bool {
+    /// approve sooner. (2) Fail closed: a flagged add whose contact is no
+    /// longer saved is dropped (stricter), and (3) a flagged contact whose
+    /// pending add no longer exists is pruned, never activated. Returns nil
+    /// when nothing changed, else the dropped adds for activity cleanup.
+    static func repair(_ state: inout LatchState) -> [PendingChange]? {
         var changed = false
         for index in state.pending.indices {
             guard case .addContact(var contact) = state.pending[index].action,
@@ -102,10 +106,18 @@ enum ContactActivation {
             state.pending[index].action = .addContact(contact)
             changed = true
         }
+        let saved = Set(state.overrides.contacts.map(\.id))
+        let ghosts = state.pending.filter { change in
+            if case .addContact(let contact) = change.action {
+                return contact.awaitingActivation && !saved.contains(contact.id)
+            }
+            return false
+        }
+        state.pending.removeAll { change in ghosts.contains { $0.id == change.id } }
         let before = state.overrides.contacts.count
         state.overrides.contacts.removeAll { contact in
             contact.awaitingActivation && pendingAdd(for: contact.id, in: state.pending) == nil
         }
-        return changed || state.overrides.contacts.count != before
+        return changed || !ghosts.isEmpty || state.overrides.contacts.count != before ? ghosts : nil
     }
 }

@@ -26,8 +26,9 @@ enum SkipWayChip: Equatable {
     case added(Date)
     /// Saved and paired, but their add hasn't landed (F2): "Can approve
     /// from Tue 14:32", or "Waiting to accept · can approve from …" when
-    /// they haven't accepted yet.
-    case canApproveFrom(Date, accepted: Bool)
+    /// they haven't accepted yet, or "Paused · can approve from …" while
+    /// contact approvals are off (F2 review).
+    case canApproveFrom(Date, accepted: Bool, paused: Bool)
     /// A contact who hasn't accepted (or confirmed by email) yet.
     case waitingToAccept
     /// A Demora contact the relay can't find right now.
@@ -94,7 +95,8 @@ struct SkipWayList: Equatable {
                 fallback: {
                     if contact.awaitingActivation,
                        let add = ContactActivation.pendingAdd(for: contact.id, in: pending) {
-                        return .canApproveFrom(add.appliesAt, accepted: contact.accepted)
+                        return .canApproveFrom(add.appliesAt, accepted: contact.accepted,
+                                               paused: !overrides.contactsEnabled)
                     }
                     if !contact.accepted { return .waitingToAccept }
                     if let code = contact.latchUserCode, unavailableCodes.contains(code) {
@@ -110,7 +112,9 @@ struct SkipWayList: Equatable {
                                    pendingChangeID: changeID ?? activation, isPendingAddition: false))
         }
         for change in pending {
-            guard case .addContact(let contact) = change.action,
+            // A flagged copy without its saved contact is a leftover the
+            // next housekeeping drops (F2 review), not an addition.
+            guard case .addContact(let contact) = change.action, !contact.awaitingActivation,
                   !contactIDs.contains(contact.id) else { continue }
             rows.append(addition(change, id: contact.id, kind: .contact, name: contact.name,
                                  allowed: contact.allowed, phrase: nil))
@@ -489,6 +493,30 @@ enum SkipWayAddPlan {
     /// Change the password now: the current one, and a new one typed twice.
     static func secretChangeIsValid(current: String, new: String, confirm: String) -> Bool {
         !current.isEmpty && !new.isEmpty && new == confirm
+    }
+}
+
+// MARK: - Removing a contact before their add lands (F2)
+
+enum ImmediateRemoval {
+    enum Outcome: Equatable {
+        /// Removed with its pending add: close the page.
+        case removed
+        /// Nothing left to remove (declined or cancelled meanwhile): close.
+        case gone
+        /// The add landed while the page was open: they can approve now, so
+        /// say so and offer the normal (stricter, delayed) removal receipt.
+        case offerReceipt
+        /// Still waiting but the write failed: stay, say so, let them retry.
+        case retry
+    }
+
+    /// What the detail page does after "Remove this contact now?", from the
+    /// engine's answer and the contact as saved afterwards.
+    static func outcome(removed: Bool, contactAfter: TrustedContact?) -> Outcome {
+        if removed { return .removed }
+        guard let contact = contactAfter else { return .gone }
+        return contact.awaitingActivation ? .retry : .offerReceipt
     }
 }
 
