@@ -1851,3 +1851,26 @@ rows in `Tests/YouPresentationHarness.py`. No phone, no second phone.
 8. Upgrade path: with a contact add pending from the current dev build,
    install this one: the contact appears at once with the same "can approve
    from" time as the old pending add.
+
+## F2 review fixes (2026-11-14)
+A fresh reviewer read `012aac2..80715cd` and confirmed that no path lets a
+waiting contact approve early. Each fix has a regression check; the ones in
+`Tests/WhenWhereHarness.py` run the real engine bodies and were seen to fail
+with the fix removed.
+
+| # | Finding | Fix | Regression check |
+| --- | --- | --- | --- |
+| 1 (med) | "Remove this contact now?" closed the page even when nothing was removed (the add landed while the page was open: deadline, Apply now via another contact, recovery), so the contact silently stayed and could now approve | `AppModel.removeAwaitingContact` returns the engine's Bool. The page decides with the pure `ImmediateRemoval.outcome`: removed or already gone → close; the add landed → stay, say "Their wait has ended, so removing them now waits like any other removal." and open the normal (stricter, delayed) removal receipt; still waiting but the write failed → stay, "Couldn't remove this contact. Try again." | `YouPresentationHarness`: all four outcomes. `ContactActivationHarness`: the page closes only on removed/gone, the receipt path exists, AppModel returns the result |
+| 2 (low–med) | A delayed `.removeContact` could be queued for a waiting contact (different conflict key); landing first, it left the flagged add as a ghost | `prepareQueue` refuses `.removeContact` for a waiting contact (the immediate path covers it). `repair` also drops flagged adds whose contact isn't saved (stricter) and returns them; `repairContactActivation` stops their activities/notifications after the write. `SkipWayList.make` skips flagged copies as additions | WhenWhere: delayed removal refused with state unchanged; ghost dropped, its activity stopped after the write, second run writes nothing; a legacy unflagged add is migrated, never dropped. Pure checks in `ContactActivationHarness`; ghost not drawn as an addition in `YouPresentationHarness` |
+| 3 (low, older) | `applyDueChanges` reads its snapshot outside coordination and saved it later, so an immediate removal/cancel/decline in between was undone (a removed waiting contact came back and activated) | **Compare-and-save**, not a coordinated load-to-save: the body runs Screen Time XPC and other stores between load and save (`prepareNewWakeGates`, credit rotation, `resetEditedLimits`), and the engine rule is no XPC under the state lock. It reads the raw saved bytes (`SharedStore.stateBlob()`, new read-only accessor) before loading; the save runs under `coordinateStateMutation` only if those bytes are unchanged. Otherwise the pass is treated like an interrupted one (those earlier steps are already written to be safe to repeat, same as a failed save before) and re-runs from a fresh read, at most twice more, and only when another writer really changed the bytes (a plain save failure doesn't loop). Nothing is merged field by field | WhenWhere: a removal injected between read and save stays removed (fails without the fix); an unrelated write injected there is kept and the due add still lands on the re-read. Harness stubs gained `stateBlob()`; `ScheduleSelectionHarness`' 168 latency/coordination cases unchanged. `WakeWidgetReadOnlyHarness` lists the two exact edits |
+| 4 (low) | With contact approvals off, the chip and strip still promised "Can approve from …" | Chip `.canApproveFrom(date, accepted:, paused:)`; paused reads "Paused · can approve from %@" (neutral chip) on the You row and the detail strip | `YouPresentationHarness` (paused, accepted and not); string in all seven tables |
+| 5 (low) | Rolling back to a pre-F2 build ignores `awaitingActivation`: a saved, waiting contact who has accepted becomes usable before their add lands, and the old build would later append a duplicate on apply | **Accepted, not fixed** (no code change). Known rollback risk: don't install a pre-F2 build over this one while a contact add is waiting; if it happens, remove and re-add that contact | — |
+
+New strings (all eight languages): "Paused · can approve from %@", "Their
+wait has ended, so removing them now waits like any other removal.",
+"Couldn't remove this contact. Try again."
+
+Phone checks added to "F2: what to try on two phones": (a) open a waiting
+contact's page, Apply now from another contact, then Remove…: the notice
+appears and the normal removal receipt opens; (b) turn contact approvals
+off: the row reads "Paused · can approve from …".
