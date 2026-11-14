@@ -1729,3 +1729,45 @@ is in **When & where: start here** (top of this file). Also:
    Mexico…" from the other side.
 5. Languages: the block lines in German/Polish/Hindi wrap; the question
    keeps the apps before the time.
+
+## F1: the protected clock counts sleep (2026-11-13)
+Step F1 of the approved `docs/fixes-2.0-batch.md`. Cause, as the spec found:
+`TimeGuard` measured elapsed time with `systemUptime`, which stops while the
+iPhone sleeps, so after > 5 min of sleep the guard distrusted the (correct)
+wall clock and every "is it due?" check and countdown ran behind by the time
+asleep. The apply activity was also scheduled on the raw guarded deadline and
+never rescheduled. Evidence: new `Tests/TimeGuardHarness.py` compiles the real
+`TimeGuard`, the 2.0 one from `81757bb` (positive control: it reproduces the
+bug on the same inputs and writes the anchors that get migrated), the pure
+`ApplyActivityTiming` and the card's `ClockReading`. No phone: real sleep
+behaviour is still unproven until the owner locks the phone across a deadline.
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| Clock: **`CLOCK_MONOTONIC_RAW`** (`mach_continuous_time`), not the spec's `CLOCK_MONOTONIC` | Checked on this Mac: `CLOCK_MONOTONIC` equals `gettimeofday − kern.boottime` to the microsecond, so it is derived from the wall clock being guarded. `MONOTONIC_RAW` counted 21.3 h of sleep that `systemUptime` missed, restarts at boot and can't be set. Cost: not frequency-corrected (≈9 s over 36 h here); within the 5 min tolerance the wall clock wins anyway, beyond it the app re-syncs | Yes |
+| New anchor is **one record** `latch.time.anchor` = `{version: 2, wall, continuous, uptime}` | One key, so another process can't read a torn pair; the version lives in the record | Yes |
+| **Migration**: no v2 record → read 2.0's `anchorWall`/`anchorUptime` with 2.0's own formula and anchor exactly there; 2.0 keys are read, never written | The new clock starts where the old one reads, so no deadline moves earlier (harness: same remaining wait). A lag already inherited (the owner's 37:43) stays until a network sync, which the tick now forces. Not deleting the old keys avoids a race where a second process migrates from half-updated keys | Yes |
+| Reboot: either elapsed clock below its anchor value; `uptime` kept in the record as the second signal | Keeps 2.0's detection and catches more cases (continuous catches up sooner than uptime). Still a residual: a reboot nobody saw until both clocks passed the anchor runs the clock late (never early) until a sync; harness documents it | Yes |
+| Tamper rules unchanged: within ±300 s (inclusive) the wall wins, outside it the derived time wins, a jump never re-anchors | Keeps "never shorten a wait after a clock change"; also keeps the clock-set-back case from looking like a new day | Yes |
+| `nowForDisplay(at:continuous:uptime:)` stays read-only: v2 record → derive; none yet → 2.0's value; never writes or migrates | The widget reader's contract | Yes |
+| Apply activity: `ApplyActivityTiming.start` converts the guarded deadline to wall time (like `scheduleRelease`), rounds up to the minute, ≥ 1 min ahead | DeviceActivity runs on the wall clock | Yes |
+| **Reschedule** in `housekeeping` (after `applyDueChanges`) and in the monitor's `intervalDidStart` for `latch.apply.*`: re-register a waiting change's activity only when `DeviceActivityCenter.schedule(for:)` is missing, starts before its wall-time landing (−1 s slack) or > 2 min after the wanted start | A healthy registration is left alone (no churn every tick). Each waiting change already reserves its own name in `MonitoringBudget.reservations`, and re-registering replaces that name, so no extra capacity | Yes |
+| The "Your change is ready" notification uses guarded remaining time | Same wall/guarded boundary as the activity; one line | Yes — not in the spec's list, flagged |
+| `tick()`: if wall and guarded differ by > 5 min, `syncWithNetwork(force: true)` **before** housekeeping; at most once a minute per process | Due changes apply right after the correction. The floor stops a lasting disagreement (clock really changed, offline) from sending a request every 30 s tick | Yes |
+| Changes card: one `ClockReading` (guarded + system, read once) drives the countdown, the landing time (`CountdownProjection.landing`: system now + guarded remaining) and, in the ledger, the group headers | All three agree even when the clocks don't; equal to the stored time when they agree. Today's "Changing soon" rows read their own | Yes |
+| Harnesses updated to the new intent: `WakeWidgetReadOnlyHarness` (TimeGuard no longer pinned to `da9b6d3`; the F1 engine edits are undone exactly before comparing), `LegacyReplayRecoveryHarness` (tick's exact F1 lines), `MonitoringBudgetHarness` (compiles `ApplyActivityTiming`), `FoundationsComponentsHarness` and `TodayPresentationHarness` (card clock) | Brief | Yes |
+| Privacy manifest comment names `clock_gettime_nsec_np`; category (System boot time, 35F9.1) unchanged | Same purpose | Yes — the widget extension reads the clock too and has no manifest (true before F1); worth a follow-up |
+
+### F1: what to try on the phone
+1. Install over the current dev build, open the app online once: an anchor
+   that inherited the old lag is corrected by the forced sync (Changes times
+   jump to the real ones).
+2. Queue a looser change with a 15 min wait, lock the phone for 30 min,
+   don't open the app: the change should have applied in the background (or
+   at the latest on the next monitor wake), and the "ready" notification
+   should arrive at the deadline.
+3. Open Changes with a pending change: landing time, header and countdown
+   agree, and the landing time is the countdown's end on the phone's clock.
+4. Settings → set the clock 2 h ahead (automatic off), offline: nothing
+   becomes due early; online, the app re-syncs within a minute.
+5. Reboot with a change pending: it still lands on time.
