@@ -1150,10 +1150,15 @@ enum ChangeEngine {
         else { return nil }
         let direction = classify(action, state: state)
         let delay = state.delayPolicy.delay(for: direction)
-        let now = TimeGuard.now()
+        // A loosening wait starts at the later of the guarded and wall clocks,
+        // so a guarded clock that is behind (corrected by a later sync) can't
+        // make it end early; stricter changes keep the guarded clock, so a
+        // clock set forward can't postpone tightening (F1 review).
+        let guardedNow = TimeGuard.now()
+        let start = direction == .lenient ? TimeGuard.looseningStart(guarded: guardedNow) : guardedNow
         let change = PendingChange(
-            createdAt: now,
-            appliesAt: now.addingTimeInterval(delay),
+            createdAt: start,
+            appliesAt: start.addingTimeInterval(delay),
             direction: direction,
             summary: summary(for: action, state: state),
             action: action
@@ -2490,6 +2495,9 @@ enum ChangeEngine {
                 registeredStart: registered, appliesAt: change.appliesAt,
                 guardedNow: guardedNow, wallNow: wallNow, calendar: cal) else { continue }
             scheduleApplyActivity(for: change, wallNow: wallNow, guardedNow: guardedNow)
+            // Same identifier: replaces the pending "ready" notification so it
+            // follows the corrected landing too.
+            scheduleNotification(for: change)
         }
     }
 
@@ -2569,12 +2577,18 @@ enum ApplyActivityTiming {
         return floored >= future ? floored : floored.addingTimeInterval(60)
     }
 
-    /// Lateness tolerated before re-registering: two minutes.
-    static let lateSlack: TimeInterval = 120
+    /// Lateness tolerated before re-registering: twice TimeGuard's tolerance,
+    /// so clocks hovering near it (guarded time flipping between wall and
+    /// derived) re-register at most once instead of on every read. A late
+    /// registration still gets its warning callback 5 min before its start.
+    static let lateSlack: TimeInterval = 600
 
     static func needsReschedule(registeredStart: Date?, appliesAt: Date, guardedNow: Date,
                                 wallNow: Date, calendar: Calendar) -> Bool {
         guard let registered = registeredStart else { return true }
+        // Its interval already started: the one-shot callback is spent while
+        // the change still waits.
+        if registered <= wallNow { return true }
         let due = wallDue(appliesAt: appliesAt, guardedNow: guardedNow, wallNow: wallNow)
         // One second absorbs reading the two clocks a moment apart.
         if registered.addingTimeInterval(1) < due { return true }

@@ -64,10 +64,10 @@ final class AppModel: ObservableObject {
 
     private var timer: AnyCancellable?
     private var housekeepingInFlight = false
-    /// Process-local floor between forced time syncs (seconds of uptime), so
-    /// a lasting disagreement (clock really changed, or offline) can't send a
-    /// request on every 30 s tick.
-    private var lastForcedTimeSync: TimeInterval?
+    /// When a forced time sync may run (F1): only while the clocks disagree,
+    /// at most once a minute, backing off when offline, and not again after
+    /// one that left a lasting offset (the wall clock itself was changed).
+    private var forcedTimeSync = ForcedTimeSyncPolicy()
 
     init() {
         // A replay interrupted by a force-quit: restore the user's real setup
@@ -111,11 +111,12 @@ final class AppModel: ObservableObject {
         housekeepingInFlight = true
         // Wall and guarded clocks more than 5 min apart: the guarded clock may
         // be behind real time (an anchor migrated from 2.0's sleep-blind
-        // clock), which would hold due changes back. Re-sync first, skipping
-        // the hourly limit, so they apply now (F1).
-        let forceSync = TimeGuard.clocksDisagree(guarded: TimeGuard.now()) && allowForcedTimeSync()
+        // clock), which would hold due changes back. Force a sync past the
+        // hourly limit, then apply what became due (F1). Housekeeping never
+        // waits on the network.
+        let forceSync = forcedTimeSync.begin(offset: Date().timeIntervalSince(TimeGuard.now()),
+                                             uptime: ProcessInfo.processInfo.systemUptime)
         Task { [weak self] in
-            if forceSync { await TimeGuard.syncWithNetwork(force: true) }
             await ChangeEngine.housekeepingOffMain()
             guard let self else { return }
             self.housekeepingInFlight = false
@@ -125,15 +126,16 @@ final class AppModel: ObservableObject {
             self.checkContactInvites()
             self.sendPendingEmailInvites()
             self.refreshIncomingInviteCount()
-            await TimeGuard.syncWithNetwork()
+            guard forceSync else { await TimeGuard.syncWithNetwork(); return }
+            let synced = await TimeGuard.syncWithNetwork(force: true)
+            self.forcedTimeSync.finish(succeeded: synced,
+                                       offsetAfter: Date().timeIntervalSince(TimeGuard.now()),
+                                       uptime: ProcessInfo.processInfo.systemUptime)
+            guard synced else { return }
+            await ChangeEngine.housekeepingOffMain()
+            self.state = SharedStore.loadState()
+            self.enforcementDegraded = SharedStore.enforcementDegraded
         }
-    }
-
-    private func allowForcedTimeSync() -> Bool {
-        let uptime = ProcessInfo.processInfo.systemUptime
-        if let last = lastForcedTimeSync, uptime - last < 60 { return false }
-        lastForcedTimeSync = uptime
-        return true
     }
 
     /// Demora-user contacts must accept an invite before they can approve for
