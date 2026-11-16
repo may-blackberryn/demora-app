@@ -1959,3 +1959,39 @@ Extra phone checks (after the F3–F5 list above): with VoiceOver,
 swipe through the limits card (the hidden line is never read; the "Limits"
 row's hint is); switch You → Appearance while Today shows the card (it
 recolours at once); an unblock session reads "Free until …" now and later.
+
+## F6: iPhone Duo and resizable windows (2026-11-15)
+Step F6 of `docs/fixes-2.0-batch.md`, commit `8b6a184`. Built with Xcode
+27.2 (27B52) and the iOS 27.2 SDK (above the 27.1 needed to fill the inner
+display); deployment target stays iOS 16. The app already used one layout
+for every device with a centred 640 pt column, and no size-class or idiom
+branches for layout, so F6 is mostly an audit plus four small fixes.
+Evidence: `Tests/ResizableLayoutHarness.py` (source guards only), unsigned
+Debug and Release builds. **Not seen in a simulator or on a Duo**: no iOS
+simulator runtime is installed.
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| `UsageInsightsView` keeps `userInterfaceIdiom` for the `DeviceActivityFilter` devices (`.iPad` / `.iPhone`), with a comment; no size class there | It picks *which device's* Screen Time data to read, not a layout. A size class would be wrong both ways: an unfolded Duo (regular width, iPhone model, product family 1) would ask for iPad data and show an empty report; an iPad in narrow Split View would ask for iPhone data | Yes, flagged: deviates from the brief's literal "replace both" |
+| DEBUG screenshot toggle: `.overlay(alignment: .top)` at every width, no branch | The iPad branch dated from the system TabView (tabs at the top on iPad). `DemoraTabBar` is at the bottom everywhere, and the old bottom-leading 160 pt spot covered the Today tab whenever the window was under ~1,020 pt (iPad mini portrait, the Duo's inner display, Split View). Top-centre is what iPhone already used. DEBUG only | Yes |
+| Readable width: reused `DemoraSpace.maxContentWidth` (640) on the four uncapped scroll screens found: the rule summary's "What" app list, onboarding's day/night and ways-to-skip sheets, and Insights' starting-point estimate editor | Every other vertical scroll screen (Today, Rules, Insights, You and their pages, editors via `RuleEditorPage`, receipts, Changes, check-in, contacts, welcome/onboarding) already caps at 640, or 700 for the tab bar; the Insights report caps itself at 640 inside the extension. The intro centres one heading sized from its own width | Yes |
+| `SquareCropViewController` refits when its bounds change (`configuredSize` instead of a one-shot `configured` flag) | `croppedImage()` maps through the current insets; after a resize the mask followed but the insets didn't, so the saved photo wouldn't match the square on screen. Already possible on iPad rotation. A refit resets the zoom to fit | Yes |
+| `DemoraTabBar` unchanged | Centred, capped at 700 pt with paper full width and the bottom safe area; four equal items, about 167 pt each on a wide display. Same as iPad | Yes |
+| No `UIScreen`, device orientation, `UIApplication.shared.windows` or manual safe-area insets anywhere (app, report, widgets, shield, monitor); widgets use `widgetFamily`; every `GeometryReader` measures its own container | Apple's foldable guidance; pinned by the harness | Yes |
+| Plist unchanged: iPhone portrait-only, iPad all four orientations, no `UIRequiresFullScreen` | The inner display may ignore portrait-only; nothing reads the orientation, so landscape just gives a wider window with the same centred column | Yes |
+| Debug and Release with the 27.2 SDK: no compiler warnings or errors in our code (only the AppIntents metadata note), nothing deprecated to adapt | | Yes |
+
+### F6: what to check in the Duo simulator (not done: no runtime)
+Run once an iOS 27.1+ runtime is installed, and run Xcode's App
+Resizability check.
+1. Folded (compact width): Today, Rules, Insights, You look like iPhone.
+2. Unfolded, both orientations: one centred column on every tab, the tab bar
+   centred with paper to both edges, the "New session" button inside the
+   column; the Insights report fills its card, shows **iPhone** data.
+3. Fold and unfold with a sheet open (a rule summary, a receipt, the
+   estimate editor) and on a pushed editor: nothing clips or jumps.
+4. Split View on each side and Slide Over, at narrow and half widths.
+5. Contacts → avatar → camera: fold or unfold while cropping, then "Use
+   photo"; the saved square matches what was framed (on iPad: rotate).
+6. Onboarding in a fresh Debug install, unfolded: the setup sheets stay in
+   the column.
