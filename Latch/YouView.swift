@@ -420,7 +420,7 @@ struct YouRowLabel: View {
                     .lineLimit(2)
             }
             if chevron {
-                Image(systemName: "chevron.right")
+                Image(systemName: "chevron.forward")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Ink.inkSoft)
                     .accessibilityHidden(true)

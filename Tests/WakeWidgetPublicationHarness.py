@@ -120,6 +120,12 @@ final class WidgetCenter {
     }
 }
 func tr(_ text: String) -> String { text }
+// The publisher records whether the in-app language reads right to left.
+enum AppLanguage {
+    case english
+    static var current: AppLanguage { .english }
+    var isRightToLeft: Bool { false }
+}
 
 // Minimal Codable shapes needed by the actual publisher. This is NOT the
 // production LatchState schema or its migration/validation implementation.

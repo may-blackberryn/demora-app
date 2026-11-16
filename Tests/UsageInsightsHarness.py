@@ -288,7 +288,10 @@ assert "dynamicTypeSize.isAccessibilitySize" in view
 assert "accessibilityElement(children: .combine)" in view
 assert "accessibilityAddTraits(.isHeader)" in view
 assert "insightsText(" in view
-assert all(key in report_theme for key in ["latch.language", "latch.appearance", "latch.accentColor"])
+assert all(key in report_theme for key in ["latch.appearance", "latch.accentColor"])
+# The language comes through the generated, shared-matcher helper (2.0 languages).
+assert "reportLanguageCode()" in report_theme
+assert 'forKey: "latch.language"' in (ROOT / "LatchReport/UsageInsightsLocalization.swift").read_text()
 assert "ReportPreferences.read(system: systemScheme)" in view
 assert "baselineDifference(for:" in trends and "not measured Screen Time" in trends and "time saved by Demora" in trends
 assert "baseline: selectedApplication == nil ? configuration.baseline : nil" in view

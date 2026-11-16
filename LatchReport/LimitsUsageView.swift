@@ -41,6 +41,7 @@ struct LimitsUsageView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(ink(ReportPalette.card))
             .environment(\.colorScheme, scheme)
+            .environment(\.layoutDirection, reportIsRightToLeft() ? .rightToLeft : .leftToRight)
     }
 
     private var reportContent: some View {

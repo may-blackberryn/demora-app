@@ -37,8 +37,11 @@ keys += ["Set a latest wake-up time", "Wake blocking ends by", "Latest wake-up: 
          "At this time, this wake-up block ends even if you haven't tapped Wake up or its wait is still running.",
          "Choose a latest time after the wake-up day begins."]
 placeholder = re.compile(r"%(?:\d+\$)?(?:@|d|f|s)")
-files = list((ROOT / "Shared").glob("Localization*.swift"))
-assert len(files) == 7
+# The seven original tables; the 2.0 languages are checked whole (every key,
+# placeholders in order) by Tests/AppLanguagesHarness.py.
+files = [ROOT / "Shared" / f"Localization{suffix}.swift"
+         for suffix in ("", "+German", "+French", "+Portuguese", "+Polish", "+Turkish", "+Hindi")]
+assert len(list((ROOT / "Shared").glob("Localization*.swift"))) == 43
 for path in files:
     entries = re.findall(r'^\s*"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)",?\s*$', path.read_text(), re.M)
     for key in keys:

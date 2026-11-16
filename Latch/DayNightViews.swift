@@ -407,7 +407,7 @@ private struct DayNightGroupSummary: View {
             HStack {
                 Text(group.name).font(.system(.title3, design: .serif)).foregroundStyle(Ink.ink)
                 Spacer()
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(Ink.faint)
+                Image(systemName: "chevron.forward").font(.caption).foregroundStyle(Ink.faint)
             }
             if group.wakeEnabled {
                 Label(String(format: tr("Wake from %@ · wait %d minutes after tap"),

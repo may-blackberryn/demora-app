@@ -77,6 +77,11 @@ PLACEHOLDER = re.compile(
     r'(?:hh|ll|[hlLzjt])?[@diuoxXfFeEgGcs%])')
 STATUS = re.compile(r'^//\s*Translation:\s*(pending|complete)\s*$', re.M)
 LEFTOVER_LIMIT = 0.10
+# Stage 3 switch. While False, the generated catalogs (widget gallery, usage
+# report, Info.plist) publish only the original eight, so a translator finishing
+# a language in stage 2 doesn't make every generated --check stale. Stage 3 sets
+# it True and regenerates; AppLanguagesHarness.py --strict requires True.
+PUBLISH_NEW_LANGUAGES = False
 
 
 def path(code):
@@ -233,13 +238,34 @@ def validate(code, keys=None):
 
 
 def complete_tables(keys=None):
-    """{code: table} for languages whose strings can be published (original or complete)."""
+    """{code: table} for the languages the generated catalogs publish: the
+    original eight, plus (once PUBLISH_NEW_LANGUAGES) each 2.0 language marked complete."""
     keys = reference() if keys is None else keys
     tables = {}
-    for code in ORIGINAL + tuple(c for c, *_ in TABLES if c not in ORIGINAL):
+    new = tuple(c for c, *_ in TABLES if c not in ORIGINAL) if PUBLISH_NEW_LANGUAGES else ()
+    for code in ORIGINAL + new:
+        # Pending files are never published, so a translator's half-written
+        # file can't block generation; AppLanguagesHarness checks them.
+        # A file without a readable status line is mid-write: also unpublished.
+        try:
+            if status(code) == 'pending':
+                continue
+        except ValueError:
+            if code in ORIGINAL:
+                raise
+            continue
         state, table, problems, _ = validate(code, keys)
         if problems:
             raise ValueError(f'{path(code).name}: ' + '; '.join(problems[:3]))
         if state != 'pending':
             tables[code] = table
     return tables
+
+
+def publication_note(published):
+    """How many 2.0 languages the generated catalogs leave out, and why."""
+    left = len(CODES) - 1 - published
+    if not left:
+        return 'all languages published'
+    why = 'complete ones publish once PUBLISH_NEW_LANGUAGES' if not PUBLISH_NEW_LANGUAGES else 'still pending'
+    return f'{left} languages English-only ({why})'

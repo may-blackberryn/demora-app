@@ -2,18 +2,73 @@
 // Read-only preferences; no measured usage leaves this report extension.
 import Foundation
 
-nonisolated private func insightsLanguageCode() -> String {
-    let supported = ["en", "es", "de", "fr", "pt", "pl", "tr", "hi"]
+/// The in-app language, matched like AppLanguage.current in the app.
+nonisolated func reportLanguageCode() -> String {
+    let supported: Set<String> = ["en", "es", "de", "fr", "pt", "pl", "tr", "hi", "ca", "cs", "da", "el", "fi", "hr", "hu", "it", "nl", "nb", "ro", "ru", "sk", "sl", "sv", "uk", "id", "ja", "ko", "ms", "th", "vi", "zh-Hans", "zh-Hant", "bn", "gu", "kn", "ml", "mr", "or", "pa", "ta", "te", "ar", "he", "ur"]
     if let saved = UserDefaults(suiteName: AppGroup.id)?.string(forKey: "latch.language"),
        supported.contains(saved) { return saved }
-    let preferred = Locale.preferredLanguages.first ?? "en"
-    let code = Locale(identifier: preferred).language.languageCode?.identifier
-        ?? String(preferred.prefix(2))
-    return supported.contains(code) ? code : "en"
+    return AppLanguageMatching.code(preferred: Locale.preferredLanguages, supported: supported)
+}
+
+/// Arabic, Hebrew and Urdu mirror the layout; charts and clocks never do.
+nonisolated func reportIsRightToLeft() -> Bool {
+    ["ar", "he", "ur"].contains(reportLanguageCode())
+}
+
+// Copied verbatim from Shared/AppLanguageMatching.swift.
+nonisolated enum AppLanguageMatching {
+    /// The first preferred identifier Demora supports, else English. Walks the
+    /// whole list, as iOS does for the app's own localizations.
+    static func code(preferred: [String], supported: Set<String>) -> String {
+        for identifier in preferred {
+            if let code = code(for: identifier, supported: supported) { return code }
+        }
+        return "en"
+    }
+
+    /// The supported app language for one identifier such as "pt-BR",
+    /// "zh-Hant-TW", "zh_HK" or "nn-NO", or nil.
+    static func code(for identifier: String, supported: Set<String>) -> String? {
+        let parts = identifier.replacingOccurrences(of: "_", with: "-")
+            .split(separator: "-").map(String.init)
+        guard let first = parts.first?.lowercased(), !first.isEmpty else { return nil }
+        let subtags = parts.dropFirst()
+        let script = subtags.first { $0.count == 4 && $0.allSatisfy(\.isLetter) }?.lowercased()
+        let region = subtags.first {
+            ($0.count == 2 && $0.allSatisfy(\.isLetter)) || ($0.count == 3 && $0.allSatisfy(\.isNumber))
+        }?.uppercased()
+        let candidate: String
+        switch first {
+        case "zh", "yue":
+            // Script first; then the regions that write Traditional Chinese.
+            if script == "hant" {
+                candidate = "zh-Hant"
+            } else if script == "hans" {
+                candidate = "zh-Hans"
+            } else if let region, ["TW", "HK", "MO"].contains(region) {
+                candidate = "zh-Hant"
+            } else {
+                candidate = first == "yue" ? "zh-Hant" : "zh-Hans"
+            }
+        case "no", "nb", "nn":
+            candidate = "nb"
+        case "iw":
+            candidate = "he"
+        case "in":
+            candidate = "id"
+        case "pa" where script == "arab", "ms" where script == "arab":
+            // Shahmukhi Punjabi and Jawi Malay: Demora's tables are Gurmukhi
+            // and Latin, so keep looking.
+            return nil
+        default:
+            candidate = first
+        }
+        return supported.contains(candidate) ? candidate : nil
+    }
 }
 
 nonisolated func insightsText(_ key: String) -> String {
-    switch insightsLanguageCode() {
+    switch reportLanguageCode() {
     case "es":
         // LANGUAGE es
         let table: [String: String] = [

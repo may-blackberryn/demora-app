@@ -169,7 +169,7 @@ struct RulesView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
+                    Image(systemName: "chevron.forward")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Ink.inkSoft)
                         .accessibilityHidden(true)
@@ -530,7 +530,7 @@ struct PendingLine: View {
                 CountdownText(to: change.appliesAt, style: nil)
                     .monospacedDigit()
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
+                Image(systemName: "chevron.forward")
                     .font(.caption2.weight(.semibold))
                     .accessibilityHidden(true)
             }

@@ -551,22 +551,28 @@ catalog = json.loads((ROOT / 'Latch/InfoPlist.xcstrings').read_text())
 assert catalog['sourceLanguage'] == 'en'
 # Never the display name: Debug ("dev demora") and Release ("demora") differ,
 # and one catalog value would rename one of them.
-assert set(catalog['strings']) == {'NSLocationWhenInUseUsageDescription', 'CheckIn'}, sorted(catalog['strings'])
+# 2.0: the catalog is generated from the dictionaries (Tests/GenerateInfoPlistLocalization.py),
+# with the camera prompt too; every app language is a bundle localization.
+assert set(catalog['strings']) == {'NSLocationWhenInUseUsageDescription', 'CheckIn', 'NSCameraUsageDescription'}, sorted(catalog['strings'])
+sys.path.insert(0, str(ROOT / 'Tests'))
+sys.dont_write_bytecode = True
+import app_languages as AL
+import GenerateInfoPlistLocalization as infoplist_generator
+assert (ROOT / 'Latch/InfoPlist.xcstrings').read_text() == infoplist_generator.render(), 'regenerate InfoPlist.xcstrings'
 LANGUAGES = ['en', 'es', 'de', 'fr', 'pt', 'pl', 'tr', 'hi']
-assert sorted(info['CFBundleLocalizations']) == sorted(LANGUAGES)
+assert info['CFBundleLocalizations'] == AL.CODES, info['CFBundleLocalizations']
 expected_en = {'NSLocationWhenInUseUsageDescription': when_in_use, 'CheckIn': temporary['CheckIn']}
-for key, entry in catalog['strings'].items():
-    localizations = entry['localizations']
-    assert sorted(localizations) == sorted(LANGUAGES), (key, sorted(localizations))
+for key in expected_en:
+    localizations = catalog['strings'][key]['localizations']
+    assert set(LANGUAGES) <= set(localizations) <= set(AL.CODES), (key, sorted(localizations))
     for code, value in localizations.items():
         unit = value['stringUnit']
         assert unit['state'] == 'translated' and unit['value'].strip() and '%' not in unit['value'], (key, code)
     assert localizations['en']['stringUnit']['value'] == expected_en[key], ('English matches the plist', key)
-    assert len({v['stringUnit']['value'] for v in localizations.values()}) == len(LANGUAGES), ('each language its own', key)
-assert not re.search(r'[一-鿿]', json.dumps(catalog, ensure_ascii=False)), 'no stray CJK characters'
+    assert len({v['stringUnit']['value'] for v in localizations.values()}) == len(localizations), ('each language its own', key)
 privacy = (ROOT / 'Latch/PrivacyInfo.xcprivacy').read_text()
 assert 'Location' not in privacy, 'location is processed on the device only: no collected data type (logged decision)'
-print('When & where permission strings passed: Debug = Release, While Using only, 2 strings × 8 languages')
+print('When & where permission strings passed: Debug = Release, While Using only, generated catalog, original 8 languages present')
 
 # --- Translations of the new place words ------------------------------------
 STRING = r'"((?:[^"\\]|\\.)*)"'

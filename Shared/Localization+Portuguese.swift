@@ -1685,4 +1685,7 @@ let portugueseStrings: [String: String] = [
     "%@, free from %@ until %@": "%@, livre de %@ até %@",
     "Your limits will show here. Pull down to refresh if it stays empty.": "Seus limites aparecem aqui. Se continuar vazio, puxe para baixo para atualizar.",
     "If your limits don't appear, pull down to refresh.": "Se seus limites não aparecerem, puxe para baixo para atualizar.",
+    // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
+    "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "O Demora lê sua localização uma vez quando você toca em Verificar, define um lugar ou usa o país em que está, para ver se o lugar ou o país de uma regra se aplica. Sua localização não é enviada a lugar nenhum; só os lugares que você salva são guardados.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "O Demora precisa da sua localização exata para esta verificação, para saber se você está dentro do lugar ou do país de uma regra.",
 ]

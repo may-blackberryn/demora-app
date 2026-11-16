@@ -70,7 +70,7 @@ struct ScheduleConflictsView: View {
                                     Text(model.state.prioritizedScheduleKeys.contains(key)
                                          ? tr("Prioritized") : tr("Default priority"))
                                         .demoraType(.meta).foregroundStyle(Ink.inkSoft)
-                                    Image(systemName: "chevron.right")
+                                    Image(systemName: "chevron.forward")
                                         .font(.caption.weight(.semibold)).foregroundStyle(Ink.inkSoft)
                                 }
                                 .frame(minHeight: 44)

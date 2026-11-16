@@ -142,9 +142,11 @@ assert gallery.entries('"Now": "Jetzt", "Next": "Danach",') == [('Now', 'Jetzt')
 assert gallery.entries('"Quote": "a \\"quoted\\" word",') == [('Quote', 'a "quoted" word')]
 catalog = json.loads((ROOT / 'LatchWidgets/Localizable.xcstrings').read_text())
 assert set(catalog['strings']) == set(gallery.GALLERY_KEYS)
-assert all(set(row['localizations']) == {'en', *gallery.LANGUAGES} for row in catalog['strings'].values())
+published = gallery.load_tables()
+assert set(published) >= {'es', 'de', 'fr', 'pt', 'pl', 'tr', 'hi'}
+assert all(set(row['localizations']) == {'en', *published} for row in catalog['strings'].values())
 assert (ROOT / 'LatchWidgets/Localizable.xcstrings').read_text() == gallery.render()
-print('Generated widget gallery: four keys × eight languages, inline/escaped fixtures passed')
+print(f'Generated widget gallery: four keys × {len(published) + 1} languages, inline/escaped fixtures passed')
 
 views = (ROOT / 'LatchWidgets/DemoraWidgets.swift').read_text()
 assert views.count('.supportedFamilies([.systemSmall, .systemMedium, .accessoryInline, .accessoryRectangular])') == 2

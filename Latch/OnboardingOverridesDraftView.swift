@@ -101,7 +101,7 @@ struct OnboardingOverridesDraftView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.system(.title3, design: .serif)).foregroundStyle(Ink.ink)
             Text(detail).font(.footnote).foregroundStyle(Ink.faint)
-            Label(tr("Edit"), systemImage: "chevron.right").font(.caption)
+            Label(tr("Edit"), systemImage: "chevron.forward").font(.caption)
         }
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)

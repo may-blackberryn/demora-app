@@ -190,20 +190,29 @@ struct LanguagePickerView: View {
     @EnvironmentObject var model: AppModel
     @State private var selectedLanguage = AppLanguage.current
     @State private var showLanguageBetaNotice = false
+    @State private var search = ""
+
+    /// 44 languages: the applied one first, the rest by their name in the app's
+    /// language, each with its own name (no section copy needed). Searchable.
+    private var languages: [AppLanguage] {
+        AppLanguage.pickerOrder(applied: model.language)
+            .filter { $0.matches(search: search, display: model.language) }
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(AppLanguage.allCases) { language in
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(languages) { language in
                         Button {
                             selectedLanguage = language
                         } label: {
                             GridCard(symbol: selectedLanguage == language
                                      ? "checkmark.circle.fill" : "circle",
                                      title: language.label,
-                                     subtitle: language.rawValue.uppercased())
+                                     subtitle: language.name(in: model.language) ?? "")
                         }
+                        .accessibilityAddTraits(selectedLanguage == language ? .isSelected : [])
                     }
                 }
 
@@ -217,6 +226,8 @@ struct LanguagePickerView: View {
         .buttonStyle(.plain)
         .background(Ink.paper.ignoresSafeArea())
         .casedNavigationTitle(tr("Language"))
+        // The system's own "Search" prompt: no new copy for 44 languages.
+        .searchable(text: $search)
         .alert(tr("Translation in beta"),
                isPresented: $showLanguageBetaNotice) {
             Button(tr("OK"), role: .cancel) { }

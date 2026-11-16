@@ -76,6 +76,7 @@ struct UsageInsightsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(colors.paper).foregroundStyle(colors.ink)
         .environment(\.colorScheme, colors.scheme).environment(\.locale, locale)
+        .environment(\.layoutDirection, preferences.layoutDirection)
         .onChange(of: selectedApplication) { _ in
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
                 reader.scrollTo("usageTop", anchor: .top)
@@ -188,18 +189,21 @@ struct UsageInsightsView: View {
     private func dayChart(_ colors: ReportColors) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 4) {
-                pageButton("Previous week", symbol: "chevron.left", colors: colors,
+                pageButton("Previous week", symbol: "chevron.backward", colors: colors,
                            enabled: selection.page < UsageDashboardPresentation.lastPage(dayCount: usage.days.count)) {
                     selection.pageBack(dayCount: usage.days.count)
                 }
                 Text(windowRange).reportType(.meta).foregroundStyle(colors.inkSoft)
                     .frame(maxWidth: .infinity).multilineTextAlignment(.center)
-                pageButton("Next week", symbol: "chevron.right", colors: colors, enabled: selection.page > 0) {
+                pageButton("Next week", symbol: "chevron.forward", colors: colors, enabled: selection.page > 0) {
                     selection.pageForward()
                 }
             }
             dayBars(colors)
         }
+        // Charts never mirror: time runs left to right in every language, and
+        // the week arrows stay beside the side they page toward.
+        .environment(\.layoutDirection, .leftToRight)
         .reportCard(colors)
     }
     private func pageButton(_ key: String, symbol: String, colors: ReportColors, enabled: Bool,

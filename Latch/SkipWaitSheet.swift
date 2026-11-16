@@ -431,7 +431,7 @@ private struct SkipWayChoiceRow: View {
                 }
                 Spacer(minLength: DemoraSpace.xs)
                 if way.unavailable == nil {
-                    Image(systemName: "chevron.right")
+                    Image(systemName: "chevron.forward")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Ink.inkSoft)
                         .accessibilityHidden(true)

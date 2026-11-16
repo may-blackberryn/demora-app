@@ -1685,4 +1685,7 @@ let frenchStrings: [String: String] = [
     "%@, free from %@ until %@": "%@, libre de %@ à %@",
     "Your limits will show here. Pull down to refresh if it stays empty.": "Vos limites s'afficheront ici. Si cela reste vide, tirez vers le bas pour actualiser.",
     "If your limits don't appear, pull down to refresh.": "Si vos limites n'apparaissent pas, tirez vers le bas pour actualiser.",
+    // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
+    "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora lit votre position une seule fois lorsque vous touchez Vérifier, définissez un lieu ou utilisez le pays où vous êtes, pour savoir si le lieu ou le pays d'une règle s'applique. Votre position n'est envoyée nulle part ; seuls les lieux que vous enregistrez sont conservés.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora a besoin de votre position exacte pour cette vérification, afin de savoir si vous êtes dans le lieu ou le pays d'une règle.",
 ]

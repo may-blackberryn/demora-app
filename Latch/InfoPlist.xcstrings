@@ -55,6 +55,36 @@
         }
       }
     },
+    "NSCameraUsageDescription": {
+      "comment": "Camera permission prompt (a trusted contact's picture). Must match INFOPLIST_KEY_NSCameraUsageDescription in English.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take a photo to use as a trusted contact's picture."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "भरोसेमंद संपर्क की तस्वीर के रूप में इस्तेमाल करने के लिए फ़ोटो लें।"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zrób zdjęcie, które będzie obrazkiem zaufanego kontaktu."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Güvenilir kişinin resmi olarak kullanmak için bir fotoğraf çek."
+          }
+        }
+      }
+    },
     "NSLocationWhenInUseUsageDescription": {
       "comment": "Location permission prompt (While Using only). Must match INFOPLIST_KEY_NSLocationWhenInUseUsageDescription in English.",
       "extractionState": "manual",

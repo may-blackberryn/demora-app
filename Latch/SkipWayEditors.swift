@@ -146,7 +146,7 @@ struct AddSkipWaySheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: DemoraSpace.xs)
-                Image(systemName: "chevron.right")
+                Image(systemName: "chevron.forward")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Ink.inkSoft)
                     .accessibilityHidden(true)

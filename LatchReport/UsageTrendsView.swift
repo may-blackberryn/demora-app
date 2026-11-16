@@ -106,6 +106,8 @@ struct UsageTrendsView: View {
                     }
                 }.padding(.bottom, 4)
             }
+            // Charts never mirror: days run left to right in every language.
+            .environment(\.layoutDirection, .leftToRight)
             if let index = a.firstIndex(where: { $0.date == selectedDay }) {
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .top, spacing: 24) { selectedDayFigures(index, current: a, previous: b) }

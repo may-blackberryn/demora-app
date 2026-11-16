@@ -396,6 +396,8 @@ private struct NowNextWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: DemoraProvider()) { entry in
             NowNextView(entry: entry)
+                .environment(\.layoutDirection, WidgetPresentation.copy(snapshot: entry.snapshot)
+                    .rightToLeft == true ? .rightToLeft : .leftToRight)
         }
         .configurationDisplayName("Now & next")
         .description("See what's on now and what's next.")
@@ -409,6 +411,8 @@ private struct PendingChangeWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: DemoraProvider()) { entry in
             PendingView(entry: entry)
+                .environment(\.layoutDirection, WidgetPresentation.copy(snapshot: entry.snapshot)
+                    .rightToLeft == true ? .rightToLeft : .leftToRight)
         }
         .configurationDisplayName("Changing soon")
         .description("Your next change and when it lands.")

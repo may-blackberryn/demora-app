@@ -485,7 +485,7 @@ struct RuleSummarySheet: View {
     private func linkLabel(_ title: String) -> some View {
         HStack(spacing: DemoraSpace.xxs) {
             Text(title)
-            Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).accessibilityHidden(true)
+            Image(systemName: "chevron.forward").font(.caption2.weight(.semibold)).accessibilityHidden(true)
         }
         .demoraType(.meta)
         .foregroundStyle(accent)
@@ -708,7 +708,7 @@ struct FactRow: View {
                     .multilineTextAlignment(typeSize.isAccessibilitySize ? .leading : .trailing)
                     .fixedSize(horizontal: false, vertical: true)
                 if chevron {
-                    Image(systemName: "chevron.right")
+                    Image(systemName: "chevron.forward")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Ink.inkSoft)
                         .accessibilityHidden(true)

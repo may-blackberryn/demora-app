@@ -102,6 +102,9 @@ def check(codes, strict):
         else:
             print(f'ok   {code:8} {state:8} {len(table):5} keys'
                   + (' · ' + '; '.join(notes) if notes else ''))
+    if strict and not L.PUBLISH_NEW_LANGUAGES:
+        failed = True
+        print('FAIL strict: set PUBLISH_NEW_LANGUAGES = True in Tests/app_languages.py and regenerate the catalogs')
     if not failed:
         typecheck([c for c in codes if c not in L.ORIGINAL])
     print(f'{len(codes)} tables checked against {len(keys)} reference keys: '

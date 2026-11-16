@@ -20,6 +20,11 @@ struct LatchApp: App {
     @AppStorage("latch.accentColor", store: SharedStore.defaults)
     private var accentColorRaw = "blue"
 
+    init() {
+        // Before any window exists, so UIKit chrome starts in the right direction.
+        AppLanguage.current.applyUIKitLayoutDirection()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -30,6 +35,12 @@ struct LatchApp: App {
                 .toggleStyle(DemoraToggleStyle())
                 .textCase(TextCasing.resolved(textCasingRaw).textCase)
                 .environment(\.locale, model.language.locale)
+                // RTL (ar, he, ur) follows the in-app language, not the device.
+                // Sheets and covers inherit it from here.
+                .environment(\.layoutDirection, model.language.layoutDirection)
+                .onChange(of: model.language) { language in
+                    language.applyUIKitLayoutDirection()
+                }
                 .preferredColorScheme(
                     (Appearance(rawValue: appearanceRaw) ?? .system).colorScheme)
                 // Hidden screenshot helper: tap to flip light ⇄ dark. Invisible.
@@ -303,5 +314,17 @@ private struct DemoraTabBar: View {
         if tab == 0 && approvalCount > 0 { return tr("Approval request waiting") }
         if tab == 3 && inviteCount > 0 { return tr("Invite waiting") }
         return ""
+    }
+}
+
+extension AppLanguage {
+    var layoutDirection: LayoutDirection { isRightToLeft ? .rightToLeft : .leftToRight }
+
+    /// UIKit pieces SwiftUI hosts (navigation bars, alerts, search fields)
+    /// take their direction from this. Views created after the call follow it;
+    /// an already-open navigation bar updates when it's next rebuilt.
+    func applyUIKitLayoutDirection() {
+        UIView.appearance().semanticContentAttribute =
+            isRightToLeft ? .forceRightToLeft : .forceLeftToRight
     }
 }

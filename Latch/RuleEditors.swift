@@ -190,7 +190,7 @@ struct EditorRow<Destination: View>: View {
                 Text(value)
                     .demoraType(.meta)
                     .foregroundStyle(Ink.inkSoft)
-                Image(systemName: "chevron.right")
+                Image(systemName: "chevron.forward")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Ink.inkSoft)
                     .accessibilityHidden(true)
@@ -258,7 +258,7 @@ struct AppsRow: View {
                     Text(String(format: tr("%d selected"), RuleCounts(selection).total))
                         .demoraType(.meta)
                         .foregroundStyle(Ink.inkSoft)
-                    Image(systemName: "chevron.right")
+                    Image(systemName: "chevron.forward")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Ink.inkSoft)
                         .accessibilityHidden(true)
@@ -1026,7 +1026,7 @@ struct ScheduleEditorView: View {
                 } label: {
                     HStack(spacing: DemoraSpace.xxs) {
                         Text(tr("See conflicts"))
-                        Image(systemName: "chevron.right").font(.caption2.weight(.semibold))
+                        Image(systemName: "chevron.forward").font(.caption2.weight(.semibold))
                     }
                     .demoraType(.meta)
                     .frame(minHeight: 44)

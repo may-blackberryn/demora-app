@@ -225,9 +225,12 @@ struct OnboardingView: View {
 
     private var preferences: some View {
         Menu {
+            // 44 languages: a submenu (not inline in this menu), in the
+            // picker's order: the current one first, then by name.
             Picker(tr("Language"), selection: Binding(get: { model.language }, set: { model.language = $0 })) {
-                ForEach(AppLanguage.allCases) { Text($0.label).tag($0) }
+                ForEach(AppLanguage.pickerOrder(applied: model.language)) { Text($0.label).tag($0) }
             }
+            .pickerStyle(.menu)
             Picker(tr("Appearance"), selection: $appearanceRaw) {
                 ForEach(Appearance.allCases) { Text($0.label).tag($0.rawValue) }
             }

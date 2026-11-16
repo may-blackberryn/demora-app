@@ -336,7 +336,7 @@ struct ExtraTimeRows: View {
                             : String(format: tr("Get extra time (%d left)"), remaining))
                             .foregroundColor(accent)
                         Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
+                        Image(systemName: "chevron.forward")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Ink.inkSoft)
                             .accessibilityHidden(true)
@@ -428,7 +428,7 @@ struct CheckInRows: View {
     private var divider: some View { Rectangle().fill(Ink.hairline).frame(height: 1) }
 
     private var chevron: some View {
-        Image(systemName: "chevron.right")
+        Image(systemName: "chevron.forward")
             .font(.caption.weight(.semibold))
             .foregroundStyle(Ink.inkSoft)
             .accessibilityHidden(true)

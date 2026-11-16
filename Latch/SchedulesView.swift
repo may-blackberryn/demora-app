@@ -63,7 +63,7 @@ struct CalendarView: View {
             VStack(spacing: DemoraSpace.s) {
                 HStack(spacing: DemoraSpace.xs) {
                     Button { shift(-1) } label: {
-                        Image(systemName: "chevron.left")
+                        Image(systemName: "chevron.backward")
                             .frame(minWidth: 44, minHeight: 44)
                             .contentShape(Rectangle())
                     }
@@ -76,7 +76,7 @@ struct CalendarView: View {
                         .frame(maxWidth: .infinity)
                         .accessibilityAddTraits(.isHeader)
                     Button { shift(1) } label: {
-                        Image(systemName: "chevron.right")
+                        Image(systemName: "chevron.forward")
                             .frame(minWidth: 44, minHeight: 44)
                             .contentShape(Rectangle())
                     }
@@ -191,7 +191,7 @@ struct CalendarView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
+            Image(systemName: "chevron.forward")
                 .font(.caption).foregroundStyle(Ink.inkSoft)
                 .accessibilityHidden(true)
         }

@@ -3,7 +3,9 @@
 
 Only the four literal WidgetKit gallery keys belong in this catalog. Runtime
 copy follows the in-app language through DemoraWidgetSnapshot, not this catalog.
-English keys and the seven app dictionaries are the only translation sources.
+English keys and the app dictionaries are the only translation sources: the
+original eight plus every 2.0 language marked complete (Tests/app_languages.py;
+pending languages are left out, so iOS shows the English).
 Validate whole dictionaries (including inline entries) before rendering JSON.
 
 Default: print deterministic JSON. --check: compare it with the checked-in file.
@@ -18,10 +20,14 @@ from pathlib import Path
 import re
 import sys
 
-ROOT = Path(__file__).resolve().parents[1]
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_languages as L  # noqa: E402
+
+ROOT = L.ROOT
 TARGET = ROOT / 'LatchWidgets/Localizable.xcstrings'
-LANGUAGES = {'es': '', 'de': '+German', 'fr': '+French', 'pt': '+Portuguese',
-             'pl': '+Polish', 'tr': '+Turkish', 'hi': '+Hindi'}
+# Published languages (code → file suffix), recomputed from the dictionaries.
+LANGUAGES = {}
 GALLERY_KEYS = (
     'Now & next',
     "See what's on now and what's next.",
@@ -57,31 +63,37 @@ def entries(source):
 
 
 def placeholders(value):
-    return Counter(token for token in PLACEHOLDER.findall(value) if token != '%%')
+    # Numbered placeholders (%2$@) count as their plain type; order is checked
+    # by Tests/app_languages.py.
+    return Counter(re.sub(r'^%\d+\$', '%', token)
+                   for token in PLACEHOLDER.findall(value) if token != '%%')
 
 
 def load_tables():
     required = set(GALLERY_KEYS) | set(RUNTIME_KEYS)
     tables = {}
-    for code, suffix in LANGUAGES.items():
-        path = ROOT / f'Shared/Localization{suffix}.swift'
-        pairs = entries(path.read_text(encoding='utf-8'))
+    # Shared validation (keys, duplicates, empty values, placeholders in order).
+    for code, table in L.complete_tables().items():
+        name = L.path(code).name
+        missing = sorted(required - table.keys())
+        if missing:
+            raise ValueError(f'{name}: missing widget translations: {missing}')
+        tables[code] = table
+    # Keep this script's own whole-table checks as a second guard.
+    for code in tables:
+        name = L.path(code).name
+        pairs = entries(L.path(code).read_text(encoding='utf-8'))
         counts = Counter(key for key, _ in pairs)
         duplicates = sorted(key for key, count in counts.items() if count > 1)
         if duplicates:
-            raise ValueError(f'{path.name}: duplicate dictionary keys: {duplicates}')
-        table = dict(pairs)
-        missing = sorted(required - table.keys())
-        if missing:
-            raise ValueError(f'{path.name}: missing widget translations: {missing}')
-        # Validate every pair, not just gallery/runtime keys, so generation cannot
-        # hide a duplicate-key trap or a damaged format elsewhere in the table.
+            raise ValueError(f'{name}: duplicate dictionary keys: {duplicates}')
         for key, value in pairs:
             if not value.strip():
-                raise ValueError(f'{path.name}: empty translation for {key!r}')
+                raise ValueError(f'{name}: empty translation for {key!r}')
             if placeholders(key) != placeholders(value):
-                raise ValueError(f'{path.name}: format placeholders differ for {key!r}')
-        tables[code] = table
+                raise ValueError(f'{name}: format placeholders differ for {key!r}')
+    LANGUAGES.clear()
+    LANGUAGES.update({code: L.BY_CODE[code][0] for code in tables})
     return tables
 
 
@@ -90,7 +102,7 @@ def render(tables=None):
         tables = load_tables()
     strings = {}
     for key in sorted(GALLERY_KEYS):
-        values = {'en': key, **{code: tables[code][key] for code in LANGUAGES}}
+        values = {'en': key, **{code: tables[code][key] for code in tables}}
         strings[key] = {
             'extractionState': 'manual',
             'localizations': {
@@ -128,8 +140,9 @@ def main():
             if not TARGET.exists() or TARGET.read_text(encoding='utf-8') != source:
                 raise ValueError('Regenerate LatchWidgets/Localizable.xcstrings: '
                                  'apply the output of --patch with apply_patch')
-            print(f'Widget gallery catalog matches {len(GALLERY_KEYS)} keys × 8 languages; '
-                  f'{len(set(GALLERY_KEYS) | set(RUNTIME_KEYS))} required widget keys × 7 tables')
+            print(f'Widget gallery catalog matches {len(GALLERY_KEYS)} keys × {len(tables) + 1} languages; '
+                  f'{len(set(GALLERY_KEYS) | set(RUNTIME_KEYS))} required widget keys × {len(tables)} tables'
+                  + f'; {L.publication_note(len(tables))}')
             print('Full dictionary key counts: ' + ', '.join(
                 f'{code}={len(table)}' for code, table in tables.items())
                   + '; no duplicates; format placeholders match')

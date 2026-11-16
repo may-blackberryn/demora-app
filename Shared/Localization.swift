@@ -16,8 +16,47 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     case polish = "pl"
     case turkish = "tr"
     case hindi = "hi"
+    // Added for 2.0 (docs/app-languages-2.0.md). Raw values are the saved
+    // `latch.language` values and the Xcode localization codes.
+    case catalan = "ca"
+    case czech = "cs"
+    case danish = "da"
+    case greek = "el"
+    case finnish = "fi"
+    case croatian = "hr"
+    case hungarian = "hu"
+    case italian = "it"
+    case dutch = "nl"
+    case norwegian = "nb"
+    case romanian = "ro"
+    case russian = "ru"
+    case slovak = "sk"
+    case slovenian = "sl"
+    case swedish = "sv"
+    case ukrainian = "uk"
+    case indonesian = "id"
+    case japanese = "ja"
+    case korean = "ko"
+    case malay = "ms"
+    case thai = "th"
+    case vietnamese = "vi"
+    case chineseSimplified = "zh-Hans"
+    case chineseTraditional = "zh-Hant"
+    case bengali = "bn"
+    case gujarati = "gu"
+    case kannada = "kn"
+    case malayalam = "ml"
+    case marathi = "mr"
+    case odia = "or"
+    case punjabi = "pa"
+    case tamil = "ta"
+    case telugu = "te"
+    case arabic = "ar"
+    case hebrew = "he"
+    case urdu = "ur"
 
     var id: String { rawValue }
+    /// The language's own name, as it calls itself.
     var label: String {
         switch self {
         case .english: return "English"
@@ -28,6 +67,42 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         case .polish: return "Polski"
         case .turkish: return "Türkçe"
         case .hindi: return "हिन्दी"
+        case .catalan: return "Català"
+        case .czech: return "Čeština"
+        case .danish: return "Dansk"
+        case .greek: return "Ελληνικά"
+        case .finnish: return "Suomi"
+        case .croatian: return "Hrvatski"
+        case .hungarian: return "Magyar"
+        case .italian: return "Italiano"
+        case .dutch: return "Nederlands"
+        case .norwegian: return "Norsk bokmål"
+        case .romanian: return "Română"
+        case .russian: return "Русский"
+        case .slovak: return "Slovenčina"
+        case .slovenian: return "Slovenščina"
+        case .swedish: return "Svenska"
+        case .ukrainian: return "Українська"
+        case .indonesian: return "Bahasa Indonesia"
+        case .japanese: return "日本語"
+        case .korean: return "한국어"
+        case .malay: return "Bahasa Melayu"
+        case .thai: return "ไทย"
+        case .vietnamese: return "Tiếng Việt"
+        case .chineseSimplified: return "简体中文"
+        case .chineseTraditional: return "繁體中文"
+        case .bengali: return "বাংলা"
+        case .gujarati: return "ગુજરાતી"
+        case .kannada: return "ಕನ್ನಡ"
+        case .malayalam: return "മലയാളം"
+        case .marathi: return "मराठी"
+        case .odia: return "ଓଡ଼ିଆ"
+        case .punjabi: return "ਪੰਜਾਬੀ"
+        case .tamil: return "தமிழ்"
+        case .telugu: return "తెలుగు"
+        case .arabic: return "العربية"
+        case .hebrew: return "עברית"
+        case .urdu: return "اردو"
         }
     }
 
@@ -39,6 +114,12 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         self != .english && self != .spanish
     }
 
+    /// Arabic, Hebrew and Urdu read right to left; the app mirrors its layout
+    /// for them (see `demoraLayoutDirection`). Clocks and charts never mirror.
+    var isRightToLeft: Bool {
+        self == .arabic || self == .hebrew || self == .urdu
+    }
+
     static var current: AppLanguage {
         get {
             // An explicit in-app choice always wins.
@@ -46,18 +127,57 @@ enum AppLanguage: String, CaseIterable, Identifiable {
                let lang = AppLanguage(rawValue: saved) {
                 return lang
             }
-            // Otherwise follow the device when Demora supports its preferred
-            // language, falling back to English.
-            let preferred = Locale.preferredLanguages.first ?? "en"
-            let code = Locale(identifier: preferred).language.languageCode?
-                .identifier ?? String(preferred.prefix(2))
-            return AppLanguage(rawValue: code) ?? .english
+            // Otherwise follow the device: the first preferred language Demora
+            // supports (scripts and Norwegian handled by AppLanguageMatching),
+            // falling back to English.
+            return deviceMatch(Locale.preferredLanguages)
         }
         set {
             SharedStore.defaults.set(newValue.rawValue, forKey: "latch.language")
             DemoraWidgetSnapshot.publish(state: SharedStore.loadState())
             DemoraNotifications.rescheduleFreeBoundaries(state: SharedStore.loadState())
         }
+    }
+
+    /// Pure: the app language for a device's preferred-language list.
+    static func deviceMatch(_ preferred: [String]) -> AppLanguage {
+        AppLanguage(rawValue: AppLanguageMatching.code(
+            preferred: preferred, supported: Set(allCases.map(\.rawValue)))) ?? .english
+    }
+}
+
+extension AppLanguage {
+    /// This language's name in `display`'s language ("Japanese" when the app
+    /// is in English), from Foundation, so it needs no translated copy. Nil
+    /// when it would just repeat the native label.
+    func name(in display: AppLanguage) -> String? {
+        guard let name = display.locale.localizedString(forIdentifier: rawValue),
+              !name.isEmpty else { return nil }
+        let cased = name.prefix(1).uppercased(with: display.locale) + name.dropFirst()
+        return cased == label ? nil : cased
+    }
+
+    /// The language picker's order: the applied language first, then every
+    /// other language by its name in the app's language (as iOS Settings lists
+    /// them), so 44 entries stay findable without section copy.
+    static func pickerOrder(applied: AppLanguage) -> [AppLanguage] {
+        let others = allCases.filter { $0 != applied }.sorted { a, b in
+            let left = a.name(in: applied) ?? a.label
+            let right = b.name(in: applied) ?? b.label
+            return left.compare(right, options: [.caseInsensitive, .diacriticInsensitive],
+                                locale: applied.locale) == .orderedAscending
+        }
+        return [applied] + others
+    }
+
+    /// Search matches the native label, the name in the app's language, the
+    /// English name and the code ("ja", "zh-Hant").
+    func matches(search: String, display: AppLanguage) -> Bool {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        return [label, name(in: display), name(in: .english), rawValue]
+            .compactMap { $0 }
+            .contains { $0.localizedStandardContains(query) }
     }
 }
 
@@ -72,6 +192,42 @@ func tr(_ key: String) -> String {
     case .polish: table = polishStrings
     case .turkish: table = turkishStrings
     case .hindi: table = hindiStrings
+    case .catalan: table = catalanStrings
+    case .czech: table = czechStrings
+    case .danish: table = danishStrings
+    case .greek: table = greekStrings
+    case .finnish: table = finnishStrings
+    case .croatian: table = croatianStrings
+    case .hungarian: table = hungarianStrings
+    case .italian: table = italianStrings
+    case .dutch: table = dutchStrings
+    case .norwegian: table = norwegianStrings
+    case .romanian: table = romanianStrings
+    case .russian: table = russianStrings
+    case .slovak: table = slovakStrings
+    case .slovenian: table = slovenianStrings
+    case .swedish: table = swedishStrings
+    case .ukrainian: table = ukrainianStrings
+    case .indonesian: table = indonesianStrings
+    case .japanese: table = japaneseStrings
+    case .korean: table = koreanStrings
+    case .malay: table = malayStrings
+    case .thai: table = thaiStrings
+    case .vietnamese: table = vietnameseStrings
+    case .chineseSimplified: table = chineseSimplifiedStrings
+    case .chineseTraditional: table = chineseTraditionalStrings
+    case .bengali: table = bengaliStrings
+    case .gujarati: table = gujaratiStrings
+    case .kannada: table = kannadaStrings
+    case .malayalam: table = malayalamStrings
+    case .marathi: table = marathiStrings
+    case .odia: table = odiaStrings
+    case .punjabi: table = punjabiStrings
+    case .tamil: table = tamilStrings
+    case .telugu: table = teluguStrings
+    case .arabic: table = arabicStrings
+    case .hebrew: table = hebrewStrings
+    case .urdu: table = urduStrings
     }
     return table?[key] ?? key
 }
@@ -1768,4 +1924,7 @@ let spanishStrings: [String: String] = [
     "%@, free from %@ until %@": "%@, libre de %@ a %@",
     "Your limits will show here. Pull down to refresh if it stays empty.": "Tus límites aparecerán aquí. Si sigue vacío, desliza hacia abajo para actualizar.",
     "If your limits don't appear, pull down to refresh.": "Si tus límites no aparecen, desliza hacia abajo para actualizar.",
+    // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
+    "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora lee tu ubicación una vez cuando tocas Comprobar, defines un lugar o usas el país en el que estás, para ver si se cumple el lugar o el país de una regla. Tu ubicación no se envía a ningún sitio; solo se guardan los lugares que guardas.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora necesita tu ubicación exacta para esta comprobación, para saber si estás dentro del lugar o del país de una regla.",
 ]

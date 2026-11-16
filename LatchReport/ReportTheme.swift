@@ -72,6 +72,8 @@ struct ReportPreferences {
     let scheme: ColorScheme
     let accentValue: String
     let locale: Locale
+    /// Follows the in-app language: Arabic, Hebrew and Urdu mirror.
+    let layoutDirection: LayoutDirection
 
     static func read(system: ColorScheme) -> ReportPreferences {
         let defaults = UserDefaults(suiteName: AppGroup.id)
@@ -81,18 +83,13 @@ struct ReportPreferences {
         case "dark": scheme = .dark
         default: scheme = system
         }
-        let supported = ["en", "es", "de", "fr", "pt", "pl", "tr", "hi"]
-        let locale: Locale
-        if let saved = defaults?.string(forKey: "latch.language"), supported.contains(saved) {
-            locale = Locale(identifier: saved)
-        } else {
-            let preferred = Locale.preferredLanguages.first ?? "en"
-            let code = Locale(identifier: preferred).language.languageCode?.identifier ?? String(preferred.prefix(2))
-            locale = Locale(identifier: supported.contains(code) ? code : "en")
-        }
+        // Same saved choice and device matching as the app (generated
+        // UsageInsightsLocalization.swift carries the shared matcher).
+        let locale = Locale(identifier: reportLanguageCode())
         return ReportPreferences(scheme: scheme,
                                  accentValue: defaults?.string(forKey: "latch.accentColor") == "red" ? "red" : "blue",
-                                 locale: locale)
+                                 locale: locale,
+                                 layoutDirection: reportIsRightToLeft() ? .rightToLeft : .leftToRight)
     }
 }
 
