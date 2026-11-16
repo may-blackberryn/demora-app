@@ -2100,7 +2100,8 @@ Verify, on the tree committed as `c4c9099`:
   --check`: one failure, `WhenWhereLocationHarness`. Commit `5f7b2b9` had
   added camera translations, so the catalog was stale. After regenerating,
   that harness, all three generator checks and `AppLanguageMatchingHarness`
-  pass. The whole suite wasn't rerun after that last regeneration.
+  pass. A final full rerun on `90a78b0` passed (`verify_failed=0`, 45
+  harnesses), with 26 languages complete and 10 pending.
 - The run before it caught `WakeWidgetPublicationHarness` (its stub lacked
   `AppLanguage`), now fixed.
 - Unsigned Debug and Release, Xcode 27.2 / iPhoneOS27.2.sdk: `BUILD
