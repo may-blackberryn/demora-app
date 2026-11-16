@@ -189,7 +189,6 @@ struct GuideTopicView: View {
 struct LanguagePickerView: View {
     @EnvironmentObject var model: AppModel
     @State private var selectedLanguage = AppLanguage.current
-    @State private var showLanguageBetaNotice = false
     @State private var search = ""
 
     /// 44 languages: the applied one first, the rest by their name in the app's
@@ -228,9 +227,13 @@ struct LanguagePickerView: View {
         .casedNavigationTitle(tr("Language"))
         // The system's own "Search" prompt: no new copy for 44 languages.
         .searchable(text: $search)
+        // The beta-translation invite (L5). Held in the model, and this page is
+        // a path route (YouRoute.language), so rebuilding the stack after
+        // applying a language keeps both the page and the notice.
         .alert(tr("Translation in beta"),
-               isPresented: $showLanguageBetaNotice) {
-            Button(tr("OK"), role: .cancel) { }
+               isPresented: Binding(get: { model.betaNoticeLanguage != nil },
+                                    set: { if !$0 { model.betaNoticeLanguage = nil } })) {
+            Button(tr("OK"), role: .cancel) { model.betaNoticeLanguage = nil }
         } message: {
             Text(tr("This language is in beta. Please report any mistranslations or unclear phrasing to hello@getdemora.app."))
         }
@@ -238,8 +241,9 @@ struct LanguagePickerView: View {
 
     private func applyLanguage() {
         model.language = selectedLanguage
+        // Shown below; survives the stack rebuild (L5 safety net).
         if selectedLanguage.isBetaTranslation {
-            showLanguageBetaNotice = true
+            model.betaNoticeLanguage = selectedLanguage
         }
     }
 }

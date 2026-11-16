@@ -78,7 +78,9 @@ struct AppearanceView: View {
                     }
                     .pickerStyle(.segmented)
                 }
-                NavigationLink { LanguagePickerView() } label: {
+                // A path route, not a view link: applying a language rebuilds
+                // the stack, and an untracked page (with its notice) was dropped.
+                Button { model.youPath.append(.language) } label: {
                     YouRowLabel(title: tr("Language"), value: model.language.label)
                         .paperCard(padding: 0)
                 }
@@ -138,7 +140,7 @@ private struct AppearancePreviewCard: View {
                     .foregroundStyle(Ink.ink)
                 Spacer(minLength: DemoraSpace.xs)
                 StateChip(kind: .active, text: String(format: tr("On until %@"),
-                                                      until.formatted(date: .omitted, time: .shortened)))
+                                                      until.appFormatted(date: .omitted, time: .shortened)))
             }
             Text(timerInterval: Date.now...until, countsDown: true)
                 .demoraType(.time)
@@ -370,7 +372,7 @@ struct PreventDisablingPage: View {
         HStack(spacing: DemoraSpace.xxs) {
             Image(systemName: "clock").accessibilityHidden(true)
             Text(String(format: tr("Opens %@"), change.appliesAt.formatted(
-                .dateTime.weekday(.abbreviated).hour().minute())))
+                .dateTime.weekday(.abbreviated).hour().minute().locale(AppLanguage.current.locale))))
             CountdownText(to: change.appliesAt, style: nil).monospacedDigit()
         }
         .demoraType(.meta)

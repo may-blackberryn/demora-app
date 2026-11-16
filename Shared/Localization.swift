@@ -181,6 +181,19 @@ extension AppLanguage {
     }
 }
 
+extension Date {
+    /// Formatted in the in-app language (digits, month names, AM/PM), not the
+    /// device region. SwiftUI `Text` already gets `\.locale` from the root.
+    func appFormatted(date: Date.FormatStyle.DateStyle, time: Date.FormatStyle.TimeStyle) -> String {
+        formatted(Date.FormatStyle(date: date, time: time).locale(AppLanguage.current.locale))
+    }
+}
+
+extension Int {
+    /// A count in the in-app language's digits.
+    func appFormatted() -> String { formatted(.number.locale(AppLanguage.current.locale)) }
+}
+
 func tr(_ key: String) -> String {
     let table: [String: String]?
     switch AppLanguage.current {

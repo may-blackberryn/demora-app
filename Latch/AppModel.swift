@@ -21,6 +21,9 @@ final class AppModel: ObservableObject {
     @Published var language: AppLanguage = AppLanguage.current {
         didSet { AppLanguage.current = language }
     }
+    /// A beta translation the user just applied in You → Language; YouView
+    /// shows the feedback invite once, then clears it.
+    @Published var betaNoticeLanguage: AppLanguage?
     /// Set when a queue attempt is rejected; shown as an alert.
     @Published var queueNotice: String?
     @Published var queueNoticeIsCapacity = false

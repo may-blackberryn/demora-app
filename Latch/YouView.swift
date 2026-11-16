@@ -12,7 +12,7 @@ import UserNotifications
 
 /// Pages pushed inside You.
 enum YouRoute: Hashable {
-    case appearance, preventDisabling, help, credits
+    case appearance, preventDisabling, help, credits, language
     case yourCode, approveFor, blocked, requestsSent
     case way(SkipWayKind, UUID)
     /// The Changes ledger, scrolled to one change when given.
@@ -123,12 +123,12 @@ struct YouView: View {
                 }
                 YouRowDivider()
                 YouNavigationRow(title: tr("People you approve for"),
-                                 value: grantsCount.map { $0.formatted() }) {
+                                 value: grantsCount.map { $0.appFormatted() }) {
                     model.youPath.append(.approveFor)
                 }
                 if blockedCount > 0 {
                     YouRowDivider()
-                    YouNavigationRow(title: tr("Blocked"), value: blockedCount.formatted()) {
+                    YouNavigationRow(title: tr("Blocked"), value: blockedCount.appFormatted()) {
                         model.youPath.append(.blocked)
                     }
                 }
@@ -212,6 +212,7 @@ struct YouView: View {
         case .preventDisabling: PreventDisablingPage()
         case .help: HelpGuideView()
         case .credits: CreditsView()
+        case .language: LanguagePickerView()
         case .yourCode: MyInfoView()
         case .approveFor: ApproveForView()
         case .blocked: BlockedUsersView()
