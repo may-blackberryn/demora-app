@@ -69,7 +69,6 @@ struct CompactHomeUsageReport: View {
     @AppStorage("appearance") private var appearanceRaw = Appearance.system.rawValue
     @AppStorage("latch.accentColor", store: SharedStore.defaults)
     private var accentColorRaw = "blue"
-    @AppStorage("limits.usageNoteDismissed") private var usageNoteDismissed = false
     @State private var refreshedAt = Date()
     @State private var expanded = false
     @State private var onScreen = false
@@ -101,9 +100,20 @@ struct CompactHomeUsageReport: View {
         // Today's "Your limits" header sits above this card. No refresh
         // button (Insights I6): pull to refresh and refresh on appear remain.
         VStack(alignment: .leading, spacing: 8) {
-            LimitsUsageReportView(refreshedAt: refreshedAt, limits: queryLimits)
-                .frame(height: viewportHeight, alignment: .topLeading)
-                .clipped()
+            ZStack(alignment: .topLeading) {
+                // Behind the report (F5): the extension draws an opaque card
+                // background, so a rendered report covers this line. Nothing
+                // here learns whether it rendered; iOS gives no such signal.
+                Text(tr("Your limits will show here. Pull down to refresh if it stays empty."))
+                    .demoraType(.meta)
+                    .foregroundStyle(Ink.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, 4)
+                    .accessibilitySortPriority(-1)
+                LimitsUsageReportView(refreshedAt: refreshedAt, limits: queryLimits)
+            }
+            .frame(height: viewportHeight, alignment: .topLeading)
+            .clipped()
             HStack {
                 Text("\(tr("Limits")) · \(limitCount)")
                     .demoraType(.meta)
@@ -119,11 +129,6 @@ struct CompactHomeUsageReport: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityValue(tr(expanded ? "Expanded" : "Compact"))
-            }
-            if !usageNoteDismissed {
-                DismissibleNote(
-                    text: tr("Usage stays in the Screen Time report. Scroll to see more groups. If it looks empty, pull down to refresh; an empty report does not mean zero usage."),
-                    onDismiss: { usageNoteDismissed = true })
             }
         }
         .paperCard()
@@ -144,9 +149,10 @@ struct CompactHomeUsageReport: View {
                 try await Task.sleep(nanoseconds: UInt64(refreshPolicy.delay(at: ProcessInfo.processInfo.systemUptime) * 1_000_000_000))
                 guard !Task.isCancelled, canRefresh else { return }
                 refreshReport()
-                // One bounded soft retry after foreground/tab return or a
-                // manual request. No readiness signal, endless polling or
-                // report recreation; hiding Home cancels pending work.
+                // One bounded soft retry about 3 s later (F5), after the card
+                // appears, a foreground/tab return or a manual request. No
+                // readiness signal, endless polling or report recreation:
+                // only the filter changes. Hiding Home cancels pending work.
                 try await Task.sleep(nanoseconds: UInt64(HomeReportRefreshPolicy.retryDelay * 1_000_000_000))
                 guard !Task.isCancelled, canRefresh else { return }
                 refreshReport()

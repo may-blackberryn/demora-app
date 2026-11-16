@@ -1276,7 +1276,6 @@ let spanishStrings: [String: String] = [
     "Opens in": "Se abre en",
     "%@ asks to apply “%@”": "%@ pide aplicar “%@”",
     "A contact asks to apply “%@”": "Un contacto pide aplicar “%@”",
-    "Usage stays in the Screen Time report. Scroll to see more groups. If it looks empty, pull down to refresh; an empty report does not mean zero usage.": "El uso se queda en el informe de Tiempo en Pantalla. Desplázate para ver más grupos. Si parece vacío, desliza hacia abajo para actualizar; un informe vacío no significa que el uso sea cero.",
     // Usage report rows (Today redesign)
     "%d of %d min": "%d de %d min",
     "Used up": "Agotado",
@@ -1768,4 +1767,5 @@ let spanishStrings: [String: String] = [
     "%@, free now until %@": "%@, libre ahora hasta %@",
     "%@, from %@ until %@": "%@, de %@ a %@",
     "%@, free from %@ until %@": "%@, libre de %@ a %@",
+    "Your limits will show here. Pull down to refresh if it stays empty.": "Tus límites aparecerán aquí. Si sigue vacío, desliza hacia abajo para actualizar.",
 ]

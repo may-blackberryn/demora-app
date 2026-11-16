@@ -1905,3 +1905,32 @@ deliberately with the band cases. No phone yet.
 | Reused the existing "New session" key (it was already in all seven tables) instead of adding a second; the old "Block now" key removed | A duplicate key crashes the dictionary literal (the harness caught it). Hindi's old value "नई सत्र" corrected to "नया सत्र" (सत्र is masculine) | Yes |
 | Also renamed where the action is named in visible copy: the Help guide's Sessions text and the check-in receipt line "It waits your stricter delay, like New session. It's in Changes.", in all eight languages (Hindi: "नए सत्र की तरह"; French: "dès qu'elle s'applique") | Consistent naming; no "Block now" in onboarding, widgets or shield. Code comments and older docs keep "Block now" as the history of the same action; `today-redesign.md` notes the rename | Yes |
 | Harness expectations updated: `TodayPresentationHarness`, `GuideContentHarness`, `WhenWhereBlockHarness` | They pin the visible names | Yes |
+
+## F5: blank "Your limits" card (2026-11-15)
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| A quiet `meta`/`inkSoft` line "Your limits will show here. Pull down to refresh if it stays empty." sits in a `ZStack` behind `LimitsUsageReportView`, inside the same clipped viewport | Spec item 1. The host never learns whether the report rendered | Yes |
+| The extension's root (`LatchReport/LimitsUsageView.swift`) was **not** opaque (bare `ScrollView`); it now draws `ReportPalette.card` behind the scroll view, resolved with its existing app-appearance `scheme` | The same values as `InkPalette.card` (harness pins the palette copy), so light/dark and forced appearance match the host card | Yes |
+| The placeholder stays readable to VoiceOver, sorted after the report (`accessibilitySortPriority(-1)`) | When the report is blank it's the only explanation; when it isn't, it's read last and is still true | Yes, flagged |
+| Automatic retry: **already present** since `862cc9c` — each refresh request (including on appear) queries once after `HomeReportRefreshPolicy`'s delay, then once more after `retryDelay` (3 s), only by changing the filter. Kept as is, comment updated, harness now pins one query + one retry and no `.id(` recreation | Spec item 2 is met by the existing mechanism; adding another timer would double the retries | Yes |
+| Old dismissible note and its `limits.usageNoteDismissed` flag removed; its string removed from the seven tables (no other user) | Spec item 3. The note's "empty doesn't mean zero" sentence goes with it, as the spec decided | Yes |
+| No report localization touched (no new report string); `GenerateUsageLocalization.py --check` unchanged | Usage never leaves the extension; only a background colour changed there | Yes |
+
+### F3–F5: what to try on the phone
+1. **Thread at night** (e.g. 23:30 with a sleep block from 22:00): the block
+   sits just under the now line with no left time and "Until <tomorrow> 7:00 AM".
+2. **Thread after midnight** (≈ 3 am): yesterday's block is on now, no
+   "thu 10:00 pm" label, chip "Until 7:00 AM".
+3. **Thread at noon**: that block is above the now line, labelled with its
+   end, chip "Ended" with a soft "Since Thu 10:00 PM"; at most two ended rows;
+   "Full day" only when rows are hidden. Check the dots line up and the line
+   stops at the last dot; try the largest text size and VoiceOver (one
+   sentence per row).
+4. **New session**: Today's bottom button, Rules → New rule menu and the
+   editor title read "New session" in English and one other language.
+5. **Limits card**: open Today several times (cold launch, tab switch,
+   background/foreground). A rendered report fully hides the "Your limits
+   will show here…" line in light and dark, and with forced light/dark in
+   You → Appearance. If it's blank, the line shows and the card retries once
+   by itself about 3 s later; pull to refresh still works.

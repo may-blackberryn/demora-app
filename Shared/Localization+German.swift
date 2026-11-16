@@ -1201,7 +1201,6 @@ let germanStrings: [String: String] = [
     "Opens in": "Öffnet in",
     "%@ asks to apply “%@”": "%@ bittet, „%@“ anzuwenden",
     "A contact asks to apply “%@”": "Ein Kontakt bittet, „%@“ anzuwenden",
-    "Usage stays in the Screen Time report. Scroll to see more groups. If it looks empty, pull down to refresh; an empty report does not mean zero usage.": "Die Nutzung bleibt im Bildschirmzeit-Bericht. Scrolle, um weitere Gruppen zu sehen. Wenn er leer aussieht, zum Aktualisieren nach unten ziehen; ein leerer Bericht bedeutet nicht null Nutzung.",
     // Usage report rows (Today redesign)
     "%d of %d min": "%d von %d Min.",
     "Used up": "Aufgebraucht",
@@ -1693,4 +1692,5 @@ let germanStrings: [String: String] = [
     "%@, free now until %@": "%@, jetzt frei bis %@",
     "%@, from %@ until %@": "%@, von %@ bis %@",
     "%@, free from %@ until %@": "%@, frei von %@ bis %@",
+    "Your limits will show here. Pull down to refresh if it stays empty.": "Deine Limits erscheinen hier. Bleibt es leer, zum Aktualisieren nach unten ziehen.",
 ]

@@ -339,7 +339,11 @@ assert "limitCount) *" not in host  # no unlimited row-count reservation
 assert "expanded.toggle()" in host and "refreshedAt = Date()" in host
 assert "HomeReportRefreshPolicy" in host and ".task(id: refreshRequest)" in host
 assert "queryLimits = model.state.limits" in host
-assert "an empty report does not mean zero usage" in host
+# F5: the dismissible note is replaced by a line behind the report. It never
+# implies zero use; missing rows still say "No data yet" inside the report.
+assert "Your limits will show here. Pull down to refresh if it stays empty." in host
+assert "DismissibleNote" not in host and "Usage stays in the Screen Time report" not in host
+assert 'insightsText("No data yet")' in report
 assert '"app.demora.dev.limits-usage"' in host
 assert '"app.demora.production.limits-usage"' in host
 assert "ScrollView { reportContent }" in report

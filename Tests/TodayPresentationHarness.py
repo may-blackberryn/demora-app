@@ -368,7 +368,8 @@ assert 'receipt = ChangeReceiptRequest(action: removal)' in contacts and '.chang
 # --- Every word on the new screens is translated ---------------------------
 TABLES = {'es': '', 'de': '+German', 'fr': '+French', 'pt': '+Portuguese',
           'pl': '+Polish', 'tr': '+Turkish', 'hi': '+Hindi'}
-TODAY_FILES = ['Latch/ChangeReceiptSheet.swift', 'Latch/ChangesLedgerView.swift', 'Latch/TodayView.swift']
+TODAY_FILES = ['Latch/ChangeReceiptSheet.swift', 'Latch/ChangesLedgerView.swift', 'Latch/TodayView.swift',
+               'Latch/LimitsUsageReportView.swift']
 keys = set()
 for name in TODAY_FILES:
     path = ROOT / name
@@ -505,6 +506,20 @@ assert 'TodayTimeText.clock(' in thread_view and 'entry.label.map(clock)' in thr
 assert 'isLast ? Color.clear : Ink.hairline' in thread_view, 'the thread stops at the last dot'
 assert thread_view.count('.accessibilityLabel(Text(sentence(entry)))') == 2, 'one sentence per row'
 assert 'children: .combine' not in thread_view
+# F5: a quiet line behind the report, an opaque report, the old note gone.
+for token in ('ZStack(alignment: .topLeading)',
+              'tr("Your limits will show here. Pull down to refresh if it stays empty.")'):
+    assert token in host, token
+assert host.index('Your limits will show here') < host.index('LimitsUsageReportView(refreshedAt: refreshedAt'), \
+    'the line is drawn behind the report'
+assert 'DismissibleNote' not in host and 'usageNoteDismissed' not in host, 'old note removed'
+assert host.count('refreshReport()') == 3 and host.count('HomeReportRefreshPolicy.retryDelay') == 1, \
+    'one query plus one ~3 s retry per request, no recreation'
+assert '.id(' not in host, 'refresh changes the filter, never the view identity'
+limits_report = (ROOT / 'LatchReport/LimitsUsageView.swift').read_text()
+assert '.background(ink(ReportPalette.card))' in limits_report, 'report draws an opaque card background'
+for forbidden in ('.set(', 'URLSession', 'FileManager', 'NotificationCenter'):
+    assert forbidden not in limits_report, ('usage never leaves the extension', forbidden)
 print('Today layout guards passed: section order, Changes-only navigation, visible inbox task, pinned New session, event-only reads, rule names only, report refresh')
 
 # --- Report restyle (§5.5) and its palette copy -----------------------------

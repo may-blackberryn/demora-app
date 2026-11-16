@@ -32,8 +32,11 @@ struct LimitsUsageView: View {
         // The host owns a bounded viewport, not an estimated per-row height.
         // Scroll entirely inside the report sandbox; no usage/readiness/height
         // payload is written to the App Group or sent back to the host.
+        // Opaque in the app's card colour (F5): a rendered report covers the
+        // host's "Your limits will show here" line behind it.
         ScrollView { reportContent }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(ink(ReportPalette.card))
             .environment(\.colorScheme, scheme)
     }
 

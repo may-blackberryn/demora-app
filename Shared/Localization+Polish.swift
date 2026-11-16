@@ -1175,7 +1175,6 @@ let polishStrings: [String: String] = [
     "Opens in": "Otwarcie za",
     "%@ asks to apply “%@”": "%@ prosi o zastosowanie „%@”",
     "A contact asks to apply “%@”": "Kontakt prosi o zastosowanie „%@”",
-    "Usage stays in the Screen Time report. Scroll to see more groups. If it looks empty, pull down to refresh; an empty report does not mean zero usage.": "Dane o użyciu zostają w raporcie Czasu przed ekranem. Przewiń, aby zobaczyć więcej grup. Jeśli wygląda na pusty, przeciągnij w dół, aby odświeżyć; pusty raport nie oznacza zerowego użycia.",
     // Usage report rows (Today redesign)
     "%d of %d min": "%d z %d min",
     "Used up": "Wyczerpany",
@@ -1686,4 +1685,5 @@ let polishStrings: [String: String] = [
     "%@, free now until %@": "%@, wolne teraz do %@",
     "%@, from %@ until %@": "%@, od %@ do %@",
     "%@, free from %@ until %@": "%@, wolne od %@ do %@",
+    "Your limits will show here. Pull down to refresh if it stays empty.": "Tu pojawią się twoje limity. Jeśli pozostanie puste, przeciągnij w dół, aby odświeżyć.",
 ]
