@@ -398,6 +398,7 @@ private struct NowNextWidget: Widget {
             NowNextView(entry: entry)
                 .environment(\.layoutDirection, WidgetPresentation.copy(snapshot: entry.snapshot)
                     .rightToLeft == true ? .rightToLeft : .leftToRight)
+                .appLocale(WidgetPresentation.copy(snapshot: entry.snapshot).localeIdentifier)
         }
         .configurationDisplayName("Now & next")
         .description("See what's on now and what's next.")
@@ -413,6 +414,7 @@ private struct PendingChangeWidget: Widget {
             PendingView(entry: entry)
                 .environment(\.layoutDirection, WidgetPresentation.copy(snapshot: entry.snapshot)
                     .rightToLeft == true ? .rightToLeft : .leftToRight)
+                .appLocale(WidgetPresentation.copy(snapshot: entry.snapshot).localeIdentifier)
         }
         .configurationDisplayName("Changing soon")
         .description("Your next change and when it lands.")
@@ -425,5 +427,16 @@ struct DemoraWidgets: WidgetBundle {
     var body: some Widget {
         NowNextWidget()
         PendingChangeWidget()
+    }
+}
+
+private extension View {
+    /// Times and dates in the app's language when the host published it.
+    @ViewBuilder func appLocale(_ identifier: String?) -> some View {
+        if let identifier {
+            environment(\.locale, Locale(identifier: identifier))
+        } else {
+            self
+        }
     }
 }

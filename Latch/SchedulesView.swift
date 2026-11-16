@@ -146,7 +146,7 @@ struct CalendarView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(day.formatted(date: .complete, time: .omitted))
+        .accessibilityLabel(day.appFormatted(date: .complete, time: .omitted))
         .accessibilityValue(count > 0 ? "\(count)" : "")
         .accessibilityAddTraits(isSel ? [.isSelected] : [])
     }
@@ -154,7 +154,7 @@ struct CalendarView: View {
     private var dayEvents: some View {
         let evs = events(on: selected)
         return VStack(alignment: .leading, spacing: DemoraSpace.cardGap) {
-            Text(selected.formatted(date: .complete, time: .omitted))
+            Text(selected.appFormatted(date: .complete, time: .omitted))
                 .demoraType(.cardTitle)
                 .foregroundStyle(Ink.ink)
                 .fixedSize(horizontal: false, vertical: true)
@@ -238,7 +238,7 @@ struct CalendarView: View {
             || (w.startsAt < cal.startOfDay(for: day) && w.endsAt > day) {
             out.append(DayEvent(symbol: w.kind == .free ? "leaf" : "calendar.badge.clock",
                 name: w.name,
-                detail: "\(w.startsAt.formatted(date: .omitted, time: .shortened)) → \(w.endsAt.formatted(date: .omitted, time: .shortened))",
+                detail: "\(w.startsAt.appFormatted(date: .omitted, time: .shortened)) → \(w.endsAt.appFormatted(date: .omitted, time: .shortened))",
                 color: accent,
                 summary: w.kind.label,
                 appsTitle: w.kind == .free ? nil
@@ -250,7 +250,7 @@ struct CalendarView: View {
             for s in model.state.sessions where s.isActive {
                 out.append(DayEvent(symbol: "play.circle", name: s.name,
                     detail: String(format: tr("until %@"),
-                                   s.endsAt.formatted(date: .omitted, time: .shortened)),
+                                   s.endsAt.appFormatted(date: .omitted, time: .shortened)),
                     color: accent,
                     summary: s.kind == .block
                         ? tr("Blocking the selected apps")
@@ -268,7 +268,8 @@ struct CalendarView: View {
     }
 
     private var periodTitle: String {
-        let f = DateFormatter(); f.dateFormat = "LLLL yyyy"
+        let f = DateFormatter(); f.locale = AppLanguage.current.locale
+        f.setLocalizedDateFormatFromTemplate("LLLL yyyy")
         return f.string(from: anchor)
     }
 

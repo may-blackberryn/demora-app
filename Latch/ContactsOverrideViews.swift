@@ -872,7 +872,7 @@ struct SentHistoryView: View {
                     Text(String(format: tr("code %@"), e.code))
                         .font(.caption).foregroundStyle(.secondary)
                     Text(Date(timeIntervalSince1970: e.lastDate)
-                        .formatted(date: .abbreviated, time: .omitted))
+                        .appFormatted(date: .abbreviated, time: .omitted))
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 .demoraSurface()
@@ -931,7 +931,7 @@ struct RequestHistoryView: View {
                         .font(.caption).foregroundStyle(.secondary)
                     Text(actionLabel(entry.lastAction) + " · "
                          + Date(timeIntervalSince1970: entry.lastDate)
-                            .formatted(date: .abbreviated, time: .omitted))
+                            .appFormatted(date: .abbreviated, time: .omitted))
                         .font(.caption2).foregroundStyle(.secondary)
                     if blocked.contains(entry.code) {
                         Button(tr("Unblock")) {
@@ -1328,7 +1328,7 @@ struct ApprovalInboxSection: View {
                             Text(request.requesterName).font(.subheadline.bold())
                         }
                         Text(request.summary).font(.subheadline)
-                        Text(request.createdAt.formatted(
+                        Text(request.createdAt.appFormatted(
                             date: .omitted, time: .shortened))
                             .font(.caption).foregroundStyle(.secondary)
                         HStack {

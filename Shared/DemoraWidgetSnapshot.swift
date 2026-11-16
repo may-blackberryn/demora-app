@@ -43,6 +43,9 @@ struct DemoraWidgetSnapshot: Codable {
         /// The in-app language reads right to left (ar, he, ur), so the
         /// widget mirrors like the app. Absent in old snapshots: left to right.
         var rightToLeft: Bool? = nil
+        /// The in-app language, so widget times use its digits and names.
+        /// Absent in old snapshots: the device locale.
+        var localeIdentifier: String? = nil
     }
 
     var windows: [Window]
@@ -223,7 +226,8 @@ struct DemoraWidgetSnapshot: Codable {
                        wakeDue: tr("Good morning. Tap to wake up."),
                        looser: tr("Looser"), stricter: tr("Stricter"),
                        openDemora: tr("Open Demora"),
-                       rightToLeft: AppLanguage.current.isRightToLeft),
+                       rightToLeft: AppLanguage.current.isRightToLeft,
+                       localeIdentifier: AppLanguage.current.rawValue),
             // A reminder says the configured gate needs a tap, not that every
             // monitor is healthy. Unrelated degradation cannot imply awake.
             wakeDue: WakeWidgetProjection.windows(state: state, at: now, calendar: cal))

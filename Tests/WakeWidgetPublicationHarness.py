@@ -125,6 +125,7 @@ enum AppLanguage {
     case english
     static var current: AppLanguage { .english }
     var isRightToLeft: Bool { false }
+    var rawValue: String { "en" }
 }
 
 // Minimal Codable shapes needed by the actual publisher. This is NOT the

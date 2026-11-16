@@ -119,8 +119,8 @@ struct ScheduleConflictsView: View {
                     StateChip(kind: .neutral, text: tr("Possible overlap"))
                 }
             }
-            Text(overlap.start.formatted(date: .abbreviated, time: .shortened)
-                 + " → " + overlap.end.formatted(date: .abbreviated, time: .shortened))
+            Text(overlap.start.appFormatted(date: .abbreviated, time: .shortened)
+                 + " → " + overlap.end.appFormatted(date: .abbreviated, time: .shortened))
                 .font(.system(.subheadline, design: .serif).monospacedDigit())
                 .foregroundStyle(Ink.inkSoft)
             Text(tr("Applies last") + ": " + localizedScheduleName(overlap.higherPriority.key, state: model.state))

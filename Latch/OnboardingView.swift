@@ -376,7 +376,7 @@ struct OnboardingView: View {
          (tr("Phrases"), overrides.phrasePolicies.count),
          (tr("Passwords"), overrides.passwordPolicies.count)]
             .filter { $0.1 > 0 }
-            .map { $0.0 + ": " + $0.1.formatted() }
+            .map { $0.0 + ": " + $0.1.appFormatted() }
             .joined(separator: " · ")
     }
 
