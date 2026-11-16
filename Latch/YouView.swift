@@ -374,6 +374,9 @@ private struct NotificationsSection: View {
     /// Same permission handling as before: ask once on the first enable,
     /// never redirect to iOS Settings.
     private func refreshPermission(requestIfPossible: Bool = false) async {
+        #if DEBUG
+        if DemoMode.isOn { notificationsAllowed = true; return }   // screenshot demo: no prompt
+        #endif
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
         if requestIfPossible && settings.authorizationStatus == .notDetermined {

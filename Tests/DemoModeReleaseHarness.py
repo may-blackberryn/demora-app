@@ -20,7 +20,7 @@ MARKERS = ["DemoMode", "DemoScreen", "DemoLimitsUsageCard", "DemoInsightsView",
            "DemoSelectedApps", "DemoAppLabel", "DemoraDemoMode", "DemoraDemoScreen",
            "demora.screenshot-demo", "demora-demo:"]
 MOCK_STRINGS = ["DemoraDemoMode", "DemoraDemoScreen", "demora.screenshot-demo", "demora-demo:",
-                "Chatterly", "Picnook", "Inkpost", "Wavely", "Pebble Run", "K7P4QX", "demo-only"]
+                "Chatterly", "Picnook", "Inkpost", "Wavely", "Pebble Run", "K7P4QX", "HK4T7Q", "demo-only"]
 failures = []
 
 # 1. The demo file is DEBUG from its first to its last line of code.

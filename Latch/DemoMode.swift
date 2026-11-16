@@ -140,6 +140,7 @@ enum DemoMode {
         defaults.set(true, forKey: "latch.healedRaceCondition")
         defaults.set(true, forKey: "latch.languageExpansionUpdate.reviewRequested")
         defaults.set(true, forKey: "latch.languageExpansionUpdate.shown")
+        defaults.set("HK4T7Q", forKey: "latch.buddyCode")   // You → Your code, same in every shot
         let state = seed(now: Date())
         if let data = try? JSONEncoder().encode(state) {
             defaults.set(data, forKey: LatchConstants.stateKey)
