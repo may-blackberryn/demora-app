@@ -239,6 +239,32 @@ check(phases(thread) == [.now, .upcoming] && thread.entries[0].label == nil, "DS
 thread = DayThread.make(items: [dstLate, dstTail], now: ny(3, 8, 23, 30), day: dstDay)
 check(phases(thread) == [.past, .now], "DST 23:30: late block on now")
 
+// F3–F5 review 7: boundaries, a 25-hour day, the tap with a full on-now band.
+let at = ny(11, 2, 12)
+thread = DayThread.make(items: [block("sn", "Starts now", at, ny(11, 2, 13))], now: at, day: day)
+check(phases(thread) == [.now] && thread.entries[0].label == nil, "start == now: on now")
+thread = DayThread.make(items: [block("en", "Ends now", ny(11, 2, 11), at)], now: at, day: day)
+check(phases(thread) == [.past] && thread.entries[0].label == at, "end == now: ended")
+thread = DayThread.make(items: [block("ym", "Yesterday", ny(11, 1, 22), ny(11, 2))], now: at, day: day)
+check(thread.entries.isEmpty && thread.hiddenCount == 0, "ends at exactly 00:00 today: excluded, not hidden")
+thread = DayThread.make(items: [block("tm2", "Tonight", ny(11, 2, 22), ny(11, 3))], now: at, day: day)
+check(phases(thread) == [.upcoming] && thread.entries[0].label == ny(11, 2, 22), "tonight to 00:00: later")
+let longDay = DateInterval(start: ny(11, 1), end: ny(11, 2))
+check(longDay.duration == 25 * 3600, "fall-back day is 25 h")
+let fallTail = block("ft", "Sleep", ny(10, 31, 22), ny(11, 1, 7))
+let fallLate = block("fl", "Late", ny(11, 1, 23), ny(11, 2, 1))
+thread = DayThread.make(items: [fallLate, fallTail], now: ny(11, 1, 12), day: longDay)
+check(ids(thread) == ["ft", "fl"] && phases(thread) == [.past, .upcoming], "25 h day noon: tail ended, late later")
+check(thread.entries[0].label == ny(11, 1, 7) && thread.entries[0].beganBeforeToday && labelsToday(thread, longDay),
+      "25 h day: tail labelled 7:00 am on that day's clock")
+thread = DayThread.make(items: [fallLate, fallTail], now: ny(11, 1, 1, 30), day: longDay)
+check(phases(thread) == [.now, .upcoming] && thread.entries[0].label == nil, "25 h day 1:30 am: tail on now")
+let fullBand = (0..<5).map { block("fb\($0)", "B\($0)", ny(11, 2, 10), ny(11, 2, 13 + $0)) }
+let morningTap = TodayItem(id: "wt", name: "Morning", kind: .wake, start: ny(11, 2, 7), end: at, needsTap: true)
+thread = DayThread.make(items: fullBand + [morningTap], now: at, day: day)
+check(ids(thread) == ["wt", "fb0", "fb1", "fb2", "fb3"] && thread.hiddenCount == 1 && thread.nowIndex == 0,
+      "5 on now + a wake tap: tap first, one hidden: \(ids(thread))")
+
 // MARK: Ledger grouping
 func bucket(_ d: Date, _ n: Date, _ c: Calendar = ny) -> LedgerGrouping.Bucket {
     LedgerGrouping.bucket(d, now: n, calendar: c)
@@ -520,6 +546,27 @@ limits_report = (ROOT / 'LatchReport/LimitsUsageView.swift').read_text()
 assert '.background(ink(ReportPalette.card))' in limits_report, 'report draws an opaque card background'
 for forbidden in ('.set(', 'URLSession', 'FileManager', 'NotificationCenter'):
     assert forbidden not in limits_report, ('usage never leaves the extension', forbidden)
+# F3–F5 review fixes 1–6 (source guards).
+placeholder = section(host, 'Text(tr("Your limits will show here.', 'LimitsUsageReportView(refreshedAt:')
+assert '.accessibilityHidden(true)' in placeholder and 'accessibilitySortPriority' not in host, \
+    'VoiceOver never reaches the line under a rendered report'
+assert '.accessibilityHint(tr("If your limits don\'t appear, pull down to refresh."))' in host, 'always-true hint'
+assert 'ProcessInfo.processInfo.systemUptime - HomeReportRefreshPolicy.minimumSpacing' in host, \
+    'first query on appear after the coalescing delay, not 2 s'
+assert '@AppStorage("latch.appearance", store: UserDefaults(suiteName: AppGroup.id))' in limits_report \
+    and '.string(forKey: "latch.appearance")' not in limits_report, 'report redraws on appearance change'
+assert 'item.kind == .free || item.kind == .unblock' in thread_view and thread_view.count('.unblock') == 1, \
+    'one free rule for dot, chip and words'
+assert 'isFree(entry.item) ? Ink.free : accent' in thread_view and 'StateChip(kind: isFree(item) ? .free : .upcoming' in thread_view
+assert '@ScaledMetric(relativeTo: .subheadline) private var dotInset' in thread_view and 'dotInset +' in thread_view
+review_tables = {code: dict(entry.findall((ROOT / f'Shared/Localization{suffix}.swift').read_text()))
+                 for code, suffix in TABLES.items()}
+assert all('New session…' not in t for t in review_tables.values()), 'orphan key removed'
+assert 'a las' not in review_tables['es']['%@, ended at %@'] + review_tables['es']['%@, started %@, ended at %@']
+assert 'às' not in review_tables['pt']['%@, ended at %@'] + review_tables['pt']['%@, started %@, ended at %@']
+assert review_tables['pt']['Your limits will show here. Pull down to refresh if it stays empty.'].startswith('Seus limites')
+assert review_tables['hi']['session'] == 'सत्र' and review_tables['hi']['New session'] == 'नया सत्र'
+assert review_tables['pl']['End session early: %@'].startswith('Zakończ sesję')
 print('Today layout guards passed: section order, Changes-only navigation, visible inbox task, pinned New session, event-only reads, rule names only, report refresh')
 
 # --- Report restyle (§5.5) and its palette copy -----------------------------

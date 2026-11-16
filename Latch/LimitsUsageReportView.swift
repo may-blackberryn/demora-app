@@ -73,7 +73,10 @@ struct CompactHomeUsageReport: View {
     @State private var expanded = false
     @State private var onScreen = false
     @State private var refreshRequest: UUID?
-    @State private var refreshPolicy = HomeReportRefreshPolicy(initialQueryUptime: ProcessInfo.processInfo.systemUptime)
+    /// Started one spacing in the past, so the first query on appear runs
+    /// after the short coalescing delay and the one retry ~3 s after that.
+    @State private var refreshPolicy = HomeReportRefreshPolicy(
+        initialQueryUptime: ProcessInfo.processInfo.systemUptime - HomeReportRefreshPolicy.minimumSpacing)
     @State private var queryLimits: [AppLimit]
     let limitCount: Int
     let reloadRequest: UUID?
@@ -104,12 +107,14 @@ struct CompactHomeUsageReport: View {
                 // Behind the report (F5): the extension draws an opaque card
                 // background, so a rendered report covers this line. Nothing
                 // here learns whether it rendered; iOS gives no such signal.
+                // Hidden from VoiceOver, which could reach it under the rows;
+                // the "Limits" line below carries the same advice as a hint.
                 Text(tr("Your limits will show here. Pull down to refresh if it stays empty."))
                     .demoraType(.meta)
                     .foregroundStyle(Ink.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.vertical, 4)
-                    .accessibilitySortPriority(-1)
+                    .accessibilityHidden(true)
                 LimitsUsageReportView(refreshedAt: refreshedAt, limits: queryLimits)
             }
             .frame(height: viewportHeight, alignment: .topLeading)
@@ -118,6 +123,7 @@ struct CompactHomeUsageReport: View {
                 Text("\(tr("Limits")) · \(limitCount)")
                     .demoraType(.meta)
                     .foregroundStyle(Ink.inkSoft)
+                    .accessibilityHint(tr("If your limits don't appear, pull down to refresh."))
                 Spacer()
                 Button {
                     expanded.toggle()
@@ -149,8 +155,9 @@ struct CompactHomeUsageReport: View {
                 try await Task.sleep(nanoseconds: UInt64(refreshPolicy.delay(at: ProcessInfo.processInfo.systemUptime) * 1_000_000_000))
                 guard !Task.isCancelled, canRefresh else { return }
                 refreshReport()
-                // One bounded soft retry about 3 s later (F5), after the card
-                // appears, a foreground/tab return or a manual request. No
+                // One bounded soft retry about 3 s after this query (F5): on
+                // appear that's ~0.35 s then ~3.35 s; also after a
+                // foreground/tab return or a manual request. No
                 // readiness signal, endless polling or report recreation:
                 // only the filter changes. Hiding Home cancels pending work.
                 try await Task.sleep(nanoseconds: UInt64(HomeReportRefreshPolicy.retryDelay * 1_000_000_000))

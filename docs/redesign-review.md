@@ -1934,3 +1934,28 @@ deliberately with the band cases. No phone yet.
    will show here…" line in light and dark, and with forced light/dark in
    You → Appearance. If it's blank, the line shows and the card retries once
    by itself about 3 s later; pull to refresh still works.
+
+## F3–F5 review fixes (2026-11-15)
+A fresh review of `281280a..6fbfa6b` found no high-severity bugs. One
+medium (a brief violation: VoiceOver could read the placeholder over a
+rendered report), six low items and a flaky F2 harness. Each fix has a
+regression check in `Tests/TodayPresentationHarness.py` unless noted.
+
+| # | Finding | Fix | Regression check |
+| --- | --- | --- | --- |
+| 1 (med, F5) | `accessibilitySortPriority(-1)` didn't hide the placeholder; touch exploration could land on it under the rows | The line is `.accessibilityHidden(true)`; the "Limits · N" row carries an always-true hint "If your limits don't appear, pull down to refresh." (all eight languages) | Guard: hidden placeholder, no sort priority, the hint present; key in all seven tables |
+| 2 (low, F5) | On a cold start the policy began at the view's creation, so queries came at ~2 s and ~5 s, not "once, ~3 s after appearing" | Today's `CompactHomeUsageReport` starts `HomeReportRefreshPolicy` at `uptime − minimumSpacing`: query at ~0.35 s, one retry ~3 s later. Insights keeps its cold 2 s settle. The F5 decision row's "already present" wording is corrected by this row | `HomeReportReliabilityHarness`: pure 0.35 s / 3.35 s checks; source guard on the start value |
+| 3 (low, F5) | The opaque report read `latch.appearance` once, so after an appearance change it could show a wrong-colour block until the next query (~2 s) | `LatchReport/LimitsUsageView.swift` observes it with `@AppStorage(…, store: UserDefaults(suiteName: AppGroup.id))`, read only; nothing leaves the extension | Guard: `@AppStorage` present, no one-off `string(forKey:)` read; existing report no-write guards still pass |
+| 4 (low, F3) | Unblock sessions: free chip and dot on now, but the upcoming chip with a free dot later | One `isFree` (free period or unblock) drives dot, chip and words in every band; an unblock reads "Free until …" | Guard: one rule, used by dot and the later chip |
+| 5 (low, F3) | The dot's fixed 5 pt top drifted from the label at xLarge–xxxLarge | `dotInset` is `@ScaledMetric(relativeTo: .subheadline)` | Guard |
+| 6 (low) | Translations: pt mixed tu/você; es "a las" / pt "às" wrong at 1 o'clock; Hindi "session" was "सीज़न" (season); orphan "New session…"; Polish "End session early" said "Początek sesji" | pt "Seus limites aparecem aqui…"; es "%@, terminó: %@" / "%@, empezó el %@, terminó: %@", pt "%@, terminou: %@" / "%@, começou %@, terminou: %@"; Hindi "सत्र"; "New session…" removed from all seven tables (no code uses it); Polish "Zakończ sesję wcześniej: %@" | Guards on each value and the orphan's absence |
+| 7 (low, F3) | Harness gaps | Pinned with the real `DayThread`: start == now → on now; end == now → ended; yesterday's block ending at 00:00 excluded and not hidden; tonight's block to 00:00 → later; a 25-hour day (noon and 1:30 am); 5 on-now rows + a wake tap → tap first, 1 hidden | 9 new checks (103 total), all pass on the unchanged `DayThread` |
+| 8 (flaky test, F2) | `Tests/WhenWhereHarness.py` failed ~1 in 6 runs: its `stateBlob()` stub re-encoded state, and equal sets/dictionaries can encode in a different order, so compare-and-save saw a false change and gave up after 3 tries | The stub stores the encoded bytes on every write (save or direct assignment) and `stateBlob()` returns them, like the real store. Same stub fixed in `Tests/ScheduleSelectionHarness.py`. No engine change | WhenWhere run 10× and ScheduleSelection 5× in a row (see the verify notes below) |
+
+Verify notes: full `CLAUDE.md` verify passes (`verify_failed=0`); separately
+`Tests/WhenWhereHarness.py` 10/10 in a row (11/11 with the verify run) and
+`Tests/ScheduleSelectionHarness.py` 5/5; unsigned Debug iOS build succeeds.
+Extra phone checks (after the F3–F5 list above): with VoiceOver,
+swipe through the limits card (the hidden line is never read; the "Limits"
+row's hint is); switch You → Appearance while Today shows the card (it
+recolours at once); an unblock session reads "Free until …" now and later.

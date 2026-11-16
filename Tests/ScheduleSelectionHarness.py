@@ -95,7 +95,9 @@ struct TestDefaults {
     func set(_ value: Any?, forKey key: String) { Self.values[key] = value }
 }
 enum SharedStore {
-    static var state = LatchState()
+    /// Stored bytes per write, as in WhenWhereHarness (F3–F5 review 8).
+    static var state = LatchState() { didSet { storedBlob = try? JSONEncoder().encode(state) } }
+    static var storedBlob: Data? = try? JSONEncoder().encode(LatchState())
     static var simulating = false
     static var enforcementDegraded = false
     static var stateRecoveryNeeded = false
@@ -120,7 +122,7 @@ enum SharedStore {
         state = value; return true
     }
     /// The saved bytes, for applyDueChanges' compare-and-save (F2 review).
-    static func stateBlob() -> Data? { try? JSONEncoder().encode(state) }
+    static func stateBlob() -> Data? { storedBlob }
     static func mutateBlockedLimitIDs(_ edit: (inout Set<UUID>) -> Void) {
         usageResetCalls += 1; edit(&blockedIDs)
     }

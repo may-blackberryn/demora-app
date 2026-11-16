@@ -53,6 +53,11 @@ check(scheduler.delay(at: 100) == 2, "cold query gets time to settle")
 check(scheduler.delay(at: 100.5) == 1.5, "coalesced requests preserve spacing")
 check(scheduler.delay(at: 103) == 0.35, "settled foreground/manual request debounced")
 check(HomeReportRefreshPolicy.retryDelay == 3, "one delayed retry spacing")
+// F3–F5 review 2: Today starts the policy one spacing back, so the query on
+// appear runs after the coalescing delay and its one retry ~3 s later.
+let today = HomeReportRefreshPolicy(initialQueryUptime: 100 - HomeReportRefreshPolicy.minimumSpacing)
+check(today.delay(at: 100) == 0.35, "first query on appear at ~0.35 s")
+check(today.delay(at: 100) + HomeReportRefreshPolicy.retryDelay == 3.35, "one retry ~3 s after it")
 scheduler.didQuery(at: 104)
 check(scheduler.lastQueryUptime == 104 && scheduler.delay(at: 104.5) == 1.5, "new query updates cooldown")
 for uptime in [104.0, 104.1, 104.9, 105.9, 106.0, 110.0] {

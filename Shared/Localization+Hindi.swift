@@ -910,7 +910,6 @@ let hindiStrings: [String: String] = [
     "New password": "नया पासवर्ड",
     "New schedule": "नया शेड्यूल",
     "New session": "नया सत्र",
-    "New session…": "नई सत्र…",
     "No free periods": "कोई मुफ्त अवधि नहीं",
     "No limits yet": "अभी तक कोई सीमा नहीं",
     "No overrides — delays are absolute": "कोई ओवरराइड नहीं — देरी पूर्ण है",
@@ -1019,7 +1018,7 @@ let hindiStrings: [String: String] = [
     "now": "अब",
     "planned window": "योजनाबद्ध खिड़की",
     "schedule": "योजना",
-    "session": "सीज़न",
+    "session": "सत्र",
     "A passcode is saved. Open the guide below to view it.": "एक पासकोड सहेजा गया है। इसे देखने के लिए नीचे दिए गए गाइड को खोलें।",
     "Can't reach this contact right now — they may have removed Demora or signed out. They won't be able to approve until they're back.": "Demora — इस संपर्क पर अभी तक पहुँच नहीं सकते हैं, वे शायद smamaamaama या बाहर हस्ताक्षरित कर दिया हो. वे जब तक वे वापस नहीं आ जाते.",
     "Couldn't start the walkthrough": "ट्रॉकिंग थ्रू शुरू नहीं कर सका",
@@ -1686,4 +1685,5 @@ let hindiStrings: [String: String] = [
     "%@, from %@ until %@": "%@, %@ से %@ तक",
     "%@, free from %@ until %@": "%@, %@ से %@ तक खुला",
     "Your limits will show here. Pull down to refresh if it stays empty.": "आपकी सीमाएँ यहाँ दिखेंगी। अगर यह खाली रहे, तो रीफ़्रेश के लिए नीचे खींचें।",
+    "If your limits don't appear, pull down to refresh.": "अगर आपकी सीमाएँ न दिखें, तो रीफ़्रेश के लिए नीचे खींचें।",
 ]

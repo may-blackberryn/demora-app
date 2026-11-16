@@ -975,7 +975,6 @@ let germanStrings: [String: String] = [
     "New password": "Neues Passwort",
     "New schedule": "Neuer Zeitplan",
     "New session": "Neue Sitzung",
-    "New session…": "Neue Sitzung...",
     "No free periods": "Keine freien Zeiten",
     "No limits yet": "Noch keine Grenzen",
     "No overrides — delays are absolute": "Keine Überbrückungen — Verzögerungen sind absolut",
@@ -1693,4 +1692,5 @@ let germanStrings: [String: String] = [
     "%@, from %@ until %@": "%@, von %@ bis %@",
     "%@, free from %@ until %@": "%@, frei von %@ bis %@",
     "Your limits will show here. Pull down to refresh if it stays empty.": "Deine Limits erscheinen hier. Bleibt es leer, zum Aktualisieren nach unten ziehen.",
+    "If your limits don't appear, pull down to refresh.": "Wenn deine Limits nicht erscheinen, zum Aktualisieren nach unten ziehen.",
 ]

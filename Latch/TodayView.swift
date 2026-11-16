@@ -445,6 +445,8 @@ struct DayThreadView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     /// Fixed, so every dot sits on one line whatever the label says.
     @ScaledMetric(relativeTo: .subheadline) private var timeWidth: CGFloat = 64
+    /// The dot's distance from the row top, scaled with the label it sits beside.
+    @ScaledMetric(relativeTo: .subheadline) private var dotInset: CGFloat = 5
     let result: DayThread.Result
     let now: Date
     /// Opens the rule behind an item (its summary sheet).
@@ -550,7 +552,7 @@ struct DayThreadView: View {
 
     /// Centres every dot on the first line of the time label.
     private func dotTop(_ entry: DayThread.Entry) -> CGFloat {
-        5 + (entry.phase == .past ? (dotSize - endedDotSize) / 2 : 0)
+        dotInset + (entry.phase == .past ? (dotSize - endedDotSize) / 2 : 0)
     }
 
     /// Ended: small, dim, filled. On now: filled, state colour. Later: hollow.
@@ -568,10 +570,12 @@ struct DayThreadView: View {
     }
 
     private func dotColor(_ entry: DayThread.Entry) -> Color {
-        entry.item.kind == .free || entry.item.kind == .unblock ? Ink.free : accent
+        isFree(entry.item) ? Ink.free : accent
     }
 
-    private func isFree(_ item: TodayItem) -> Bool { item.kind == .free }
+    /// One rule for dot, chip and words: a free period or an unblock session
+    /// opens apps, so both read as free in every band.
+    private func isFree(_ item: TodayItem) -> Bool { item.kind == .free || item.kind == .unblock }
 
     /// The chip names only what the left label doesn't: "ended", or the end.
     @ViewBuilder private func chips(_ entry: DayThread.Entry) -> some View {
@@ -590,7 +594,7 @@ struct DayThreadView: View {
         case .now where item.needsTap:
             StateChip(kind: .blocked, text: tr("Wake-up tap needed"))
         case .now:
-            StateChip(kind: item.kind == .free || item.kind == .unblock ? .free : .blocked,
+            StateChip(kind: isFree(item) ? .free : .blocked,
                       text: until(item))
         case .upcoming:
             StateChip(kind: isFree(item) ? .free : .upcoming, text: until(item))

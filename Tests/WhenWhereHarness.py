@@ -135,7 +135,11 @@ struct TestDefaults {
     func set(_ value: Any?, forKey key: String) { Self.values[key] = value }
 }
 enum SharedStore {
-    static var state = LatchState()
+    /// Every write (save or a test's direct assignment) stores its bytes, like
+    /// the real store; `stateBlob()` returns them rather than re-encoding,
+    /// since equal states can encode sets/dictionaries in a different order.
+    static var state = LatchState() { didSet { storedBlob = try? JSONEncoder().encode(state) } }
+    static var storedBlob: Data? = try? JSONEncoder().encode(LatchState())
     static var simulating = false
     static var enforcementDegraded = false
     static var stateRecoveryNeeded = false
@@ -155,7 +159,7 @@ enum SharedStore {
         saves += 1; state = value; return true
     }
     /// The saved bytes, for applyDueChanges' compare-and-save (F2 review).
-    static func stateBlob() -> Data? { try? JSONEncoder().encode(state) }
+    static func stateBlob() -> Data? { storedBlob }
     static func mutateBlockedLimitIDs(_ edit: (inout Set<UUID>) -> Void) { edit(&blockedIDs) }
     static func loadBlockedLimitIDs() -> Set<UUID> { blockedIDs }
     static func dayKey(for date: Date) -> String {

@@ -1047,7 +1047,6 @@ let spanishStrings: [String: String] = [
     "New password": "Nueva contraseña",
     "New schedule": "Nuevo horario",
     "New session": "Nueva sesión",
-    "New session…": "Nueva sesión…",
     "No free periods": "Sin periodos libres",
     "No limits yet": "Aún no hay límites",
     "No overrides — delays are absolute": "Sin anulaciones — las esperas son absolutas",
@@ -1760,12 +1759,13 @@ let spanishStrings: [String: String] = [
     // Fixes batch F3–F5 (2026-11-15)
     "Ended": "Terminado",
     "Since %@": "Desde %@",
-    "%@, ended at %@": "%@, terminó a las %@",
-    "%@, started %@, ended at %@": "%@, empezó el %@, terminó a las %@",
+    "%@, ended at %@": "%@, terminó: %@",
+    "%@, started %@, ended at %@": "%@, empezó el %@, terminó: %@",
     "%@, wake-up tap needed": "%@, toca Despertar para empezar",
     "%@, on now until %@": "%@, activo ahora hasta %@",
     "%@, free now until %@": "%@, libre ahora hasta %@",
     "%@, from %@ until %@": "%@, de %@ a %@",
     "%@, free from %@ until %@": "%@, libre de %@ a %@",
     "Your limits will show here. Pull down to refresh if it stays empty.": "Tus límites aparecerán aquí. Si sigue vacío, desliza hacia abajo para actualizar.",
+    "If your limits don't appear, pull down to refresh.": "Si tus límites no aparecen, desliza hacia abajo para actualizar.",
 ]

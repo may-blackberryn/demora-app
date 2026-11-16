@@ -864,7 +864,7 @@ let polishStrings: [String: String] = [
     "Enable/update password override": "Włącz/aktualizuj obejście hasła",
     "End": "Koniec",
     "End early…": "Skończ wcześniej...",
-    "End session early: %@": "Początek sesji: %@",
+    "End session early: %@": "Zakończ sesję wcześniej: %@",
     "Ends": "Końce",
     "Enter password": "Podaj hasło",
     "Every change you make waits out a delay you chose, counting down in the background. You can always change your rules — just not in a moment of weakness.": "Każda zmiana, którą dokonasz, czeka na twój wybór opóźnienia, odliczając się od tego, co się dzieje w tle. Zawsze możesz zmienić swoje zasady — tylko nie w chwili słabości.",
@@ -910,7 +910,6 @@ let polishStrings: [String: String] = [
     "New password": "Nowe hasło",
     "New schedule": "Nowy harmonogram",
     "New session": "Nowa sesja",
-    "New session…": "Nowa sesja...",
     "No free periods": "Brak wolnych okresów",
     "No limits yet": "Dotychczas brak ograniczeń",
     "No overrides — delays are absolute": "Brak nadrzędnych przeterminowań – opóźnienia są bezwzględne",
@@ -1686,4 +1685,5 @@ let polishStrings: [String: String] = [
     "%@, from %@ until %@": "%@, od %@ do %@",
     "%@, free from %@ until %@": "%@, wolne od %@ do %@",
     "Your limits will show here. Pull down to refresh if it stays empty.": "Tu pojawią się twoje limity. Jeśli pozostanie puste, przeciągnij w dół, aby odświeżyć.",
+    "If your limits don't appear, pull down to refresh.": "Jeśli twoje limity się nie pojawiają, przeciągnij w dół, aby odświeżyć.",
 ]

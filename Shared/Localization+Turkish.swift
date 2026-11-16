@@ -910,7 +910,6 @@ let turkishStrings: [String: String] = [
     "New password": "Yeni şifre",
     "New schedule": "Yeni program",
     "New session": "Yeni oturum",
-    "New session…": "Yeni oturum…",
     "No free periods": "Ücretsiz dönem yok",
     "No limits yet": "Henüz sınırlama yok",
     "No overrides — delays are absolute": "Devre dışı bırakma yok — gecikmeler mutlakdır",
@@ -1686,4 +1685,5 @@ let turkishStrings: [String: String] = [
     "%@, from %@ until %@": "%@, %@ ile %@ arası",
     "%@, free from %@ until %@": "%@, %@ ile %@ arası serbest",
     "Your limits will show here. Pull down to refresh if it stays empty.": "Sınırların burada görünecek. Boş kalırsa yenilemek için aşağı çek.",
+    "If your limits don't appear, pull down to refresh.": "Sınırların görünmüyorsa yenilemek için aşağı çek.",
 ]

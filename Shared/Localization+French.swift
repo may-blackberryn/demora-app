@@ -948,7 +948,6 @@ let frenchStrings: [String: String] = [
     "New password": "Nouveau mot de passe",
     "New schedule": "Nouveau calendrier",
     "New session": "Nouvelle session",
-    "New session…": "Nouvelle session...",
     "No free periods": "Pas de périodes libres",
     "No limits yet": "Pas encore de limites",
     "No overrides — delays are absolute": "Pas de dépassements — les retards sont absolus",
@@ -1685,4 +1684,5 @@ let frenchStrings: [String: String] = [
     "%@, from %@ until %@": "%@, de %@ à %@",
     "%@, free from %@ until %@": "%@, libre de %@ à %@",
     "Your limits will show here. Pull down to refresh if it stays empty.": "Vos limites s'afficheront ici. Si cela reste vide, tirez vers le bas pour actualiser.",
+    "If your limits don't appear, pull down to refresh.": "Si vos limites n'apparaissent pas, tirez vers le bas pour actualiser.",
 ]

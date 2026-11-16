@@ -12,14 +12,17 @@ struct LimitsUsageView: View {
     @Environment(\.colorScheme) private var systemScheme
     @AppStorage("latch.accentColor", store: UserDefaults(suiteName: AppGroup.id))
     private var accentColorRaw = "blue"
+    /// Observed (read only), so the opaque background redraws as soon as the
+    /// app's appearance changes instead of waiting for the next query.
+    @AppStorage("latch.appearance", store: UserDefaults(suiteName: AppGroup.id))
+    private var appearanceRaw: String?
 
     /// Match the app's chosen appearance (shared via the App Group). The
     /// extension renders out-of-process and otherwise uses the system
     /// appearance, which can mismatch the app's forced light/dark and make
     /// the semantic text colors (.primary/.secondary) invisible.
     private var scheme: ColorScheme {
-        switch UserDefaults(suiteName: AppGroup.id)?
-            .string(forKey: "latch.appearance") {
+        switch appearanceRaw {
         case "light": return .light
         case "dark":  return .dark
         default:      return systemScheme
