@@ -1981,20 +1981,34 @@ simulator runtime is installed.
 | Plist unchanged: iPhone portrait-only, iPad all four orientations, no `UIRequiresFullScreen` | The inner display may ignore portrait-only; nothing reads the orientation, so landscape just gives a wider window with the same centred column | Yes |
 | Debug and Release with the 27.2 SDK: no compiler warnings or errors in our code (only the AppIntents metadata note), nothing deprecated to adapt | | Yes |
 
-### F6: what to check in the Duo simulator (not done: no runtime)
-Run once an iOS 27.1+ runtime is installed, and run Xcode's App
-Resizability check.
-1. Folded (compact width): Today, Rules, Insights, You look like iPhone.
-2. Unfolded, both orientations: one centred column on every tab, the tab bar
-   centred with paper to both edges, the "New session" button inside the
-   column; the Insights report fills its card, shows **iPhone** data.
-3. Fold and unfold with a sheet open (a rule summary, a receipt, the
-   estimate editor) and on a pushed editor: nothing clips or jumps.
-4. Split View on each side and Slide Over, at narrow and half widths.
-5. Contacts → avatar → camera: fold or unfold while cropping, then "Use
-   photo"; the saved square matches what was framed (on iPad: rotate).
-6. Onboarding in a fresh Debug install, unfolded: the setup sheets stay in
-   the column.
+### F6: simulator checks (2026-11-16)
+iOS 27.2 runtime (24B8117), Xcode 27.2, Debug simulator builds. **The
+iPhone Duo couldn't be tested**: this runtime doesn't list the Duo among its
+63 supported device types, so `simctl create` refuses it (403 "Incompatible
+device"); a Duo-capable runtime is still needed. `simctl` has no fold
+controls, and simulator taps weren't available (the access request went
+unanswered), so screens were reached with a throwaway probe build made from
+committed HEAD in a scratch folder (Debug launch arguments pick the tab or
+open a sheet and skip the system Screen Time prompt; a seeded "set up"
+state skips onboarding). Nothing from the probe is in the repo. Devices:
+iPhone 18 Pro and iPad Pro 11-inch (M5), iOS 27.2. Screen Time can't be
+authorized in the simulator, so every screen shows its no-access state.
+
+| # | Check | Result |
+| --- | --- | --- |
+| 0 | Launch with the hand-written scene manifest | **Done.** Debug launches cleanly on iPhone and iPad: one scene (`may.latch.dev-default`), no UIScene-lifecycle, manifest or multiple-scene warnings. Only expected errors: Family Controls "not authorized" |
+| 1 | Folded: Today, Rules, Insights, You look like iPhone | **Duo not done.** Stand-in: iPhone 18 Pro, all four tabs, Setup step 1, the New rule chooser, the Repeating block editor and New session sheets render correctly |
+| 2 | Unfolded: one centred column, tab bar paper and hairline edge to edge, New session inside the column, Insights shows iPhone data | **Duo not done.** Stand-in: iPad (regular width). Every tab keeps the centred column; Insights' header now sits in it; the tab bar's top line runs edge to edge; New session and New rule stay in the column. Report data not checkable (no Screen Time) |
+| 3 | Fold/unfold with a sheet open and on a pushed editor | **Not done** (no Duo, no rotation or resize without taps). iPad sheets shown as centred form sheets (~430 pt) that read cleanly |
+| 4 | Split View on each side, Slide Over | **Not done** (needs taps/window controls) |
+| 5 | Cropper: fold/unfold mid-crop, saved square matches | **Not done** (camera needs a device; not reachable in the simulator) |
+| 6 | Onboarding unfolded stays in the column | **Partly.** iPad Setup step 1 in the column; the day/night and ways-to-skip setup sheets weren't opened |
+| 7 | Cropper on a notched phone / near-square window | **Not done** (camera only) |
+| 8 | iPad offers no second Demora window | **Done at runtime, not in the UI.** The probe logged `UIApplication.shared.supportsMultipleScenes = NO` with one connected scene on the iPad; built Info.plists (Debug, Release, simulator) say `false`. The window menu itself wasn't opened |
+| — | Xcode App Resizability check | **Not done** (Xcode UI) |
+
+No layout bug was found in what rendered, so no code changed in this pass.
+Screenshots (not in the repo): the F6 session's scratchpad `shots/`.
 
 ## F6 review fixes (2026-11-15)
 A fresh review of `8b6a184` found no regression from the F6 diff (its own
@@ -2015,7 +2029,7 @@ and six low ones. Fixed in `e46e638`. Regression checks are in
 Verify notes: full `CLAUDE.md` verify on the final tree passes
 (`verify_failed=0`, 43 harnesses). Unsigned Debug and Release with
 Xcode 27.2 / iPhoneOS27.2.sdk: `BUILD SUCCEEDED`, no compiler warnings.
-Still not seen in a simulator: the runtime is downloading. Add to the Duo
-checklist above: (7) the cropper on a notched phone and in a near-square
-window, with the square clear of both buttons; (8) on iPad, Demora offers no
-second window (no "New window" in the app switcher / dock menu).
+Two checks were added to the simulator list above: (7) the cropper on a
+notched phone and in a near-square window, with the square clear of both
+buttons; (8) on iPad, Demora offers no second window. Their results are
+in "F6: simulator checks".
