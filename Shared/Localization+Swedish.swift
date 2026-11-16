@@ -1156,7 +1156,7 @@ let swedishStrings: [String: String] = [
     "Stricter change": "Strängare ändring",
     "Takes effect": "Träder i kraft",
     "Right away": "Direkt",
-    "Until then nothing changes. You can cancel it from Today.": "Fram till dess ändras inget. Du kan avbryta den från Idag.",
+    "Until then nothing changes. You can cancel it from Today.": "Fram till dess ändras inget. Du kan avbryta den på fliken Idag.",
     "Hold to confirm": "Håll för att bekräfta",
     "Keep editing": "Fortsätt redigera",
     "Confirm looser change?": "Bekräfta mindre sträng ändring?",

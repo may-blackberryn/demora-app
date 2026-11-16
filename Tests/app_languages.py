@@ -257,6 +257,18 @@ def validate(code, keys=None):
     if all(prompts) and not len(prompts[0]) < len(prompts[1]) < len(prompts[2]):
         problems.append('Info.plist prompts look swapped: the camera value should be the '
                         'shortest and the While Using location value the longest')
+    # Meaning marker per slot: the camera prompt names a photo (this table's own
+    # word for "Photo", or its longest prefix of 3+ letters, 2 for short words)
+    # and neither location prompt does.
+    photo = table.get('Photo', '').casefold()
+    if all(prompts) and photo:
+        camera, *locations = (value.casefold() for value in prompts)
+        marker = next((photo[:n] for n in range(len(photo), 1, -1) if photo[:n] in camera), '')
+        if len(marker) < min(3, len(photo)):
+            problems.append('Info.plist camera prompt does not mention a photo '
+                            f'({table["Photo"]!r}); is it another prompt?')
+        elif any(marker in value for value in locations):
+            problems.append(f'Info.plist location prompt mentions a photo ({marker!r}); swapped?')
     if state == 'complete':
         if missing:
             problems.append(f'marked complete but {len(missing)} keys are missing: {missing[:5]}')

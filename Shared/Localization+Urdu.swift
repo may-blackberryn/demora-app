@@ -1156,7 +1156,7 @@ let urduStrings: [String: String] = [
     "Stricter change": "سخت تبدیلی",
     "Takes effect": "لاگو ہوتی ہے",
     "Right away": "فوراً",
-    "Until then nothing changes. You can cancel it from Today.": "تب تک کچھ نہیں بدلتا۔ آپ اسے آج سے منسوخ کر سکتے ہیں۔",
+    "Until then nothing changes. You can cancel it from Today.": "تب تک کچھ نہیں بدلتا۔ آپ اسے ‘آج’ ٹیب سے منسوخ کر سکتے ہیں۔",
     "Hold to confirm": "تصدیق کے لیے دبائے رکھیں",
     "Keep editing": "ترمیم جاری رکھیں",
     "Confirm looser change?": "نرم تبدیلی کی تصدیق کریں؟",

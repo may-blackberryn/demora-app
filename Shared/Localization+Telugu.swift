@@ -1156,7 +1156,7 @@ let teluguStrings: [String: String] = [
     "Stricter change": "కఠిన మార్పు",
     "Takes effect": "అమలయ్యేది",
     "Right away": "వెంటనే",
-    "Until then nothing changes. You can cancel it from Today.": "అప్పటి వరకు ఏదీ మారదు. మీరు దీన్ని ఈ రోజు నుండి రద్దు చేయవచ్చు.",
+    "Until then nothing changes. You can cancel it from Today.": "అప్పటి వరకు ఏదీ మారదు. మీరు దీన్ని ‘ఈ రోజు’ ట్యాబ్ నుండి రద్దు చేయవచ్చు.",
     "Hold to confirm": "నొక్కి పట్టి నిర్ధారించండి",
     "Keep editing": "సవరణ కొనసాగించండి",
     "Confirm looser change?": "సడలింపు మార్పును నిర్ధారించాలా?",

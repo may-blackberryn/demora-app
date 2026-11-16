@@ -1059,7 +1059,7 @@ let polishStrings: [String: String] = [
     "Skip walkthrough": "Pomiń spacer",
     "Skip — set up manually": "Pomiń – ustaw ręcznie",
     "Store the Screen Time passcode": "Przechowuj kod przepustnicy czasu ekranu",
-    "Take photo": "Zdjęcia",
+    "Take photo": "Zrób zdjęcie",
     "Takes about 2 minutes, and you need a second person physically with you.": "Zajmuje to około 2 minut, a potrzebuje pan drugiej osoby fizycznie.",
     "Tap “Lock Screen Time Settings” (or “Use Screen Time Passcode”).": "Kliknij przycisk „Ustawienia czasu ekranu” (lub „Użyj kodu przepustnicy ekranu”).",
     "Thank you. ❤️": "Dziękuję.",
@@ -1701,5 +1701,5 @@ let polishStrings: [String: String] = [
     "That word was incorrect. Try again.": "To słowo było niepoprawne. Spróbuj ponownie.",
     "Too many mistakes. Start again.": "Zbyt wiele błędów. Zacznij od nowa.",
     "Phrase unavailable. Close this screen and try again.": "Fraza jest niedostępna. Zamknij ten ekran i spróbuj ponownie.",
-    "Take a photo to use as a trusted contact's picture.": "Zrób zdjęcie, które będzie obrazkiem zaufanego kontaktu.",
+    "Take a photo to use as a trusted contact's picture.": "Zrób zdjęcie dla zaufanego kontaktu.",
 ]

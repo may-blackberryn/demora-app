@@ -1157,7 +1157,7 @@ let russianStrings: [String: String] = [
     "Takes effect": "Вступает в силу",
     "Right away": "Сразу",
     "Until then nothing changes. You can cancel it from Today.": "До тех пор ничего не меняется. Отменить можно в «Сегодня».",
-    "Hold to confirm": "Удерживайте для подтверждения",
+    "Hold to confirm": "Удерживайте",
     "Keep editing": "Продолжить редактирование",
     "Confirm looser change?": "Подтвердить более мягкое изменение?",
     // Changes ledger (Today redesign)

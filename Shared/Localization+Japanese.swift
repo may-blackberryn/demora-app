@@ -1154,7 +1154,7 @@ let japaneseStrings: [String: String] = [
     // Change receipt (Today redesign)
     "Looser change": "ゆるくする変更",
     "Stricter change": "厳しくする変更",
-    "Takes effect": "反映されるのは",
+    "Takes effect": "反映日時",
     "Right away": "すぐに",
     "Until then nothing changes. You can cancel it from Today.": "それまでは何も変わりません。「今日」からキャンセルできます。",
     "Hold to confirm": "長押しで確定",

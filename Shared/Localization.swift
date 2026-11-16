@@ -1396,7 +1396,7 @@ let spanishStrings: [String: String] = [
     "Stricter change": "Cambio más estricto",
     "Takes effect": "Entra en vigor",
     "Right away": "De inmediato",
-    "Until then nothing changes. You can cancel it from Today.": "Hasta entonces no cambia nada. Puedes cancelarlo desde Hoy.",
+    "Until then nothing changes. You can cancel it from Today.": "Hasta entonces no cambia nada. Puedes cancelarlo en la pestaña Hoy.",
     "Hold to confirm": "Mantén pulsado para confirmar",
     "Keep editing": "Seguir editando",
     "Confirm looser change?": "¿Confirmar el cambio menos estricto?",

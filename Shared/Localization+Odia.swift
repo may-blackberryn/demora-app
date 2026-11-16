@@ -1156,7 +1156,7 @@ let odiaStrings: [String: String] = [
     "Stricter change": "କଡ଼ା ବଦଳ",
     "Takes effect": "ଲାଗୁ ହୁଏ",
     "Right away": "ତୁରନ୍ତ",
-    "Until then nothing changes. You can cancel it from Today.": "ସେତେବେଳ ପର୍ଯ୍ୟନ୍ତ କିଛି ବଦଳେ ନାହିଁ। ଆପଣ ଏହାକୁ ଆଜି ରୁ ବାତିଲ୍ କରିପାରିବେ।",
+    "Until then nothing changes. You can cancel it from Today.": "ସେତେବେଳ ପର୍ଯ୍ୟନ୍ତ କିଛି ବଦଳେ ନାହିଁ। ଆପଣ ଏହାକୁ ‘ଆଜି’ ଟ୍ୟାବ୍‌ରୁ ବାତିଲ୍ କରିପାରିବେ।",
     "Hold to confirm": "ନିଶ୍ଚିତ କରିବାକୁ ଚାପି ଧରନ୍ତୁ",
     "Keep editing": "ସମ୍ପାଦନ ଜାରି ରଖନ୍ତୁ",
     "Confirm looser change?": "ଢିଲା ବଦଳ ନିଶ୍ଚିତ କରିବେ?",

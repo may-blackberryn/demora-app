@@ -1156,7 +1156,7 @@ let danishStrings: [String: String] = [
     "Stricter change": "Strengere ændring",
     "Takes effect": "Træder i kraft",
     "Right away": "Med det samme",
-    "Until then nothing changes. You can cancel it from Today.": "Indtil da ændres intet. Du kan annullere den fra I dag.",
+    "Until then nothing changes. You can cancel it from Today.": "Indtil da ændres intet. Du kan annullere den på fanen I dag.",
     "Hold to confirm": "Hold for at bekræfte",
     "Keep editing": "Fortsæt redigering",
     "Confirm looser change?": "Bekræft mindre streng ændring?",

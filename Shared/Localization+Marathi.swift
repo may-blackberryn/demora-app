@@ -1156,7 +1156,7 @@ let marathiStrings: [String: String] = [
     "Stricter change": "कडक बदल",
     "Takes effect": "लागू होते",
     "Right away": "लगेच",
-    "Until then nothing changes. You can cancel it from Today.": "तोपर्यंत काहीही बदलत नाही. तुम्ही तो आज वरून रद्द करू शकता.",
+    "Until then nothing changes. You can cancel it from Today.": "तोपर्यंत काहीही बदलत नाही. तुम्ही तो ‘आज’ टॅबवरून रद्द करू शकता.",
     "Hold to confirm": "पुष्टीसाठी दाबून ठेवा",
     "Keep editing": "संपादन सुरू ठेवा",
     "Confirm looser change?": "सैल बदलाची पुष्टी करायची?",

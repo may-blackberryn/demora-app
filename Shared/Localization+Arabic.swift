@@ -1156,7 +1156,7 @@ let arabicStrings: [String: String] = [
     "Stricter change": "تغيير أكثر صرامة",
     "Takes effect": "يسري",
     "Right away": "فورًا",
-    "Until then nothing changes. You can cancel it from Today.": "حتى ذلك الحين لا يتغير شيء. يمكنك إلغاؤه من اليوم.",
+    "Until then nothing changes. You can cancel it from Today.": "حتى ذلك الحين لا يتغير شيء. يمكنك إلغاؤه من تبويب «اليوم».",
     "Hold to confirm": "اضغط مطولًا للتأكيد",
     "Keep editing": "واصل التعديل",
     "Confirm looser change?": "تأكيد التغيير الأكثر تخفيفًا؟",

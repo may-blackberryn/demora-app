@@ -1156,7 +1156,7 @@ let norwegianStrings: [String: String] = [
     "Stricter change": "Strengere endring",
     "Takes effect": "Trer i kraft",
     "Right away": "Umiddelbart",
-    "Until then nothing changes. You can cancel it from Today.": "Inntil da endres ingenting. Du kan avbryte den fra I dag.",
+    "Until then nothing changes. You can cancel it from Today.": "Inntil da endres ingenting. Du kan avbryte den i fanen I dag.",
     "Hold to confirm": "Hold for å bekrefte",
     "Keep editing": "Fortsett å redigere",
     "Confirm looser change?": "Bekrefte mindre streng endring?",

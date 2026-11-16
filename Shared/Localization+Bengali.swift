@@ -1156,7 +1156,7 @@ let bengaliStrings: [String: String] = [
     "Stricter change": "কড়া বদল",
     "Takes effect": "কার্যকর হয়",
     "Right away": "সঙ্গে সঙ্গে",
-    "Until then nothing changes. You can cancel it from Today.": "তার আগে কিছু বদলায় না। আজ থেকে বাতিল করতে পারেন।",
+    "Until then nothing changes. You can cancel it from Today.": "তার আগে কিছু বদলায় না। ‘আজ’ ট্যাব থেকে বাতিল করতে পারেন।",
     "Hold to confirm": "নিশ্চিত করতে চেপে ধরুন",
     "Keep editing": "সম্পাদনা চালিয়ে যান",
     "Confirm looser change?": "ঢিলা বদল নিশ্চিত করবেন?",

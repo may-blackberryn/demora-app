@@ -1125,7 +1125,7 @@ let frenchStrings: [String: String] = [
     "Stricter change": "Changement plus strict",
     "Takes effect": "Prend effet",
     "Right away": "Tout de suite",
-    "Until then nothing changes. You can cancel it from Today.": "D’ici là, rien ne change. Vous pouvez l’annuler depuis Aujourd’hui.",
+    "Until then nothing changes. You can cancel it from Today.": "D’ici là, rien ne change. Vous pouvez l’annuler dans l’onglet Aujourd’hui.",
     "Hold to confirm": "Maintenez pour confirmer",
     "Keep editing": "Continuer à modifier",
     "Confirm looser change?": "Confirmer ce changement moins strict ?",

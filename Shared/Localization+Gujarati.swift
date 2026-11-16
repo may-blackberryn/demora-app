@@ -1156,7 +1156,7 @@ let gujaratiStrings: [String: String] = [
     "Stricter change": "કડક ફેરફાર",
     "Takes effect": "લાગુ થાય છે",
     "Right away": "તરત",
-    "Until then nothing changes. You can cancel it from Today.": "ત્યાં સુધી કશું બદલાતું નથી. તમે તેને આજે પરથી રદ કરી શકો છો.",
+    "Until then nothing changes. You can cancel it from Today.": "ત્યાં સુધી કશું બદલાતું નથી. તમે તેને ‘આજે’ ટૅબ પરથી રદ કરી શકો છો.",
     "Hold to confirm": "પુષ્ટિ માટે દબાવી રાખો",
     "Keep editing": "સંપાદન ચાલુ રાખો",
     "Confirm looser change?": "ઢીલા ફેરફારની પુષ્ટિ કરવી?",

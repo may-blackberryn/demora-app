@@ -1156,7 +1156,7 @@ let vietnameseStrings: [String: String] = [
     "Stricter change": "Thay đổi nghiêm hơn",
     "Takes effect": "Có hiệu lực",
     "Right away": "Ngay lập tức",
-    "Until then nothing changes. You can cancel it from Today.": "Cho đến lúc đó không có gì thay đổi. Bạn có thể hủy nó từ Hôm nay.",
+    "Until then nothing changes. You can cancel it from Today.": "Cho đến lúc đó không có gì thay đổi. Bạn có thể hủy nó ở tab Hôm nay.",
     "Hold to confirm": "Giữ để xác nhận",
     "Keep editing": "Tiếp tục sửa",
     "Confirm looser change?": "Xác nhận thay đổi nới lỏng?",
