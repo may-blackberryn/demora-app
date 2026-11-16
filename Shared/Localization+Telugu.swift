@@ -1699,7 +1699,7 @@ let teluguStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "మీ పరిమితులు కనిపించకపోతే, రిఫ్రెష్ చేయడానికి క్రిందికి లాగండి.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "మీరు చెక్ ఇన్ నొక్కినప్పుడు, చోటును సెట్ చేసినప్పుడు లేదా మీరు ఉన్న దేశాన్ని వాడినప్పుడు, నియమం యొక్క చోటు లేదా దేశం వర్తిస్తుందో చూడడానికి Demora మీ లొకేషన్‌ను ఒక్కసారి చదువుతుంది. మీ లొకేషన్ ఎక్కడికీ పంపబడదు; మీరు సేవ్ చేసిన చోట్లు మాత్రమే ఉంటాయి.",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "విశ్వసనీయ కాంటాక్ట్ చిత్రంగా వాడడానికి ఫోటో తీయండి.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "ఈ తనిఖీకి Demoraకు మీ ఖచ్చితమైన లొకేషన్ కావాలి, మీరు నియమం యొక్క చోటు లేదా దేశంలో ఉన్నారో లేదో చెప్పడానికి.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "ఈ తనిఖీకి Demoraకు మీ ఖచ్చితమైన లొకేషన్ కావాలి, మీరు నియమం యొక్క చోటు లేదా దేశంలో ఉన్నారో లేదో చెప్పడానికి.",
+    "Take a photo to use as a trusted contact's picture.": "విశ్వసనీయ కాంటాక్ట్ చిత్రంగా వాడడానికి ఫోటో తీయండి.",
 ]

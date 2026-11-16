@@ -1699,7 +1699,7 @@ let malayStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "Jika had anda tidak muncul, tarik ke bawah untuk menyegarkan.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora membaca lokasi anda sekali apabila anda mengetik Daftar masuk, menetapkan tempat atau menggunakan negara tempat anda berada, untuk melihat sama ada tempat atau negara sesuatu peraturan terpakai. Lokasi anda tidak dihantar ke mana-mana; hanya tempat yang anda simpan disimpan.",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Ambil foto untuk digunakan sebagai gambar kenalan dipercayai.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora memerlukan lokasi tepat anda untuk semakan ini, bagi mengetahui sama ada anda berada di dalam tempat atau negara sesuatu peraturan.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "Demora memerlukan lokasi tepat anda untuk semakan ini, bagi mengetahui sama ada anda berada di dalam tempat atau negara sesuatu peraturan.",
+    "Take a photo to use as a trusted contact's picture.": "Ambil foto untuk digunakan sebagai gambar kenalan dipercayai.",
 ]

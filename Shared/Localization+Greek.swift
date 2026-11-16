@@ -1699,7 +1699,7 @@ let greekStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "Αν τα όριά σου δεν εμφανίζονται, τράβηξε προς τα κάτω για ανανέωση.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Το Demora διαβάζει την τοποθεσία σου μία φορά όταν πατάς Check-in, ορίζεις ένα μέρος ή χρησιμοποιείς τη χώρα όπου βρίσκεσαι, για να δει αν ισχύει το μέρος ή η χώρα ενός κανόνα. Η τοποθεσία σου δεν στέλνεται πουθενά· κρατιούνται μόνο τα μέρη που αποθηκεύεις.",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Τράβηξε μια φωτογραφία για να τη χρησιμοποιήσεις ως εικόνα ενός έμπιστου προσώπου.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Το Demora χρειάζεται την ακριβή τοποθεσία σου για αυτόν τον έλεγχο, ώστε να καταλάβει αν βρίσκεσαι μέσα στο μέρος ή τη χώρα ενός κανόνα.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "Το Demora χρειάζεται την ακριβή τοποθεσία σου για αυτόν τον έλεγχο, ώστε να καταλάβει αν βρίσκεσαι μέσα στο μέρος ή τη χώρα ενός κανόνα.",
+    "Take a photo to use as a trusted contact's picture.": "Τράβηξε μια φωτογραφία για να τη χρησιμοποιήσεις ως εικόνα ενός έμπιστου προσώπου.",
 ]

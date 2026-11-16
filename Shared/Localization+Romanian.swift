@@ -1699,7 +1699,7 @@ let romanianStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "Dacă limitele tale nu apar, trage în jos pentru a reîmprospăta.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora îți citește locația o singură dată, când atingi Check-in, stabilești un loc sau folosești țara în care ești, ca să vadă dacă se aplică locul sau țara unei reguli. Locația ta nu este trimisă nicăieri; doar locurile pe care le salvezi sunt păstrate.",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Fă o fotografie pentru a o folosi drept imagine a unui contact de încredere.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora are nevoie de locația ta precisă pentru această verificare, ca să stabilească dacă ești în locul sau țara unei reguli.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "Demora are nevoie de locația ta precisă pentru această verificare, ca să stabilească dacă ești în locul sau țara unei reguli.",
+    "Take a photo to use as a trusted contact's picture.": "Fă o fotografie pentru a o folosi drept imagine a unui contact de încredere.",
 ]

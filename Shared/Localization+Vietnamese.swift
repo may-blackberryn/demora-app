@@ -1699,7 +1699,7 @@ let vietnameseStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "Nếu các giới hạn của bạn không hiện, hãy kéo xuống để làm mới.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora đọc vị trí của bạn một lần khi bạn chạm Check-in, đặt một nơi hoặc dùng quốc gia bạn đang ở, để xem nơi chốn hay quốc gia của một quy tắc có áp dụng không. Vị trí của bạn không được gửi đi đâu cả; chỉ các nơi bạn lưu mới được giữ.",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Chụp ảnh để dùng làm ảnh của một liên hệ tin cậy.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora cần vị trí chính xác của bạn cho lần kiểm tra này, để biết bạn có ở trong nơi chốn hay quốc gia của một quy tắc không.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "Demora cần vị trí chính xác của bạn cho lần kiểm tra này, để biết bạn có ở trong nơi chốn hay quốc gia của một quy tắc không.",
+    "Take a photo to use as a trusted contact's picture.": "Chụp ảnh để dùng làm ảnh của một liên hệ tin cậy.",
 ]

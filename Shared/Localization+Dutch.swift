@@ -1699,7 +1699,7 @@ let dutchStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "Verschijnen je limieten niet, trek dan omlaag om te verversen.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora leest je locatie één keer wanneer je op Inchecken tikt, een plek instelt of het land gebruikt waar je bent, om te zien of de plek of het land van een regel van toepassing is. Je locatie wordt nergens naartoe verstuurd; alleen de plekken die je opslaat worden bewaard.",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Maak een foto om als afbeelding van een vertrouwd contact te gebruiken.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora heeft je nauwkeurige locatie nodig voor deze controle, om te bepalen of je binnen de plek of het land van een regel bent.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "Demora heeft je nauwkeurige locatie nodig voor deze controle, om te bepalen of je binnen de plek of het land van een regel bent.",
+    "Take a photo to use as a trusted contact's picture.": "Maak een foto om als afbeelding van een vertrouwd contact te gebruiken.",
 ]

@@ -1699,7 +1699,7 @@ let odiaStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "ଆପଣଙ୍କ ସୀମା ନଦେଖାଗଲେ ରିଫ୍ରେସ୍ କରିବାକୁ ତଳକୁ ଟାଣନ୍ତୁ।",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "ଆପଣ ଚେକ୍ ଇନ୍ ଟ୍ୟାପ୍ କଲେ, ଏକ ସ୍ଥାନ ଠିକ୍ କଲେ କିମ୍ବା ଆପଣ ଥିବା ଦେଶ ବ୍ୟବହାର କଲେ, ନିୟମର ସ୍ଥାନ କିମ୍ବା ଦେଶ ଲାଗୁ ହେଉଛି କି ନାହିଁ ଦେଖିବାକୁ Demora ଥରେ ଆପଣଙ୍କ ଲୋକେସନ୍ ପଢ଼େ। ଆପଣଙ୍କ ଲୋକେସନ୍ କେଉଁଠି ପଠାଯାଏ ନାହିଁ; କେବଳ ଆପଣ ସେଭ୍ କରିଥିବା ସ୍ଥାନ ରଖାଯାଏ।",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "ଭରସାଯୋଗ୍ୟ ବ୍ୟକ୍ତିଙ୍କ ଛବି ଭାବେ ବ୍ୟବହାର କରିବାକୁ ଏକ ଫଟୋ ଉଠାନ୍ତୁ।",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "ଏହି ଯାଞ୍ଚ ପାଇଁ Demora କୁ ଆପଣଙ୍କ ସଠିକ୍ ଲୋକେସନ୍ ଦରକାର, ଆପଣ ଏକ ନିୟମର ସ୍ଥାନ କିମ୍ବା ଦେଶ ଭିତରେ ଅଛନ୍ତି କି ନାହିଁ ଜାଣିବାକୁ।",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "ଏହି ଯାଞ୍ଚ ପାଇଁ Demora କୁ ଆପଣଙ୍କ ସଠିକ୍ ଲୋକେସନ୍ ଦରକାର, ଆପଣ ଏକ ନିୟମର ସ୍ଥାନ କିମ୍ବା ଦେଶ ଭିତରେ ଅଛନ୍ତି କି ନାହିଁ ଜାଣିବାକୁ।",
+    "Take a photo to use as a trusted contact's picture.": "ଭରସାଯୋଗ୍ୟ ବ୍ୟକ୍ତିଙ୍କ ଛବି ଭାବେ ବ୍ୟବହାର କରିବାକୁ ଏକ ଫଟୋ ଉଠାନ୍ତୁ।",
 ]

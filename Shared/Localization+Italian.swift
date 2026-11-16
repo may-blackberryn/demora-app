@@ -1699,7 +1699,7 @@ let italianStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "Se i tuoi limiti non compaiono, trascina verso il basso per aggiornare.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora legge la tua posizione una volta quando tocchi Check-in, imposti un luogo o usi il paese in cui sei, per vedere se si applica il luogo o il paese di una regola. La tua posizione non viene inviata da nessuna parte; vengono conservati solo i luoghi che salvi.",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Scatta una foto da usare come immagine di un contatto di fiducia.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora ha bisogno della tua posizione precisa per questo controllo, per capire se sei dentro il luogo o il paese di una regola.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "Demora ha bisogno della tua posizione precisa per questo controllo, per capire se sei dentro il luogo o il paese di una regola.",
+    "Take a photo to use as a trusted contact's picture.": "Scatta una foto da usare come immagine di un contatto di fiducia.",
 ]

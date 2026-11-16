@@ -1699,7 +1699,7 @@ let hungarianStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "Ha a korlátaid nem jelennek meg, húzd lefelé a frissítéshez.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "A Demora egyszer olvassa le a helyzetedet, amikor a Bejelentkezést érinted, helyet állítasz be, vagy azt az országot használod, ahol vagy, hogy lássa, érvényes-e egy szabály helye vagy országa. A helyzetedet sehová nem küldi el; csak az általad mentett helyek maradnak meg.",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Készíts fotót, hogy egy megbízható személy képeként használd.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "A Demorának a pontos helyzetedre van szüksége ehhez az ellenőrzéshez, hogy megállapítsa, egy szabály helyén vagy országában vagy-e.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "A Demorának a pontos helyzetedre van szüksége ehhez az ellenőrzéshez, hogy megállapítsa, egy szabály helyén vagy országában vagy-e.",
+    "Take a photo to use as a trusted contact's picture.": "Készíts fotót, hogy egy megbízható személy képeként használd.",
 ]

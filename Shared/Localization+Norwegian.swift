@@ -1699,7 +1699,7 @@ let norwegianStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "Hvis grensene dine ikke vises, dra ned for å oppdatere.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora leser posisjonen din én gang når du trykker på Sjekk inn, setter et sted eller bruker landet du er i, for å se om stedet eller landet til en regel gjelder. Posisjonen din sendes ingen steder; bare stedene du lagrer, beholdes.",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Ta et bilde som kan brukes som bildet til en betrodd person.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora trenger din nøyaktige posisjon for denne sjekken, for å avgjøre om du er innenfor stedet eller landet til en regel.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "Demora trenger din nøyaktige posisjon for denne sjekken, for å avgjøre om du er innenfor stedet eller landet til en regel.",
+    "Take a photo to use as a trusted contact's picture.": "Ta et bilde som kan brukes som bildet til en betrodd person.",
 ]

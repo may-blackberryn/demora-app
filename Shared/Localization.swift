@@ -1927,4 +1927,5 @@ let spanishStrings: [String: String] = [
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora lee tu ubicación una vez cuando tocas Comprobar, defines un lugar o usas el país en el que estás, para ver si se cumple el lugar o el país de una regla. Tu ubicación no se envía a ningún sitio; solo se guardan los lugares que guardas.",
     "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora necesita tu ubicación exacta para esta comprobación, para saber si estás dentro del lugar o del país de una regla.",
+    "Take a photo to use as a trusted contact's picture.": "Haz una foto para usarla como imagen de un contacto de confianza.",
 ]

@@ -658,7 +658,7 @@ let hindiStrings: [String: String] = [
     "Blocked sites": "ब्लॉक किए गए साइटें",
     "Stop apps from being deleted, limit adult websites, or block specific sites by domain. Every change here goes through your delays.": "ऐप्स को हटाने से रोकें, वयस्क वेबसाइटों को सीमित करें, या डोमेन के आधार पर विशिष्ट साइटों को ब्लॉक करें। यहाँ की प्रत्येक परिवर्तन आपके विलंबताओं से गुजरती है।",
     "0 minutes — this app stays blocked all day, every day.": "0 मिनट — यह ऐप पूरे दिन, हर दिन ब्लॉक रहता है।",
-    "Approval emails are at capacity right now. Try again later, or use a Demora contact.": "Demora — ई. ई.",
+    "Approval emails are at capacity right now. Try again later, or use a Demora contact.": "अभी अनुमोदन ईमेल की सीमा पूरी हो गई है। बाद में फिर कोशिश करें, या Demora संपर्क का इस्तेमाल करें।",
     "You've sent today": "आपने आज भेजा है",
     "All users · today": "सभी उपयोगकर्ता · आज",
     "All users · this month": "सभी उपयोगकर्ता · इस महीने",

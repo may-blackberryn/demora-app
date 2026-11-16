@@ -1699,7 +1699,7 @@ let hebrewStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "אם המגבלות שלכם לא מופיעות, משכו מטה לרענון.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora קוראת את המיקום שלכם פעם אחת כשאתם מקישים על צ׳ק-אין, מגדירים מקום או משתמשים במדינה שבה אתם נמצאים, כדי לראות אם המקום או המדינה של כלל חלים. המיקום שלכם לא נשלח לשום מקום; רק מקומות שתשמרו נשמרים.",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "צלמו תמונה לשימוש כתמונה של איש קשר מהימן.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora צריכה את המיקום המדויק שלכם לבדיקה הזו, כדי לדעת אם אתם בתוך המקום או המדינה של כלל.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "Demora צריכה את המיקום המדויק שלכם לבדיקה הזו, כדי לדעת אם אתם בתוך המקום או המדינה של כלל.",
+    "Take a photo to use as a trusted contact's picture.": "צלמו תמונה לשימוש כתמונה של איש קשר מהימן.",
 ]

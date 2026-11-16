@@ -1699,7 +1699,7 @@ let ukrainianStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "Якщо ваші ліміти не з'явилися, потягніть донизу, щоб оновити.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora один раз визначає ваше місцеперебування, коли ви торкаєтеся «Відмітитися», задаєте місце або використовуєте країну, де ви перебуваєте, щоб зрозуміти, чи діє місце або країна правила. Ваше місцеперебування нікуди не надсилається; зберігаються лише місця, які ви записали.",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Зробіть фото, щоб використати його як зображення довіреної особи.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Для цієї перевірки Demora потрібна ваша точна геопозиція, щоб зрозуміти, чи перебуваєте ви в місці або країні правила.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "Для цієї перевірки Demora потрібна ваша точна геопозиція, щоб зрозуміти, чи перебуваєте ви в місці або країні правила.",
+    "Take a photo to use as a trusted contact's picture.": "Зробіть фото, щоб використати його як зображення довіреної особи.",
 ]

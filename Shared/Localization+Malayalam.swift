@@ -1699,7 +1699,7 @@ let malayalamStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "നിങ്ങളുടെ പരിധികൾ കാണുന്നില്ലെങ്കിൽ, പുതുക്കാൻ താഴേക്ക് വലിക്കൂ.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "ചെക്ക് ഇൻ ടാപ്പ് ചെയ്യുമ്പോഴോ സ്ഥലം സജ്ജമാക്കുമ്പോഴോ നിങ്ങൾ ഉള്ള രാജ്യം ഉപയോഗിക്കുമ്പോഴോ, ഒരു നിയമത്തിന്റെ സ്ഥലമോ രാജ്യമോ ബാധകമാണോ എന്ന് നോക്കാൻ Demora നിങ്ങളുടെ ലൊക്കേഷൻ ഒരു തവണ വായിക്കും. നിങ്ങളുടെ ലൊക്കേഷൻ എവിടേക്കും അയയ്ക്കില്ല; നിങ്ങൾ സേവ് ചെയ്യുന്ന സ്ഥലങ്ങൾ മാത്രം സൂക്ഷിക്കും.",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "ഒരു വിശ്വസ്ത കോൺടാക്റ്റിന്റെ ചിത്രമായി ഉപയോഗിക്കാൻ ഒരു ഫോട്ടോ എടുക്കൂ.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "ഈ പരിശോധനയ്ക്ക് നിങ്ങളുടെ കൃത്യമായ ലൊക്കേഷൻ Demora-യ്ക്ക് വേണം, ഒരു നിയമത്തിന്റെ സ്ഥലത്തോ രാജ്യത്തോ ആണോ നിങ്ങൾ എന്ന് അറിയാൻ.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "ഈ പരിശോധനയ്ക്ക് നിങ്ങളുടെ കൃത്യമായ ലൊക്കേഷൻ Demora-യ്ക്ക് വേണം, ഒരു നിയമത്തിന്റെ സ്ഥലത്തോ രാജ്യത്തോ ആണോ നിങ്ങൾ എന്ന് അറിയാൻ.",
+    "Take a photo to use as a trusted contact's picture.": "ഒരു വിശ്വസ്ത കോൺടാക്റ്റിന്റെ ചിത്രമായി ഉപയോഗിക്കാൻ ഒരു ഫോട്ടോ എടുക്കൂ.",
 ]

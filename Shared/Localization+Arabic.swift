@@ -1699,7 +1699,7 @@ let arabicStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "إن لم تظهر حدودك، اسحب للأسفل للتحديث.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "تقرأ Demora موقعك مرة واحدة عندما تضغط تسجيل الحضور أو تحدد مكانًا أو تستخدم البلد الذي أنت فيه، لترى هل ينطبق مكان القاعدة أو بلدها. لا يُرسل موقعك إلى أي مكان؛ لا يُحتفظ إلا بالأماكن التي تحفظها.",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "التقط صورة لاستخدامها صورةً لجهة اتصال موثوقة.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "تحتاج Demora إلى موقعك الدقيق لهذا الفحص، لمعرفة هل أنت داخل مكان القاعدة أو بلدها.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "تحتاج Demora إلى موقعك الدقيق لهذا الفحص، لمعرفة هل أنت داخل مكان القاعدة أو بلدها.",
+    "Take a photo to use as a trusted contact's picture.": "التقط صورة لاستخدامها صورةً لجهة اتصال موثوقة.",
 ]

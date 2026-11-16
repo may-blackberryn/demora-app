@@ -1699,7 +1699,7 @@ let marathiStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "तुमच्या मर्यादा दिसत नसतील तर रिफ्रेश करण्यासाठी खाली ओढा.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "तुम्ही चेक इन टॅप करता, ठिकाण ठरवता किंवा तुम्ही ज्या देशात आहात तो वापरता तेव्हा नियमाचे ठिकाण किंवा देश लागू होतो का ते पाहण्यासाठी Demora एकदा तुमचे लोकेशन वाचते. तुमचे लोकेशन कुठेही पाठवले जात नाही; फक्त तुम्ही सेव्ह केलेली ठिकाणे राखली जातात.",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "विश्वासू व्यक्तीचे चित्र म्हणून वापरण्यासाठी फोटो काढा.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "या तपासणीसाठी Demora ला तुमचे अचूक लोकेशन हवे आहे, तुम्ही नियमाच्या ठिकाणात किंवा देशात आहात का ते ठरवण्यासाठी.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "या तपासणीसाठी Demora ला तुमचे अचूक लोकेशन हवे आहे, तुम्ही नियमाच्या ठिकाणात किंवा देशात आहात का ते ठरवण्यासाठी.",
+    "Take a photo to use as a trusted contact's picture.": "विश्वासू व्यक्तीचे चित्र म्हणून वापरण्यासाठी फोटो काढा.",
 ]

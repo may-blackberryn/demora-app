@@ -1699,7 +1699,7 @@ let thaiStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "หากขีดจำกัดของคุณไม่ปรากฏ ให้ดึงลงเพื่อรีเฟรช",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora อ่านตำแหน่งของคุณหนึ่งครั้งเมื่อคุณแตะเช็กอิน ตั้งสถานที่ หรือใช้ประเทศที่คุณอยู่ เพื่อดูว่าสถานที่หรือประเทศของกฎใช้ได้หรือไม่ ตำแหน่งของคุณไม่ถูกส่งไปที่ใด บันทึกเฉพาะสถานที่ที่คุณบันทึก",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "ถ่ายรูปเพื่อใช้เป็นรูปของผู้ติดต่อที่ไว้ใจ",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora ต้องการตำแหน่งที่แม่นยำของคุณสำหรับการตรวจสอบนี้ เพื่อบอกว่าคุณอยู่ในสถานที่หรือประเทศของกฎหรือไม่",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "Demora ต้องการตำแหน่งที่แม่นยำของคุณสำหรับการตรวจสอบนี้ เพื่อบอกว่าคุณอยู่ในสถานที่หรือประเทศของกฎหรือไม่",
+    "Take a photo to use as a trusted contact's picture.": "ถ่ายรูปเพื่อใช้เป็นรูปของผู้ติดต่อที่ไว้ใจ",
 ]

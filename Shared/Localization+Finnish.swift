@@ -1699,7 +1699,7 @@ let finnishStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "Jos rajasi eivät näy, vedä alas päivittääksesi.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora lukee sijaintisi kerran, kun napautat Kirjaudu sisään, asetat paikan tai käytät maata, jossa olet, nähdäkseen, koskeeko säännön paikka tai maa sinua. Sijaintiasi ei lähetetä minnekään; vain tallentamasi paikat säilytetään.",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Ota kuva yhteyshenkilön kuvaksi.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora tarvitsee tarkan sijaintisi tähän tarkistukseen selvittääkseen, oletko säännön paikan tai maan sisällä.",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "Demora tarvitsee tarkan sijaintisi tähän tarkistukseen selvittääkseen, oletko säännön paikan tai maan sisällä.",
+    "Take a photo to use as a trusted contact's picture.": "Ota kuva yhteyshenkilön kuvaksi.",
 ]

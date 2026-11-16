@@ -1699,7 +1699,7 @@ let bengaliStrings: [String: String] = [
     "If your limits don't appear, pull down to refresh.": "আপনার সীমা না দেখালে টেনে রিফ্রেশ করুন।",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "চেক ইন ট্যাপ করলে, জায়গা ঠিক করলে বা আপনার দেশ ব্যবহার করলে Demora একবার আপনার লোকেশন পড়ে, কোনো নিয়মের জায়গা বা দেশ প্রযোজ্য কি না দেখতে। আপনার লোকেশন কোথাও পাঠানো হয় না; শুধু আপনার সেভ করা জায়গা থাকে।",
-    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "বিশ্বস্ত মানুষের ছবি হিসেবে ব্যবহার করতে একটা ছবি তুলুন।",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "এই যাচাইয়ের জন্য Demora-র আপনার নিখুঁত লোকেশন লাগে, আপনি কোনো নিয়মের জায়গা বা দেশের ভেতরে কি না বুঝতে।",
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
-    "Take a photo to use as a trusted contact's picture.": "এই যাচাইয়ের জন্য Demora-র আপনার নিখুঁত লোকেশন লাগে, আপনি কোনো নিয়মের জায়গা বা দেশের ভেতরে কি না বুঝতে।",
+    "Take a photo to use as a trusted contact's picture.": "বিশ্বস্ত মানুষের ছবি হিসেবে ব্যবহার করতে একটা ছবি তুলুন।",
 ]

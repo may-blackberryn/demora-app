@@ -1140,7 +1140,7 @@ let croatianStrings: [String: String] = [
     "Unavailable": "Nedostupno",
     "Unlock the “Prevent disabling” guide": "Otključaj vodič „Spriječi isključivanje”",
     "Use photo": "Koristi fotografiju",
-    "When asked for Screen Time Passcode Recovery, your friend signs in with THEIR OWN Apple ID — not yours. That's what stops you from resetting the passcode on your own.": "To sprječava da pristupni kod resetiraš sam.",
+    "When asked for Screen Time Passcode Recovery, your friend signs in with THEIR OWN Apple ID — not yours. That's what stops you from resetting the passcode on your own.": "Kad se zatraži oporavak pristupnog koda Vremena uporabe, tvoj se prijatelj prijavljuje SVOJIM Apple ID-om — ne tvojim. To sprječava da pristupni kod resetiraš sam.",
     "You can always find this later under Help — but there it's behind a delay.": "Ovo uvijek možeš naći kasnije u Pomoći — ali tamo je iza odgode.",
     "You can change these any time under General blocking. Each change then goes through your delays.": "Ovo možeš mijenjati bilo kada u Općem blokiranju. Svaka promjena zatim prolazi kroz tvoje odgode.",
     "Your one-time access is ready.": "Tvoj jednokratni pristup je spreman.",
