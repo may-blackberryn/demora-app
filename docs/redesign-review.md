@@ -2000,7 +2000,7 @@ authorized in the simulator, so every screen shows its no-access state.
 | 1 | Folded: Today, Rules, Insights, You look like iPhone | **Duo not done.** Stand-in: iPhone 18 Pro, all four tabs, Setup step 1, the New rule chooser, the Repeating block editor and New session sheets render correctly |
 | 2 | Unfolded: one centred column, tab bar paper and hairline edge to edge, New session inside the column, Insights shows iPhone data | **Duo not done.** Stand-in: iPad (regular width). Every tab keeps the centred column; Insights' header now sits in it; the tab bar's top line runs edge to edge; New session and New rule stay in the column. Report data not checkable (no Screen Time) |
 | 3 | Fold/unfold with a sheet open and on a pushed editor | **Not done** (no Duo, no rotation or resize without taps). iPad sheets shown as centred form sheets (~430 pt) that read cleanly |
-| 4 | Split View on each side, Slide Over | **Not done** (needs taps/window controls) |
+| 4 | Split View on each side, Slide Over; iPad window resizing as a stand-in for the inner display | **Not done.** Needs simulator interaction: the simulator access request went unanswered twice, so nothing could resize the iPad window or open Split View. To run it: grant access from the simulator panel (or do it by hand) and drag the iPad window through narrow, half and wide widths, and Split View on each side |
 | 5 | Cropper: fold/unfold mid-crop, saved square matches | **Not done** (camera needs a device; not reachable in the simulator) |
 | 6 | Onboarding unfolded stays in the column | **Partly.** iPad Setup step 1 in the column; the day/night and ways-to-skip setup sheets weren't opened |
 | 7 | Cropper on a notched phone / near-square window | **Not done** (camera only) |
@@ -2008,6 +2008,9 @@ authorized in the simulator, so every screen shows its no-access state.
 | — | Xcode App Resizability check | **Not done** (Xcode UI) |
 
 No layout bug was found in what rendered, so no code changed in this pass.
+iPhone and iPad checks are finished for now; the Duo items wait for a
+Duo runtime (iOS 27.1 or the Duo-specific 27.2 runtime; the generic 27.2
+refuses it). All F6 simulators were shut down afterwards.
 Screenshots (not in the repo): the F6 session's scratchpad `shots/`.
 
 ## F6 review fixes (2026-11-15)
