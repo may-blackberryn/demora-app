@@ -1896,3 +1896,12 @@ deliberately with the band cases. No phone yet.
 | Dots: ended 6 pt filled `inkSoft` at 45 %; on now 9 pt filled; later 9 pt hollow 1.5 pt stroke; free/unblock in `Ink.free`, others in the accent. The line runs above the dot (not on the first row) and below it (not on the last) | "Stops at the last dot", and the line no longer has a 5 pt gap at each row's top | Yes |
 | VoiceOver: one `accessibilityLabel` per row from 7 sentence formats (ended / ended since / tap / on now / free now / later / free later); the rule-sheet hint and button trait kept | One sentence per row, without the chip and label read separately | Yes |
 | New strings in all eight languages: "Ended", "Since %@" and the 7 sentences; harness string scan now also covers `LimitsUsageReportView.swift` (87 keys × 7 tables) | The scan couldn't read `tr(isFree(item) ? …)`; the code now uses a local `free` so every key is checked | Yes |
+
+## F4: "Block now" becomes "New session" (2026-11-15)
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| Rules add-menu item, session editor title and Today's pinned action read **New session**; subtitle "Block apps for a set time, starting soon" kept; `.blockNow` and other internal names unchanged | Spec | Yes |
+| Reused the existing "New session" key (it was already in all seven tables) instead of adding a second; the old "Block now" key removed | A duplicate key crashes the dictionary literal (the harness caught it). Hindi's old value "नई सत्र" corrected to "नया सत्र" (सत्र is masculine) | Yes |
+| Also renamed where the action is named in visible copy: the Help guide's Sessions text and the check-in receipt line "It waits your stricter delay, like New session. It's in Changes.", in all eight languages (Hindi: "नए सत्र की तरह"; French: "dès qu'elle s'applique") | Consistent naming; no "Block now" in onboarding, widgets or shield. Code comments and older docs keep "Block now" as the history of the same action; `today-redesign.md` notes the rename | Yes |
+| Harness expectations updated: `TodayPresentationHarness`, `GuideContentHarness`, `WhenWhereBlockHarness` | They pin the visible names | Yes |

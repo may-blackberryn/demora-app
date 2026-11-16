@@ -2069,7 +2069,7 @@ enum ConditionalCheckIn {
         case .queued: return "It's waiting in Changes instead."
         case .blockMet, .blockRunning: return "Leaving doesn't end it. Ending it early waits like any looser change."
         case .blockOnItsOwn: return "Its time blocks on its own, without a check-in."
-        case .blockWaiting: return "It waits your stricter delay, like Block now. It's in Changes."
+        case .blockWaiting: return "It waits your stricter delay, like New session. It's in Changes."
         case .blockWontWait(.windowCloses): return "This window closes before your stricter wait ends."
         case .blockWontWait(.ruleChangesFirst): return "A change to this rule lands first. Check in after it lands."
         case .blockWontWait(.staleWaiting): return "Its rule changed while it waited. Cancel it in Changes, then check in again."

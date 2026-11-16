@@ -448,8 +448,8 @@ order = ['TodayHeader(', 'TodayAttentionCard(', 'NowCard(', 'InboxCard(', 'limit
          'dayThread(at:', 'changingSoon']
 positions = [today.index(token) for token in order]
 assert positions == sorted(positions), ('Today order', order)
-assert 'if !needsWakeTap {' in today and 'Label(tr("Block now")' in today and 'SessionStartView()' in today, \
-    'Block now pinned, hidden while Wake up shows'
+assert 'if !needsWakeTap {' in today and 'Label(tr("New session")' in today and 'SessionStartView()' in today, \
+    'New session pinned, hidden while Wake up shows'
 assert '.safeAreaInset(edge: .bottom)' in today
 assert 'ChangesLedgerView(outgoing: activeOutgoing, onRequestsChanged: loadOutgoing,\n                                  scrollTo: ledgerTarget, navigationReset: ledgerNavigationReset)' in today
 assert 'LimitEditorView(existing: nil)' in today and 'model.selectedTab = 1 } label' not in today, \
@@ -505,7 +505,7 @@ assert 'TodayTimeText.clock(' in thread_view and 'entry.label.map(clock)' in thr
 assert 'isLast ? Color.clear : Ink.hairline' in thread_view, 'the thread stops at the last dot'
 assert thread_view.count('.accessibilityLabel(Text(sentence(entry)))') == 2, 'one sentence per row'
 assert 'children: .combine' not in thread_view
-print('Today layout guards passed: section order, Changes-only navigation, visible inbox task, pinned Block now, event-only reads, rule names only, report refresh')
+print('Today layout guards passed: section order, Changes-only navigation, visible inbox task, pinned New session, event-only reads, rule names only, report refresh')
 
 # --- Report restyle (§5.5) and its palette copy -----------------------------
 theme = (ROOT / 'Latch/Theme.swift').read_text()

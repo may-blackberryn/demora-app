@@ -225,7 +225,7 @@ struct HomeView: View {
             // One primary action per screen: hidden while Wake up shows.
             if !needsWakeTap {
                 Button { showSession = true } label: {
-                    Label(tr("Block now"), systemImage: "lock")
+                    Label(tr("New session"), systemImage: "lock")
                 }
                 .buttonStyle(DemoraPrimaryButtonStyle())
                 .padding(.horizontal, DemoraSpace.pageGutter)

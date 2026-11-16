@@ -603,7 +603,7 @@ struct NewRuleChooser: View {
     static func copy(_ kind: NewRuleKind) -> (symbol: String, title: String, line: String) {
         switch kind {
         case .dailyLimit: return ("hourglass", "Daily limit", "A daily time budget for some apps")
-        case .blockNow: return ("play.circle", "Block now", "Block apps for a set time, starting soon")
+        case .blockNow: return ("play.circle", "New session", "Block apps for a set time, starting soon")
         case .repeating: return ("repeat", "Repeating block", "Every day, some days, or monthly — or a free period")
         case .planned: return ("calendar.badge.clock", "Plan a block", "One time: a trip, an exam, a weekend")
         case .dayNight: return ("sun.horizon", "Day & night", "A wake-up wait and a sleep time")

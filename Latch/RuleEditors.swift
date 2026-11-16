@@ -1201,7 +1201,7 @@ struct SessionStartView: View {
     }
 
     var body: some View {
-        RuleEditorPage(title: tr("Block now"), isDirty: isDirty,
+        RuleEditorPage(title: tr("New session"), isDirty: isDirty,
                        problem: problem?.messageKey.map(tr), canReview: problem == nil,
                        onReview: review) {
             EditorSection(tr("Name")) {

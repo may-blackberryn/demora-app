@@ -588,7 +588,7 @@ keys = ["Close enough to %@ to count for a block", "The block didn't start.", "B
         "Your clock was changed recently. The block can start once it's set right again.",
         "Leaving doesn't end it. Ending it early waits like any looser change.",
         "Its time blocks on its own, without a check-in.",
-        "It waits your stricter delay, like Block now. It's in Changes.", "A block from this rule is already on.",
+        "It waits your stricter delay, like New session. It's in Changes.", "A block from this rule is already on.",
         "The block couldn't start safely. iOS may not be able to track another session right now. Nothing changed.",
         "Review", "Then runs until %@.", "starts a block",
         "This block won't start.", "This window closes before your stricter wait ends.",

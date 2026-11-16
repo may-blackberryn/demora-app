@@ -46,7 +46,7 @@ class GuideContentTests(unittest.TestCase):
         sources = "\n".join((ROOT / path).read_text() for path in [
             "Latch/RulesView.swift", "Latch/DayNightViews.swift", "Latch/HomeView.swift",
             "Latch/ScheduleConflictsView.swift", "Latch/RuleEditors.swift"])
-        for label in ["New rule", "Daily limit", "Block now", "Plan a block", "Repeating block",
+        for label in ["New rule", "Daily limit", "New session", "Plan a block", "Repeating block",
                       "Day & night", "Calendar", "Conflicts", "Recheck blocked limits",
                       "Manual extra time"]:
             self.assertTrue(f'"{label}"' in sources, f"Missing destination: {label}")
@@ -124,7 +124,7 @@ class GuideContentTests(unittest.TestCase):
                        "Both actions always queue a less-strict change",
                        "last one promoted applies last"]:
             self.assertIn(phrase, TOPICS["conflicts"])
-        for phrase in ["Block now, Plan a block or Repeating block", "duration starts when it takes effect",
+        for phrase in ["New session, Plan a block or Repeating block", "duration starts when it takes effect",
                        "Screen Time checkpoints", "not the same as free usage",
                        "less-strict delay"]:
             self.assertIn(phrase, TOPICS["schedules"])

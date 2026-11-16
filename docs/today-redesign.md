@@ -136,6 +136,8 @@ The single time order above is replaced by three bands, each in its own order:
 - Pure logic: `DayThread.make` in `Latch/TodayPresentation.swift`; cases in
   `Tests/TodayPresentationHarness.py` (3 am tail, noon tail, tonight past
   midnight, the cap, a 23-hour day).
+- F4 (same batch): the pinned action is now **New session** (was "Block
+  now"); earlier mentions of "Block now" in this spec mean that action.
 
 ### 5.7 Changing soon
 - `SectionHeader("Changing soon", trailing: "All 5")` → Changes ledger.
