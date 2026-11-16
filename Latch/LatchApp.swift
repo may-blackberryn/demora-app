@@ -304,19 +304,30 @@ private struct DemoraTabBar: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // Like the system tab bar: the bar keeps its size and a long
+                // press shows the item large at accessibility text sizes.
+                .accessibilityShowsLargeContentViewer {
+                    Label(tr(item.1), systemImage: item.2)
+                }
                 .accessibilityLabel(tr(item.1))
                 .accessibilityValue(dotDescription(for: item.0))
                 .accessibilityAddTraits(selection == item.0 ? [.isSelected] : [])
             }
         }
+        // Capped (F6): at accessibility sizes the labels broke mid-word
+        // ("Rule s") and the bar took a third of the iPhone Duo's outer
+        // display. The large content viewer above covers those sizes.
+        .dynamicTypeSize(...DynamicTypeSize.xLarge)
         .padding(.horizontal, 16)
         .padding(.top, 10)
         .padding(.bottom, 4)
         .frame(maxWidth: 700)
         .frame(maxWidth: .infinity)
-        // The hairline spans the paper, edge to edge, not just the 700 pt items.
+        // The hairline spans the paper, edge to edge, not just the 700 pt
+        // items, including under a side safe area (the Duo's outer display).
         .overlay(alignment: .top) {
             Rectangle().fill(Ink.hairline).frame(height: 1)
+                .ignoresSafeArea(edges: .horizontal)
         }
         .background(Ink.paper.ignoresSafeArea(edges: .bottom))
     }

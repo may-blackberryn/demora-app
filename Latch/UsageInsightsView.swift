@@ -99,6 +99,7 @@ struct UsageInsightsView: View {
             header
             if model.authorized {
                 Rectangle().fill(Ink.hairline).frame(height: 1)
+                    .ignoresSafeArea(edges: .horizontal)
                 // Screen-bounded viewport, one scroll owned by the report.
                 // No nested host scroller or report-size/readiness handshake:
                 // the line behind it is covered once iOS draws the report's

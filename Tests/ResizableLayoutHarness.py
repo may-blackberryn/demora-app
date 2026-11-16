@@ -109,6 +109,18 @@ line = tab.index("Rectangle().fill(Ink.hairline).frame(height: 1)")
 paper = tab.index(".background(Ink.paper.ignoresSafeArea(edges: .bottom))")
 assert cap < line < paper, (cap, line, paper)
 assert tab.count(".overlay(alignment: .top)") == 1
+# Duo outer display (F6 simulator pass): at accessibility sizes the labels
+# broke mid-word and the bar took a third of the screen. The bar's text size
+# is capped and each item offers the large content viewer instead, like the
+# system tab bar. Its hairline, and the Insights header line, also reach under
+# a side safe area (the outer display's status column).
+assert ".dynamicTypeSize(...DynamicTypeSize.xLarge)" in tab
+assert ".accessibilityShowsLargeContentViewer {" in tab
+assert "Label(tr(item.1), systemImage: item.2)" in tab
+assert "Rectangle().fill(Ink.hairline).frame(height: 1)\n                .ignoresSafeArea(edges: .horizontal)" in tab
+body = insights[insights.index("    var body: some View {"):]
+body = body[:body.index("DeviceActivityReport(")]
+assert "Rectangle().fill(Ink.hairline).frame(height: 1)\n                    .ignoresSafeArea(edges: .horizontal)" in body
 
 # 6. The square cropper: sized from the safe area above its buttons, no
 # automatic insets, refits whenever the square changes (fold, rotation, Split
