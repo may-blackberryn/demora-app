@@ -118,6 +118,11 @@ final class AppModel: ObservableObject {
 
     /// Apply due changes, prune finished sessions, refresh shields & state.
     func tick() {
+        #if DEBUG
+        // Screenshot demo: reload the seeded store only. No housekeeping,
+        // time sync, CloudKit invites or contact checks (Latch/DemoMode.swift).
+        if DemoMode.isOn { state = SharedStore.loadState(); return }
+        #endif
         guard !setupStorageUnavailable else { return }
         guard !housekeepingInFlight else { return }
         housekeepingInFlight = true

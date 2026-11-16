@@ -386,9 +386,9 @@ print("PASS runtime: \(scenarios) scenarios, \(assertions) assertions (actual re
 
 
 # The Debug-only screenshot demo (Latch/DemoMode.swift) adds one early return
-# to init. Only that exact block is set aside before comparing; any other
-# edit, or a demo block anywhere else, still fails (Tests/DemoModeReleaseHarness.py
-# proves it is compiled out of Release).
+# to init and one to tick. Only those exact blocks are set aside before
+# comparing; any other edit, or a demo block anywhere else, still fails
+# (Tests/DemoModeReleaseHarness.py proves it is compiled out of Release).
 DEMO_INIT_BLOCK = """        #if DEBUG
         // Screenshot demo: the seeded demo store only. No migration, replay,
         // authorization request, housekeeping or network (Latch/DemoMode.swift).
@@ -401,10 +401,20 @@ DEMO_INIT_BLOCK = """        #if DEBUG
 """
 
 
+DEMO_TICK_BLOCK = """        #if DEBUG
+        // Screenshot demo: reload the seeded store only. No housekeeping,
+        // time sync, CloudKit invites or contact checks (Latch/DemoMode.swift).
+        if DemoMode.isOn { state = SharedStore.loadState(); return }
+        #endif
+"""
+
+
 def without_demo(app):
     assert app.count(DEMO_INIT_BLOCK) <= 1, "demo init block repeated"
+    assert app.count(DEMO_TICK_BLOCK) <= 1, "demo tick block repeated"
     app = app.replace("    init() {\n" + DEMO_INIT_BLOCK, "    init() {\n", 1)
-    assert "DemoMode" not in app, "AppModel uses the screenshot demo outside its one init block"
+    app = app.replace("    func tick() {\n" + DEMO_TICK_BLOCK, "    func tick() {\n", 1)
+    assert "DemoMode" not in app, "AppModel uses the screenshot demo outside its init and tick blocks"
     return app
 
 

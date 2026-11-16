@@ -883,6 +883,9 @@ private struct ContactRequestStep: View {
     }
 
     private func send() async {
+        #if DEBUG
+        if DemoMode.isOn { return }   // screenshot demo: never send a real request
+        #endif
         guard !sending else { return }
         sending = true
         defer { sending = false }

@@ -78,6 +78,40 @@ for name, hook in hooks.items():
     if hook not in (ROOT / name).read_text():
         failures.append(f"{name}: expected demo hook {hook!r} is gone (update this harness)")
 
+# 4b. Review fixes (2026-11-16). The demo runs only in the simulator: shield
+# stores and DeviceActivity are per app, not per defaults suite, so on a
+# device it could clear real shields and stop real monitors.
+launch = store[store.index("enum DemoModeLaunch {"):]
+launch = launch[:launch.index("\n}\n") + 3]
+expected_launch = """enum DemoModeLaunch {
+    static let suiteName = "demora.screenshot-demo"
+#if targetEnvironment(simulator)
+    static let isOn = UserDefaults.standard.bool(forKey: "DemoraDemoMode")
+#else
+    static let isOn = false
+#endif
+}
+"""
+if launch != expected_launch:
+    failures.append("DemoModeLaunch must read -DemoraDemoMode only under #if targetEnvironment(simulator), else false")
+for path in ["Latch", "Shared"]:
+    for swift in (ROOT / path).glob("*.swift"):
+        if swift.name != "SharedStore.swift" and '"DemoraDemoMode"' in swift.read_text():
+            failures.append(f"{swift.relative_to(ROOT)} reads the launch argument itself (use DemoModeLaunch.isOn)")
+# No network or CloudKit in the demo: tick only reloads, a contact request is never sent.
+pins = {
+    "Latch/AppModel.swift": ("    func tick() {\n        #if DEBUG\n"
+                             "        // Screenshot demo: reload the seeded store only. No housekeeping,\n"
+                             "        // time sync, CloudKit invites or contact checks (Latch/DemoMode.swift).\n"
+                             "        if DemoMode.isOn { state = SharedStore.loadState(); return }\n        #endif\n"),
+    "Latch/SkipWaitSheet.swift": ("    private func send() async {\n        #if DEBUG\n"
+                                  "        if DemoMode.isOn { return }   // screenshot demo: never send a real request\n"
+                                  "        #endif\n"),
+}
+for name, pin in pins.items():
+    if pin not in (ROOT / name).read_text():
+        failures.append(f"{name}: the demo's first-line guard is missing or moved")
+
 # 5. No new translation keys: every tr("…") literal in the demo already exists.
 catalog = (ROOT / "Shared/Localization.swift").read_text()
 spanish = catalog[catalog.index("let spanishStrings"):]

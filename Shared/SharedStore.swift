@@ -11,9 +11,16 @@ import Foundation
 /// a separate local suite instead of the App Group. Only the host process is
 /// launched with the argument; extensions keep the App Group. Seeded by
 /// `DemoMode.prepare()` (Latch/DemoMode.swift). Compiled out of Release.
+/// Simulator only: shield stores and DeviceActivity monitors are per app, not
+/// per defaults suite, so on a device the demo could clear real shields and
+/// stop real monitors. A Debug build on a device ignores the argument.
 enum DemoModeLaunch {
     static let suiteName = "demora.screenshot-demo"
+#if targetEnvironment(simulator)
     static let isOn = UserDefaults.standard.bool(forKey: "DemoraDemoMode")
+#else
+    static let isOn = false
+#endif
 }
 #endif
 

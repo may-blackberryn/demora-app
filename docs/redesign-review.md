@@ -2280,3 +2280,22 @@ checked by eye in English. Unsigned arm64 Release device build succeeded;
 `DEMORA_RELEASE_APP=… python3 Tests/DemoModeReleaseHarness.py` found none of
 the demo's strings (launch arguments, suite, token prefix, mock app names,
 contact code) in the Release binary. Nothing installed on a device.
+
+## Screenshot demo mode: review fixes (2026-11-16)
+A fresh review of `92a1295`/`d794a9b` found two real bugs. Both fixed with
+regression checks in `Tests/DemoModeReleaseHarness.py` (each checked by
+mutation: removing the guard fails the harness).
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| `DemoModeLaunch.isOn` reads `-DemoraDemoMode` only under `#if targetEnvironment(simulator)`; on a device it is `false` | High: shield stores and DeviceActivity are per app, not per defaults suite. With `latch.simulating` set, a pull to refresh (or the skip sheet, wake, recheck) ran housekeeping → `ShieldController.refresh` → `clearAll()`, wiping the real shields; a due seeded change made `reconfigureWindowMonitoring`/`reconfigureDailyMonitoring` stop real activities; apply activities and notifications were registered without the flag. A Debug build on the owner's iPhone now ignores the argument | Yes — harness pins the exact block and that no other file reads the argument |
+| `AppModel.tick()` starts with a DEBUG demo guard that only reloads the seeded state | Medium: tick still ran `TimeGuard.syncWithNetwork` and `checkContactInvites` → `reconcileSentInvites`, which queried the shared dev CloudKit database for invites from the demo code and could delete records; also `codeExists`/`inviteResponse`/`incomingInvites` | Yes — `LegacyReplayRecoveryHarness` sets aside exactly this block and the init block; any other `DemoMode` use in AppModel still fails |
+| `SkipWaitSheet.send()` returns at once in the demo | Asking Alex in the demo sent a real request record | Yes — pinned |
+| No screenshots retaken | The guards change nothing drawn in the simulator demo: tick already had no visible effect there, and the screenshots never send a request | — |
+
+Verify: full CLAUDE.md verify `verify_failed=0` (46 harnesses). Unsigned
+arm64 Debug device build: `Latch.debug.dylib` no longer contains the
+`DemoraDemoMode` argument (the demo can't be turned on there). Debug simulator
+build: it does, and the demo still opens the same on the iPhone Duo simulator.
+Unsigned arm64 Release device build: the release guard's binary scan finds no
+demo strings. Nothing installed on a device.
