@@ -2110,3 +2110,61 @@ Verify, on the tree committed as `c4c9099`:
 - `--strict` fails, as expected in stage 2: pending languages and
   `PUBLISH_NEW_LANGUAGES`.
 - Nothing installed; no simulator booted.
+
+## App languages: stage 3 (2026-11-16)
+
+All 36 translations and the original-language gap fills are committed by the
+stage-2 sessions. This stage publishes them, checks them, and runs the first
+right-to-left and long-language pass on a simulator.
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| **`PUBLISH_NEW_LANGUAGES = True`.** The three catalogs are regenerated. | The widget gallery, the usage report and Info.plist now carry 44 languages; the report has 43 tables, plus English. The built app has 44 `.lproj` folders, in the host and in the widget extension. | Yes |
+| **The camera prompt added for es and de** (two sentences, using each file's existing words for "trusted contact" and "photo"). | These were the last two keys `--strict` reported missing. No session had them. | Yes |
+| **Fixed a camera ↔ check-in swap in 24 languages:** el fi hu it nl nb ro ru sv uk id ms th vi bn gu kn ml mr or ta te ar he. | The built Arabic `InfoPlist.strings` showed the precise-location text under `NSCameraUsageDescription`. App Review reads these prompts. The values were swapped back by exact replacement, not retranslated. | Yes. Regression check below |
+| **New check: the three Info.plist prompts must keep their length order** (camera < check-in < While Using). | It holds by a wide margin in English and all 43 tables. The old Arabic file fails it. | Yes, `Tests/app_languages.py` |
+| **Length-outlier scan over every key** (a value under 1/3.2 or over 3.2× its language's median ratio). | It looks for other swapped or cut values. It found 5: hi "Approval emails are at capacity…" was "Demora — ई. ई." (fixed); hr "When asked for Screen Time Passcode Recovery…" kept only its last sentence (completed); tr "Demora can be a lot at first…" is cut short but the key is unused (left); pl ×2 are terse but correct. | Yes |
+| **"Open" arrows (`arrow.up.right`) mirror in RTL** (GridCard, the Theme time card, the contacts row). | In Arabic they still pointed up-right, away from the reading direction. Seen on the simulator before and after the fix. | Yes, guard in `AppLanguageMatchingHarness` |
+| **Existing UIKit views follow a direction switch** (`UIKitDirectionSync` in `LatchApp.swift`). | On the simulator, switching Arabic → English in the app left the navigation bar's back button on the right. The sync reaches the window through its own view; F6's harness bans `connectedScenes`. After the fix, English → Arabic flipped the back button at once, without a relaunch. | Yes, seen on the simulator |
+
+Simulator pass (stock iPhone 18 Pro, iOS 27.2, Debug):
+
+- **Seen:** Arabic onboarding steps 1–3, Today, You, Appearance and the
+  language picker (including search). Hebrew Today and Rules. Tamil Today and
+  You. A live switch between English and Arabic, both ways, and from Arabic
+  to German.
+- **Arabic and Hebrew, right to left:**
+  - text, cards, tabs, progress bar, segmented controls, scroll indicator and
+    theme previews mirror;
+  - back and forward chevrons point the right way;
+  - embedded Latin words (iOS, Demora) are ordered correctly;
+  - the hours picker reads hours first.
+- **Tamil:** wraps cleanly, with no truncation on these screens. Finnish
+  wasn't opened.
+- **How the screens were reached:** setup was marked done in the
+  simulator's App Group, because the Screen Time request doesn't complete
+  on a simulator. iOS's Screen Time prompt was answered Don't Allow.
+- The app was uninstalled and the simulator shut down afterwards.
+
+Not reached without authorization (the screenshots session's demo mode will show them):
+
+- rules with content;
+- the Today thread with entries;
+- countdown rings and HoldButton;
+- the change receipt and the cropper;
+- Insights reports and widgets.
+
+Found, not fixed (follow-ups):
+
+1. **Existing:** applying a language closes the picker, so the "Translation
+   in beta" notice never appears. Seen for German too, before any RTL change.
+2. **Existing:** some times format by the device region, not the app
+   language. An English UI on an ar_SA device shows "٤:٢٢ ص"; an Arabic UI
+   on an English device shows "AM 4:24".
+3. Countdowns use Western digits while system-formatted times use Arabic-Indic
+   ones. It's mixed within one card in Arabic.
+4. A search with no match shows an empty list, with no message.
+5. Hebrew gets the system's serif fallback (Times-like). Readable; the owner
+   may prefer SF Hebrew.
+6. German wording: "Leicht" (Light theme) should be "Hell"; "Regelmäßig"
+   (text case "Regular") should be "Normal".
