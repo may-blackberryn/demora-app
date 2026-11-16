@@ -137,6 +137,34 @@ def status(code, source=None):
     return found[0]
 
 
+# Non-Latin-script languages: their values should be mostly in their script.
+NON_LATIN = {'el', 'ru', 'uk', 'ja', 'ko', 'th', 'zh-Hans', 'zh-Hant', 'bn', 'gu', 'kn', 'ml',
+             'mr', 'or', 'pa', 'ta', 'te', 'ar', 'he', 'ur', 'hi'}
+# Names that stay in Latin letters in every language (brands, products, units).
+LATIN_NAMES = re.compile(
+    r'Demora|demora|iPadOS|iOS|iPhone|iPad|Apple ID|Apple|Screen Time|App Store|Safari|iCloud|'
+    r'CloudKit|Face ID|Touch ID|Natural Earth|Instagram|TikTok|YouTube|Trello|EFF|PIN|OK|URL|'
+    r'GPS|SNS|AM|PM|ID|[Ee]-?mail|[\w.-]+@[\w.-]+|[\w-]+\.(?:com|app|org|net)\b')
+REPEATED = re.compile(r'([^\W\d_]{1,4})\1{3,}')
+
+
+def garble_problems(code, key, value):
+    """Machine-translation noise the reviewer found in Hindi (stage 3 review)."""
+    problems = []
+    if REPEATED.search(value) and not REPEATED.search(key):
+        problems.append(f'{key[:50]!r}: repeated-syllable noise')
+    if value.startswith('Demora — ') and not key.startswith('Demora'):
+        problems.append(f'{key[:50]!r}: starts "Demora — " although the English does not')
+    if code in NON_LATIN:
+        # iOS's own setting names may stay quoted in English; brands always do.
+        text = re.sub(r'“[^”]*”|"[^"]*"', '', LATIN_NAMES.sub('', PLACEHOLDER.sub('', value)))
+        letters = [c for c in text if c.isalpha()]
+        latin = [c for c in letters if c.isascii()]
+        if len(letters) >= 8 and len(latin) / len(letters) > 0.5:
+            problems.append(f'{key[:50]!r}: mostly Latin letters in a non-Latin-script language')
+    return problems
+
+
 def placeholder_tokens(value):
     """[(position or None, spec)] for every format token, %% included."""
     return [(int(pos) if pos else None, spec) for pos, spec in PLACEHOLDER.findall(value)]
@@ -217,6 +245,7 @@ def validate(code, keys=None):
         why = placeholder_problem(key, value)
         if why:
             problems.append(f'{key!r}: {why}')
+        problems.extend(garble_problems(code, key, value))
     table = dict(pairs)
     missing = [key for key in keys if key not in table]
     # Stage 3 found 24 files with the camera and check-in prompts swapped.
