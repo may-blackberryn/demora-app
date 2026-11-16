@@ -1686,4 +1686,20 @@ let polishStrings: [String: String] = [
     "%@, free from %@ until %@": "%@, wolne od %@ do %@",
     "Your limits will show here. Pull down to refresh if it stays empty.": "Tu pojawią się twoje limity. Jeśli pozostanie puste, przeciągnij w dół, aby odświeżyć.",
     "If your limits don't appear, pull down to refresh.": "Jeśli twoje limity się nie pojawiają, przeciągnij w dół, aby odświeżyć.",
+    // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
+    "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora odczytuje Twoją lokalizację raz, gdy stukniesz Sprawdź, ustawisz miejsce lub użyjesz kraju, w którym jesteś, aby sprawdzić, czy miejsce lub kraj z zasady pasuje. Twoja lokalizacja nie jest nigdzie wysyłana; zachowywane są tylko miejsca, które zapiszesz.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora potrzebuje Twojej dokładnej lokalizacji do tego sprawdzenia, aby ustalić, czy jesteś w miejscu lub kraju z zasady.",
+    // Phrase challenge and camera text (added for the 2.0 key set).
+    "Edit phrase": "Edytuj frazę",
+    "Add or change phrase: %@": "Dodaj lub zmień frazę: %@",
+    "Remove phrase: %@": "Usuń frazę: %@",
+    "phrase": "fraza",
+    "Word %d of %d": "Słowo %d z %d",
+    "Mistakes: %d": "Błędy: %d",
+    "Type the highlighted word": "Wpisz wyróżnione słowo",
+    "Check word": "Sprawdź słowo",
+    "That word was incorrect. Try again.": "To słowo było niepoprawne. Spróbuj ponownie.",
+    "Too many mistakes. Start again.": "Zbyt wiele błędów. Zacznij od nowa.",
+    "Phrase unavailable. Close this screen and try again.": "Fraza jest niedostępna. Zamknij ten ekran i spróbuj ponownie.",
+    "Take a photo to use as a trusted contact's picture.": "Zrób zdjęcie, które będzie obrazkiem zaufanego kontaktu.",
 ]

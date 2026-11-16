@@ -1686,4 +1686,20 @@ let turkishStrings: [String: String] = [
     "%@, free from %@ until %@": "%@, %@ ile %@ arası serbest",
     "Your limits will show here. Pull down to refresh if it stays empty.": "Sınırların burada görünecek. Boş kalırsa yenilemek için aşağı çek.",
     "If your limits don't appear, pull down to refresh.": "Sınırların görünmüyorsa yenilemek için aşağı çek.",
+    // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
+    "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora, Kontrol et'e dokunduğunda, bir yer belirlediğinde veya bulunduğun ülkeyi kullandığında konumunu bir kez okur; böylece bir kuralın yerinin ya da ülkesinin geçerli olup olmadığını görür. Konumun hiçbir yere gönderilmez; yalnızca kaydettiğin yerler saklanır.",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora'nın bu kontrol için tam konumuna ihtiyacı var; böylece bir kuralın yerinin ya da ülkesinin içinde olup olmadığını anlayabilir.",
+    // Phrase challenge and camera text (added for the 2.0 key set).
+    "Edit phrase": "İfadeyi düzenle",
+    "Add or change phrase: %@": "İfade ekle veya değiştir: %@",
+    "Remove phrase: %@": "İfadeyi kaldır: %@",
+    "phrase": "ifade",
+    "Word %d of %d": "Kelime %d / %d",
+    "Mistakes: %d": "Hata: %d",
+    "Type the highlighted word": "Vurgulanan kelimeyi yaz",
+    "Check word": "Kelimeyi kontrol et",
+    "That word was incorrect. Try again.": "Bu kelime yanlıştı. Tekrar dene.",
+    "Too many mistakes. Start again.": "Çok fazla hata. Baştan başla.",
+    "Phrase unavailable. Close this screen and try again.": "İfade kullanılamıyor. Bu ekranı kapat ve tekrar dene.",
+    "Take a photo to use as a trusted contact's picture.": "Güvenilir kişinin resmi olarak kullanmak için bir fotoğraf çek.",
 ]

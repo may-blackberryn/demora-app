@@ -1686,4 +1686,20 @@ let hindiStrings: [String: String] = [
     "%@, free from %@ until %@": "%@, %@ से %@ तक खुला",
     "Your limits will show here. Pull down to refresh if it stays empty.": "आपकी सीमाएँ यहाँ दिखेंगी। अगर यह खाली रहे, तो रीफ़्रेश के लिए नीचे खींचें।",
     "If your limits don't appear, pull down to refresh.": "अगर आपकी सीमाएँ न दिखें, तो रीफ़्रेश के लिए नीचे खींचें।",
+    // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
+    "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "जब आप चेक इन पर टैप करते हैं, कोई जगह सेट करते हैं या जिस देश में आप हैं उसे इस्तेमाल करते हैं, तब Demora एक बार आपकी लोकेशन पढ़ता है, यह देखने के लिए कि किसी नियम की जगह या देश लागू होता है या नहीं। आपकी लोकेशन कहीं नहीं भेजी जाती; सिर्फ़ आपकी सहेजी गई जगहें रखी जाती हैं।",
+    "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "इस जाँच के लिए Demora को आपकी सटीक लोकेशन चाहिए, ताकि पता चल सके कि आप किसी नियम की जगह या देश के अंदर हैं या नहीं।",
+    // Phrase challenge and camera text (added for the 2.0 key set).
+    "Edit phrase": "वाक्यांश संपादित करें",
+    "Add or change phrase: %@": "वाक्यांश जोड़ें या बदलें: %@",
+    "Remove phrase: %@": "वाक्यांश हटाएँ: %@",
+    "phrase": "वाक्यांश",
+    "Word %d of %d": "शब्द %d / %d",
+    "Mistakes: %d": "गलतियाँ: %d",
+    "Type the highlighted word": "हाइलाइट किया हुआ शब्द लिखें",
+    "Check word": "शब्द जाँचें",
+    "That word was incorrect. Try again.": "यह शब्द गलत था। फिर से कोशिश करें।",
+    "Too many mistakes. Start again.": "बहुत ज़्यादा गलतियाँ। फिर से शुरू करें।",
+    "Phrase unavailable. Close this screen and try again.": "वाक्यांश उपलब्ध नहीं है। यह स्क्रीन बंद करके फिर कोशिश करें।",
+    "Take a photo to use as a trusted contact's picture.": "भरोसेमंद संपर्क की तस्वीर के रूप में इस्तेमाल करने के लिए फ़ोटो लें।",
 ]
