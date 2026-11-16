@@ -256,8 +256,17 @@ don't touch or regenerate them:
   - Don't add direction marks.
   - The layout mirrors by itself.
 
+### During stage 2
+
+- The generated catalogs publish only the original eight languages while
+  `PUBLISH_NEW_LANGUAGES = False` (`Tests/app_languages.py`).
+- So a finished language never makes the full verify fail.
+- The app itself uses a dictionary as soon as it lands.
+
 ### After stage 2 (stage 3)
 
+0. Set `PUBLISH_NEW_LANGUAGES = True` in `Tests/app_languages.py`.
+   `--strict` refuses to pass without it.
 1. Regenerate the three generated catalogs:
    - `python3 Tests/GenerateWidgetLocalization.py --patch`
    - `python3 Tests/GenerateUsageLocalization.py --patch`
@@ -265,3 +274,10 @@ don't touch or regenerate them:
 2. Apply each patch.
 3. `python3 Tests/AppLanguagesHarness.py --strict` must pass, then the full
    verify.
+
+Known gaps `--strict` reports in the original files:
+
+- fr, pt, pl, tr and hi each lack 11 phrase-challenge keys (`Check word`,
+  `Word %d of %d`, …). Today those screens show English.
+- All seven original languages lack the camera prompt (`Take a photo to use as
+  a trusted contact's picture.`). It was never localized.

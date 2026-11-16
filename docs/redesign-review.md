@@ -2036,3 +2036,76 @@ Two checks were added to the simulator list above: (7) the cropper on a
 notched phone and in a near-square window, with the square clear of both
 buttons; (8) on iPad, Demora offers no second window. Their results are
 in "F6: simulator checks".
+
+## App languages: infrastructure (2026-11-16)
+
+Stage 1 of `docs/app-languages-2.0.md` (L1, L2, L3, L6 step 1, L8). The
+translation kit is the spec's "Translation kit" section. Translations
+themselves are stage 2.
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| **One file per language.** `Shared/Localization+<Name>.swift` holds every string. | The widget gallery and the report already derived from the dictionaries. Info.plist was the only hand-kept catalog. With one file each, parallel translators never share a file. | Yes, `640fe00` |
+| **Info.plist strings are dictionary keys.** The keys are the English purpose strings (location, precise-location check-in, camera). `Tests/GenerateInfoPlistLocalization.py` renders `Latch/InfoPlist.xcstrings`. | One source per language. The existing catalog values were copied into the seven original files unchanged, not retranslated, and the output reproduces the old catalog byte for byte. | Yes |
+| **The camera prompt joins the catalog.** | It was never localized, and App Review reads it. For now it's English only; the seven originals need it in stage 2 or 3. | Yes, gap noted |
+| **Published languages are behind one switch.** `PUBLISH_NEW_LANGUAGES` in `Tests/app_languages.py` stays False in stage 2. | Translators finish at different times. Without the switch, every finished language would make the three generated `--check`s stale. `--strict` requires the switch to be True. | Yes |
+| **Matching walks the whole preferred list** (`Shared/AppLanguageMatching.swift`, pure). | This is how iOS picks the app's own localization, so the permission prompts and the UI agree. It is a behaviour change only for devices whose first language Demora lacks but a later one it has; before, they got English. | Yes |
+| Script rules: zh-Hant for `Hant` or TW/HK/MO, else zh-Hans. `yue` → Hant. no/nb/nn → nb. iw → he, in → id. pa-Arab and ms-Arab are skipped. | Chinese needs the script, not just `languageCode`. Shahmukhi and Jawi readers can't read Gurmukhi or Latin tables. | Yes, 56 cases in `Tests/AppLanguageMatchingHarness.py` |
+| **The report extension gets a verbatim copy of the matcher**, emitted by its generator, plus `reportLanguageCode()` and `reportIsRightToLeft()`. | The extension can't import Shared. The harness asserts the copy is identical. | Yes |
+| **Picker:** applied language first, then the rest by their name in the app's language, each with its native name. System search prompt. Onboarding uses a submenu. | 44 rows stay findable with **no new copy**. New keys would have invalidated files the translators had already finished. Foundation supplies the localized names. | Yes |
+| **RTL:** root `.environment(\.layoutDirection)` from `AppLanguage`, plus `UIView.appearance().semanticContentAttribute` at launch and on change. Widgets get it through the snapshot (`Copy.rightToLeft`, optional). The report gets it from its preferences. | SwiftUI and UIKit chrome need separate signals. Sheets inherit the root environment. | Yes, source guards |
+| **Charts stay left to right** (report day bars, Trends day by day, and the week arrows beside them). Clocks are Shapes, so they never mirror. Calendar, day chips and the tab bar mirror naturally. | Spec L3. | Yes |
+| **All 22 `chevron.right`/`chevron.left` became `chevron.forward`/`chevron.backward`.** | Only the semantic symbols mirror. | Yes |
+| **Fonts: no change.** | CoreText on this Mac, with the language passed as SwiftUI does: Latin, Greek and Cyrillic get New York. Indic scripts, Thai and Arabic get SF. ja/zh-Hans/zh-Hant/ko/he get the system's serif counterparts (Hiragino Mincho, Songti SC/TC, AppleMyungjo, Times New Roman), all language-correct. | Verified on macOS only |
+| **The shield can't follow the app language's direction.** | iOS draws `ShieldConfiguration`. Its text is translated; its layout follows the device. | Not fixable |
+
+Gaps found (for stage 2/3):
+
+- fr, pt, pl, tr and hi lacked 11 phrase-challenge keys that es and de have.
+  Those screens show English today.
+- All seven original languages lacked the camera prompt.
+- `5f7b2b9` (another session) filled both for pl, tr and hi. That commit also
+  swept in this session's then-uncommitted Info.plist lines in those three
+  files; the content is identical, only the attribution is mixed.
+- Still open:
+  - the 11 phrase keys in fr and pt;
+  - the camera prompt in es, de, fr and pt.
+- `--strict` reports what remains.
+
+Needs a visual check (stage 3, simulator):
+
+1. Arabic or Hebrew from the picker:
+   - Today thread dots and line on the right;
+   - tab order reversed;
+   - the badge dot on the tab icon (`.topTrailing` with `.offset(x: -2)`);
+   - HoldButton fill grows from the right.
+2. Navigation bar and back chevron right after switching. UIKit appearance
+   only affects views created later; if the open bar stays LTR, recreate the
+   root when the direction flips.
+3. Sheets, alerts and the search field in RTL.
+4. StateChip `arrow.down.right` (loosening) and GridCard `arrow.up.right`:
+   decide whether they should mirror.
+5. The countdown ring stays clockwise. The report's day bars and Trends stay
+   left to right, with their week arrows.
+6. The photo cropper in RTL: its geometry is centred, so it should be neutral.
+7. Widgets in Arabic, and the iOS font cascade for ja/ko/zh/he.
+8. The picker with 44 rows:
+   - search by native name, English name and code;
+   - large text;
+   - the onboarding submenu.
+
+Verify, on the tree committed as `c4c9099`:
+
+- Full `CLAUDE.md` verify plus the new `GenerateInfoPlistLocalization.py
+  --check`: one failure, `WhenWhereLocationHarness`. Commit `5f7b2b9` had
+  added camera translations, so the catalog was stale. After regenerating,
+  that harness, all three generator checks and `AppLanguageMatchingHarness`
+  pass. The whole suite wasn't rerun after that last regeneration.
+- The run before it caught `WakeWidgetPublicationHarness` (its stub lacked
+  `AppLanguage`), now fixed.
+- Unsigned Debug and Release, Xcode 27.2 / iPhoneOS27.2.sdk: `BUILD
+  SUCCEEDED`, no warnings in project files. The built app has `.lproj`
+  folders for the original eight only, as intended until stage 3.
+- `--strict` fails, as expected in stage 2: pending languages and
+  `PUBLISH_NEW_LANGUAGES`.
+- Nothing installed; no simulator booted.
