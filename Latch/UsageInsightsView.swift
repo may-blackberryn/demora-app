@@ -103,18 +103,11 @@ struct UsageInsightsView: View {
                 // No nested host scroller or report-size/readiness handshake:
                 // the line behind it is covered once iOS draws the report's
                 // opaque paper, and nothing is signalled back (I9).
-                ZStack {
-                    Text(tr("Loading your usage… If this stays empty, tap Refresh."))
-                        .demoraType(.meta)
-                        .foregroundStyle(Ink.inkSoft)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, DemoraSpace.xxl)
-                        .accessibilityHidden(true)
-                    DeviceActivityReport(context, filter: filter)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .clipped()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                #if DEBUG
+                if DemoMode.isOn { DemoInsightsView() } else { reportViewport }
+                #else
+                reportViewport
+                #endif
             } else {
                 // Today owns the permission banner; no prompt or Settings
                 // redirect here (Apple 5.1.1(iv); I11).
@@ -171,6 +164,23 @@ struct UsageInsightsView: View {
     }
 
     // MARK: Header
+
+    /// The private report and the line behind it (unchanged; split out so the
+    /// screenshot demo can stand in for it).
+    private var reportViewport: some View {
+        ZStack {
+            Text(tr("Loading your usage… If this stays empty, tap Refresh."))
+                .demoraType(.meta)
+                .foregroundStyle(Ink.inkSoft)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, DemoraSpace.xxl)
+                .accessibilityHidden(true)
+            DeviceActivityReport(context, filter: filter)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .clipped()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
 
     /// A fixed row, not a large navigation title: the scroll belongs to the
     /// report process, so a large title would never collapse (§5.1).

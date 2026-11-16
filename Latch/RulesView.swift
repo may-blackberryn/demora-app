@@ -41,6 +41,10 @@ struct RulesView: View {
     @State private var summary: RuleSummaryRequest?
     @State private var recheckInFlight = false
     @State private var recheckMessage: String?
+    #if DEBUG
+    /// Screenshot demo: the receipt for a looser edit, over Rules.
+    @State private var demoReceipt: ChangeReceiptRequest?
+    #endif
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -81,6 +85,16 @@ struct RulesView: View {
             }
         }
         .onAppear { refresh(model.state) }
+        #if DEBUG
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                if DemoMode.consume(.receipt) {
+                    demoReceipt = ChangeReceiptRequest(action: DemoMode.receiptAction)
+                }
+            }
+        }
+        .changeReceipt($demoReceipt)
+        #endif
         .onReceive(model.$state) { refresh($0) }
         .sheet(isPresented: $showChooser, onDismiss: {
             // The editor opens once the chooser has gone.

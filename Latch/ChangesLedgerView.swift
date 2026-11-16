@@ -133,7 +133,7 @@ struct ChangeRow: View {
                 .frame(minHeight: 44)
         }
 #if DEBUG
-        if !change.isDue {
+        if !change.isDue && !DemoMode.isOn {
             Button("Skip delay (dev)", action: onDebugApply)
                 .buttonStyle(.bordered).controlSize(.small)
                 .tint(.purple)

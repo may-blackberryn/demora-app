@@ -69,7 +69,7 @@ struct YouView: View {
                     NotificationsSection()
                     appSection
                     #if DEBUG
-                    developerSection
+                    if !DemoMode.isOn { developerSection }
                     #endif
                     footer
                 }
@@ -83,6 +83,9 @@ struct YouView: View {
             .background(Ink.paper.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .task {
+                #if DEBUG
+                if DemoMode.isOn { return }   // screenshot demo: no CloudKit
+                #endif
                 await ContactsRelay.registerSelfIfNeeded()
                 await reload()
             }

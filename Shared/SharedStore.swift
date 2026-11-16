@@ -6,8 +6,26 @@
 
 import Foundation
 
-struct SharedStore {  
-    static let defaults = UserDefaults(suiteName: LatchConstants.appGroupID)!
+#if DEBUG
+/// Debug-only screenshot demo (`-DemoraDemoMode 1`): the host reads and writes
+/// a separate local suite instead of the App Group. Only the host process is
+/// launched with the argument; extensions keep the App Group. Seeded by
+/// `DemoMode.prepare()` (Latch/DemoMode.swift). Compiled out of Release.
+enum DemoModeLaunch {
+    static let suiteName = "demora.screenshot-demo"
+    static let isOn = UserDefaults.standard.bool(forKey: "DemoraDemoMode")
+}
+#endif
+
+struct SharedStore {
+    // The directive sits at column 0 on purpose: harnesses slice this file
+    // at its first indented `#if DEBUG` (the tutorial replay section).
+    static let defaults: UserDefaults = {
+#if DEBUG
+        if DemoModeLaunch.isOn { return UserDefaults(suiteName: DemoModeLaunch.suiteName)! }
+#endif
+        return UserDefaults(suiteName: LatchConstants.appGroupID)!
+    }()
     static let redesignMigrationKey = "latch.redesign2.migrated"
     static let redesignWelcomeKey = "latch.redesign2.welcomeSeen"
     static let redesignIntroKey = "latch.redesign2.introSeen"

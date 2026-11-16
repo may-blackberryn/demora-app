@@ -73,6 +73,15 @@ final class AppModel: ObservableObject {
     private var forcedTimeSync = ForcedTimeSyncPolicy()
 
     init() {
+        #if DEBUG
+        // Screenshot demo: the seeded demo store only. No migration, replay,
+        // authorization request, housekeeping or network (Latch/DemoMode.swift).
+        if DemoMode.isOn {
+            authorized = true
+            selectedTab = DemoMode.initialTab
+            return
+        }
+        #endif
         // A replay interrupted by a force-quit: restore the user's real setup
         // from the backup so nothing is lost (and so we don't fall into the
         // not-set-up onboarding branch below).

@@ -281,6 +281,9 @@ struct AppsRow: View {
         let apps = Array(selection.applicationTokens.prefix(max(0, Self.preview - categories.count)))
         let sites = Array(selection.webDomainTokens.prefix(max(0, Self.preview - categories.count - apps.count)))
         let more = RuleCounts(selection).total - categories.count - apps.count - sites.count
+        #if DEBUG
+        if DemoMode.isOn { DemoSelectedApps(selection: selection) }
+        #endif
         ForEach(categories, id: \.self) { Label($0).demoraType(.meta) }
         ForEach(apps, id: \.self) { Label($0).demoraType(.meta) }
         ForEach(sites, id: \.self) { Label($0).demoraType(.meta) }
@@ -1234,6 +1237,15 @@ struct SessionStartView: View {
             }
         }
         .changeReceipt($receipt) { dismiss() }
+        #if DEBUG
+        .onAppear {
+            // Screenshot demo: a filled-in session.
+            guard DemoMode.isOn, !isDirty else { return }
+            name = tr("Deep work")
+            selection = DemoMode.selection(["chatterly", "picnook", "loopa"])
+            minutes = 90
+        }
+        #endif
     }
 
     private func review() {

@@ -302,6 +302,13 @@ struct CheckInSheet: View {
         let clock = ConditionalClockInput.current(for: state)
         var result = CheckInResult.make(rule: rule, state: state, clock: clock, location: .notRead)
         if check == nil, case .freeTime(_, _, let maxMinutes, _) = rule.outcome { minutes = maxMinutes }
+        #if DEBUG
+        // Screenshot demo: a fixed fix at the demo home; no location read.
+        if DemoMode.isOn {
+            check = CheckInResult.make(rule: rule, state: state, clock: clock, location: DemoMode.homeFix)
+            return
+        }
+        #endif
         check = result
         if userAsked {
             switch ConditionalCheckIn.locationStep(result, permission: locator.permission,

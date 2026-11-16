@@ -385,8 +385,31 @@ print("PASS runtime: \(scenarios) scenarios, \(assertions) assertions (actual re
 '''
 
 
+# The Debug-only screenshot demo (Latch/DemoMode.swift) adds one early return
+# to init. Only that exact block is set aside before comparing; any other
+# edit, or a demo block anywhere else, still fails (Tests/DemoModeReleaseHarness.py
+# proves it is compiled out of Release).
+DEMO_INIT_BLOCK = """        #if DEBUG
+        // Screenshot demo: the seeded demo store only. No migration, replay,
+        // authorization request, housekeeping or network (Latch/DemoMode.swift).
+        if DemoMode.isOn {
+            authorized = true
+            selectedTab = DemoMode.initialTab
+            return
+        }
+        #endif
+"""
+
+
+def without_demo(app):
+    assert app.count(DEMO_INIT_BLOCK) <= 1, "demo init block repeated"
+    app = app.replace("    init() {\n" + DEMO_INIT_BLOCK, "    init() {\n", 1)
+    assert "DemoMode" not in app, "AppModel uses the screenshot demo outside its one init block"
+    return app
+
+
 def main():
-    app = (ROOT / APP_PATH).read_bytes().decode("utf-8")
+    app = without_demo((ROOT / APP_PATH).read_bytes().decode("utf-8"))
     baseline = subprocess.run(
         ["git", "show", f"{BASELINE}:{APP_PATH}"], cwd=ROOT,
         check=True, capture_output=True).stdout.decode("utf-8")

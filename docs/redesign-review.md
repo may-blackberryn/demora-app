@@ -2214,3 +2214,31 @@ Verify:
 Not ours (noted): the Italian/Dutch store-copy tab names are fixed at
 store-edit time. Owner checklist (device only): iOS's per-app language
 setting and whether the extensions follow it; RTL sheets and alerts.
+
+## Screenshot demo mode (2026-11-16)
+Debug-only demo for the 2.0 App Store and website screenshots. Launch the
+Debug app with `-DemoraDemoMode 1` and `-DemoraDemoScreen
+today|receipt|changes|rules|whenwhere|insights|skip|session`. New
+`Latch/DemoMode.swift` (whole file `#if DEBUG`) plus small `#if DEBUG` hooks;
+`Tests/DemoModeReleaseHarness.py` guards it. Capture tools live outside this
+repo in `../AppStore/screenshots/tools/`.
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| `SharedStore.defaults` returns a local suite `demora.screenshot-demo` when the host is launched with the argument; `DemoMode.prepare()` (from `LatchApp.init`) wipes it and seeds a mock setup relative to launch | Never read or write the App Group state; extensions never get the launch argument | Yes |
+| The demo store also sets `latch.simulating` | The engine then applies no shields or monitors even on a manual pull to refresh | Yes |
+| `AppModel.init` returns early in the demo (authorized, tab from the screen argument): no migration, replay, Screen Time request, timer/housekeeping, CloudKit or time check. `Tests/LegacyReplayRecoveryHarness.py` sets aside exactly that block before its byte-for-byte compare (any other edit still fails) | AppModel is frozen against `2732883`; the alternative was a Screen Time prompt and network calls on every demo launch | Yes — the one edit to an existing harness; worth a reviewer's eye |
+| The store switch's `#if DEBUG` sits at column 0 | `RedesignMigrationHarness` slices `SharedStore.swift` at its first indented `#if DEBUG` | Yes |
+| Stand-ins drawn in the host: Today limits card (like the report's rows), Insights Day view (week bars + most used apps), app names in editors/summaries | Apple's report and token labels don't render in the simulator | Yes |
+| App tokens are fake (`ApplicationToken` decoded from `demora-demo:<key>`; checked on the iOS 27.2 simulator), so counts read "2 apps"; names are invented (Loopa, Chatterly, Picnook, Wavely, Inkpost, Tiles, Pebble Run) with SF Symbol tiles | No real app names, logos or trademarks | Yes |
+| Mock text reuses existing keys (Social apps, Deep work, Free period, Free time, Evening block, Weekends, Password, Phrase); the place is "🏠", the contact "Alex". The harness fails on any demo `tr()` key that isn't in the catalog | No new keys to translate into 44 languages. The catalog's "Home" means the Home tab ("Inicio"), not a place | Yes |
+| The check-in uses a fixed precise fix at the demo place; the When & where rule is "any of: 🏠, days that aren't today" | One ✓ and one ✗, still met; no CoreLocation in the simulator | Yes |
+| Today's dev "Skip delay (dev)" button and You's Developer section are hidden in the demo | They'd show in Debug screenshots | Yes |
+| Capture: each launch gets a `GMT±hhmm` time zone that puts the app's clock at 9:41, matching the 9:41 status bar | Otherwise in-app times follow the Mac's clock (e.g. 3:49 AM next to 9:41) | Yes |
+
+Verify: full CLAUDE.md verify `verify_failed=0` (46 harnesses), Debug
+simulator build (iOS 27.2, iPhone 18 Pro Max) run and all eight screens
+checked by eye in English. Unsigned arm64 Release device build succeeded;
+`DEMORA_RELEASE_APP=… python3 Tests/DemoModeReleaseHarness.py` found none of
+the demo's strings (launch arguments, suite, token prefix, mock app names,
+contact code) in the Release binary. Nothing installed on a device.

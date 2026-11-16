@@ -353,6 +353,9 @@ struct SelectedAppsView: View {
             Text(tr("Nothing selected"))
                 .font(.caption).foregroundStyle(.secondary)
         } else {
+            #if DEBUG
+            if DemoMode.isOn { DemoSelectedApps(selection: selection) }
+            #endif
             ForEach(cats, id: \.self) { Label($0).font(.system(.subheadline, design: .serif)) }
             ForEach(apps, id: \.self) { Label($0).font(.system(.subheadline, design: .serif)) }
             ForEach(webs, id: \.self) { Label($0).font(.system(.subheadline, design: .serif)) }

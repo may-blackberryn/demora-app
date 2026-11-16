@@ -21,6 +21,10 @@ struct LatchApp: App {
     private var accentColorRaw = "blue"
 
     init() {
+        #if DEBUG
+        // The screenshot demo seeds its own store before anything reads it.
+        DemoMode.prepare()
+        #endif
         // Before any window exists, so UIKit chrome starts in the right direction.
         AppLanguage.current.applyUIKitLayoutDirection()
     }
@@ -80,6 +84,10 @@ struct LatchApp: App {
         }
         .onChange(of: scenePhase) { phase in
             guard !model.setupStorageUnavailable else { return }
+            #if DEBUG
+            // Screenshot demo: no healing, monitors, shields or authorization.
+            if DemoMode.isOn { return }
+            #endif
             if phase == .active {
                 if !SharedStore.defaults.bool(forKey: "latch.healedRaceCondition") {
                     SharedStore.saveBlockedLimitIDs([])
@@ -153,6 +161,9 @@ struct RootView: View {
         // restart the task; backgrounding cancels it.
         .task(id: model.selectedTab != 0 && scenePhase == .active) {
             guard model.selectedTab != 0, scenePhase == .active else { return }
+            #if DEBUG
+            if DemoMode.isOn { return }
+            #endif
             while !Task.isCancelled {
                 if let requests = try? await ContactsRelay.pendingRequestsForMe() {
                     guard !Task.isCancelled, model.selectedTab != 0,

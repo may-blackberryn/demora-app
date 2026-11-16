@@ -16,6 +16,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions:
             [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        #if DEBUG
+        if DemoMode.isOn { return true }   // screenshot demo: no CloudKit or BG tasks
+        #endif
         // CloudKit delivers its pushes over APNs, so we still register here.
         application.registerForRemoteNotifications()
         ContactsRelay.ensureApprovalSubscription()

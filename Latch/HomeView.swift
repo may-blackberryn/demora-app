@@ -124,6 +124,9 @@ struct HomeView: View {
                 refreshSnapshot(state: model.state)
                 loadOutgoing()
                 consumeWidgetDestination()
+                #if DEBUG
+                openDemoScreen()
+                #endif
             }
             .onChange(of: model.todayRequest) { _ in
                 // Sent here from a sheet on top of Today (e.g. Calendar →
@@ -153,6 +156,17 @@ struct HomeView: View {
     }
 
     // MARK: Today (docs/today-redesign.md §5)
+
+    #if DEBUG
+    /// Screenshot demo: opens the launch's screen once, after Today is up.
+    private func openDemoScreen() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            if DemoMode.consume(.changes) { todayPath = [.changes] }
+            if DemoMode.consume(.session) { showSession = true }
+            if DemoMode.consume(.whenwhere) { checkIn = CheckInRequest(ruleID: DemoMode.homeRuleID) }
+        }
+    }
+    #endif
 
     private func consumeWidgetDestination() {
         guard model.state.isSetUp, !model.setupStorageUnavailable,
@@ -280,8 +294,17 @@ struct HomeView: View {
                                actionTitle: tr("Add a daily limit"),
                                action: { showAddLimit = true })
             } else {
+                #if DEBUG
+                if DemoMode.isOn {
+                    DemoLimitsUsageCard(limits: model.state.limits)
+                } else {
+                    CompactHomeUsageReport(limits: model.state.limits,
+                                           reloadRequest: usageRefreshRequest)
+                }
+                #else
                 CompactHomeUsageReport(limits: model.state.limits,
                                        reloadRequest: usageRefreshRequest)
+                #endif
                 ExtraTimeRows(limits: model.state.limits, states: extraTimes,
                               contactPending: extraRequestPending) { limit, remaining in
                     requestExtraTime(for: limit, remaining: remaining)
@@ -542,6 +565,9 @@ struct HomeView: View {
 
     private func loadInbox() async {
         guard !Task.isCancelled, inboxVisible else { return }
+        #if DEBUG
+        if DemoMode.isOn { return }   // screenshot demo: no CloudKit
+        #endif
         do {
             let incoming = try await ContactsRelay.pendingRequestsForMe()
             guard !Task.isCancelled, inboxVisible else { return }
