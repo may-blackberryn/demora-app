@@ -1688,4 +1688,17 @@ let frenchStrings: [String: String] = [
     // Info.plist permission text (App Review reads these; generated into Latch/InfoPlist.xcstrings).
     "Demora reads your location once when you tap Check in, set a place or use the country you're in, to see if a rule's place or country applies. Your location isn't sent anywhere; only the places you save are kept.": "Demora lit votre position une seule fois lorsque vous touchez Vérifier, définissez un lieu ou utilisez le pays où vous êtes, pour savoir si le lieu ou le pays d'une règle s'applique. Votre position n'est envoyée nulle part ; seuls les lieux que vous enregistrez sont conservés.",
     "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora a besoin de votre position exacte pour cette vérification, afin de savoir si vous êtes dans le lieu ou le pays d'une règle.",
+    // Phrase challenges and contact photo (added for parity with Spanish/German).
+    "Edit phrase": "Modifier la phrase",
+    "Add or change phrase: %@": "Ajouter ou modifier la phrase : %@",
+    "Remove phrase: %@": "Supprimer la phrase : %@",
+    "phrase": "phrase",
+    "Word %d of %d": "Mot %d sur %d",
+    "Mistakes: %d": "Erreurs : %d",
+    "Type the highlighted word": "Saisissez le mot en surbrillance",
+    "Check word": "Vérifier le mot",
+    "That word was incorrect. Try again.": "Ce mot était incorrect. Réessayez.",
+    "Too many mistakes. Start again.": "Trop d'erreurs. Recommencez.",
+    "Phrase unavailable. Close this screen and try again.": "La phrase n'est pas disponible. Fermez cet écran et réessayez.",
+    "Take a photo to use as a trusted contact's picture.": "Prenez une photo à utiliser comme image d'une personne de confiance.",
 ]
