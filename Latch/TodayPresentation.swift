@@ -169,46 +169,78 @@ enum TodayTimeText {
             : style.day().month(.abbreviated)
         return date.formatted(style)
     }
+
+    /// The time alone ("5:00 am"), for the day thread's left column, which
+    /// only ever shows today's clock.
+    static func clock(_ date: Date, calendar: Calendar, locale: Locale) -> String {
+        date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, locale: locale,
+                                        calendar: calendar, timeZone: calendar.timeZone))
+    }
 }
 
 // MARK: - Day thread
 
+/// Today's line in three bands (docs/today-redesign.md §5.6, amended by
+/// docs/fixes-2.0-batch.md F3): ended earlier today, on now (just under the
+/// now line), later today. Each band has its own order, and the left label
+/// only ever shows a time on today's clock.
 enum DayThread {
     enum Phase: Equatable { case past, now, upcoming }
 
     struct Entry: Equatable {
         let item: TodayItem
         let phase: Phase
+        /// An ended row that began before today ("since thu 10:00 pm"); false otherwise.
+        let beganBeforeToday: Bool
+
+        /// The left label: an ended row's end, a later row's start, nothing
+        /// for a row that's on now. Always a time on today's clock.
+        var label: Date? {
+            switch phase {
+            case .past: return item.end
+            case .upcoming: return item.start
+            case .now: return nil
+            }
+        }
     }
 
     struct Result: Equatable {
+        /// Display order: ended (by end), on now (soonest end), later (by start).
         let entries: [Entry]
-        /// Where the "now" marker sits: before this entry (== count: at the end).
+        /// Where the "now" marker sits: before this entry, after the ended band.
         let nowIndex: Int
-        /// Items left out by the cap ("Full day" shows them).
+        /// Rows left out by the caps; "full day" shows only when this isn't 0.
         let hiddenCount: Int
     }
 
-    /// Today's items in time order, capped. Active and upcoming items are kept
-    /// first; spare slots go to the most recent past items.
+    /// At most this many ended rows, the most recent ones.
+    static let maxEnded = 2
+
+    /// Slots go to on now first, then later today, then ended rows (most
+    /// recent end first, at most `maxEnded`).
     static func make(items: [TodayItem], now: Date, day: DateInterval, cap: Int = 5) -> Result {
         let today = items.filter { item in
             item.needsTap || (item.end > day.start && item.start < day.end && item.end > item.start)
-        }.sorted { ($0.start, $0.name, $0.id) < ($1.start, $1.name, $1.id) }
-        let all = today.map { item -> Entry in
-            let phase: Phase = item.needsTap || item.isActive(at: now) ? .now
-                : (item.end <= now ? .past : .upcoming)
-            return Entry(item: item, phase: phase)
         }
-        let current = all.filter { $0.phase != .past }
-        let kept = Array(current.prefix(cap))
-        let pastSlots = max(0, cap - kept.count)
-        let recentPast = Array(all.filter { $0.phase == .past }.suffix(pastSlots))
-        let entries = (recentPast + kept).sorted {
-            ($0.item.start, $0.item.name, $0.item.id) < ($1.item.start, $1.item.name, $1.item.id)
-        }
-        let nowIndex = entries.firstIndex { $0.phase == .upcoming } ?? entries.count
-        return Result(entries: entries, nowIndex: nowIndex, hiddenCount: all.count - entries.count)
+        func tie(_ a: TodayItem, _ b: TodayItem) -> Bool { (a.name, a.id) < (b.name, b.id) }
+        // A wake gate waiting for its tap is on now; its `end` is now, so it sorts first.
+        let onNow = today.filter { $0.needsTap || $0.isActive(at: now) }
+            .sorted { $0.end != $1.end ? $0.end < $1.end : tie($0, $1) }
+        let later = today.filter { !$0.needsTap && $0.start > now }
+            .sorted { $0.start != $1.start ? $0.start < $1.start : tie($0, $1) }
+        let ended = today.filter { !$0.needsTap && $0.end <= now }
+            .sorted { $0.end != $1.end ? $0.end < $1.end : tie($0, $1) }
+
+        let shownNow = Array(onNow.prefix(cap))
+        let shownLater = Array(later.prefix(max(0, cap - shownNow.count)))
+        let endedSlots = min(maxEnded, max(0, cap - shownNow.count - shownLater.count))
+        let shownEnded = Array(ended.suffix(endedSlots))
+
+        let entries = shownEnded.map { Entry(item: $0, phase: .past, beganBeforeToday: $0.start < day.start) }
+            + shownNow.map { Entry(item: $0, phase: .now, beganBeforeToday: false) }
+            + shownLater.map { Entry(item: $0, phase: .upcoming, beganBeforeToday: false) }
+        return Result(entries: entries, nowIndex: shownEnded.count,
+                      hiddenCount: today.count - entries.count)
     }
 }
 

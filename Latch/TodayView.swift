@@ -437,11 +437,14 @@ struct CheckInRows: View {
 
 // MARK: - Day thread
 
-/// Today's rules on a vertical thread, with "now" marked on the line.
+/// Today's rules on a vertical thread in three bands: ended earlier today,
+/// the now line, on now, later today (docs/fixes-2.0-batch.md F3).
 struct DayThreadView: View {
     @AppAccent private var accent
     @Environment(\.locale) private var locale
     @Environment(\.dynamicTypeSize) private var typeSize
+    /// Fixed, so every dot sits on one line whatever the label says.
+    @ScaledMetric(relativeTo: .subheadline) private var timeWidth: CGFloat = 64
     let result: DayThread.Result
     let now: Date
     /// Opens the rule behind an item (its summary sheet).
@@ -451,7 +454,7 @@ struct DayThreadView: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(result.entries.enumerated()), id: \.offset) { index, entry in
                 if index == result.nowIndex { nowMarker }
-                row(entry, isLast: index == result.entries.count - 1 && result.nowIndex < result.entries.count)
+                row(entry, isFirst: index == 0, isLast: index == result.entries.count - 1)
             }
             if result.nowIndex == result.entries.count { nowMarker }
         }
@@ -468,43 +471,56 @@ struct DayThreadView: View {
         TodayTimeText.short(date, now: now, calendar: calendar, locale: locale)
     }
 
+    private func clock(_ date: Date) -> String {
+        TodayTimeText.clock(date, calendar: calendar, locale: locale)
+    }
+
     private var nowMarker: some View {
-        HStack(spacing: DemoraSpace.xs) {
-            Text(short(now))
+        HStack(spacing: DemoraSpace.s) {
+            Text(clock(now))
                 .font(.system(.subheadline, design: .serif).monospacedDigit())
                 .foregroundStyle(accent)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(width: typeSize.isAccessibilitySize ? nil : timeWidth, alignment: .leading)
             Rectangle().fill(accent).frame(height: 1)
         }
         .padding(.vertical, DemoraSpace.xxs)
         .accessibilityHidden(true)
     }
 
-    @ViewBuilder private func row(_ entry: DayThread.Entry, isLast: Bool) -> some View {
+    @ViewBuilder private func row(_ entry: DayThread.Entry, isFirst: Bool, isLast: Bool) -> some View {
         let past = entry.phase == .past
-        let time = Text(short(entry.item.start))
+        let label = entry.label.map(clock)
+        let time = Text(label ?? "")
             .font(.system(.subheadline, design: .serif).monospacedDigit())
             .foregroundStyle(Ink.inkSoft)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
         let item = VStack(alignment: .leading, spacing: DemoraSpace.xxs) {
             Text(entry.item.name)
                 .demoraType(.cardTitle)
                 .foregroundStyle(past ? Ink.inkSoft : Ink.ink)
                 .fixedSize(horizontal: false, vertical: true)
-            chip(entry)
+            chips(entry)
         }
         let content = Group {
             if typeSize.isAccessibilitySize {
                 // The time column moves above each item at the largest sizes.
-                VStack(alignment: .leading, spacing: DemoraSpace.xxs) { time; item }
-                    .padding(.vertical, DemoraSpace.xs)
+                VStack(alignment: .leading, spacing: DemoraSpace.xxs) {
+                    if label != nil { time }
+                    item
+                }
+                .padding(.vertical, DemoraSpace.xs)
             } else {
                 HStack(alignment: .top, spacing: DemoraSpace.s) {
-                    time.frame(minWidth: 52, alignment: .leading)
+                    time.frame(width: timeWidth, alignment: .leading)
+                    // The thread runs between dots and stops at the last one.
                     VStack(spacing: 0) {
-                        Circle()
-                            .stroke(past ? Ink.hairline : dotColor(entry), lineWidth: 1.5)
-                            .frame(width: 9, height: 9)
-                            .padding(.top, 5)
-                        Rectangle().fill(Ink.hairline).frame(width: 1)
+                        Rectangle().fill(isFirst ? Color.clear : Ink.hairline)
+                            .frame(width: 1, height: dotTop(entry))
+                        dot(entry)
+                        Rectangle().fill(isLast ? Color.clear : Ink.hairline).frame(width: 1)
                     }
                     .frame(width: 12)
                     .accessibilityHidden(true)
@@ -518,37 +534,93 @@ struct DayThreadView: View {
                 content.contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(sentence(entry)))
+            .accessibilityAddTraits(.isButton)
             .accessibilityHint(tr("Shows what this rule does"))
         } else {
-            content.accessibilityElement(children: .combine)
+            content
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(sentence(entry)))
+        }
+    }
+
+    private let dotSize: CGFloat = 9
+    private let endedDotSize: CGFloat = 6
+
+    /// Centres every dot on the first line of the time label.
+    private func dotTop(_ entry: DayThread.Entry) -> CGFloat {
+        5 + (entry.phase == .past ? (dotSize - endedDotSize) / 2 : 0)
+    }
+
+    /// Ended: small, dim, filled. On now: filled, state colour. Later: hollow.
+    @ViewBuilder private func dot(_ entry: DayThread.Entry) -> some View {
+        switch entry.phase {
+        case .past:
+            Circle().fill(Ink.inkSoft.opacity(0.45))
+                .frame(width: endedDotSize, height: endedDotSize)
+                .padding(.bottom, (dotSize - endedDotSize) / 2)
+        case .now:
+            Circle().fill(dotColor(entry)).frame(width: dotSize, height: dotSize)
+        case .upcoming:
+            Circle().stroke(dotColor(entry), lineWidth: 1.5).frame(width: dotSize, height: dotSize)
         }
     }
 
     private func dotColor(_ entry: DayThread.Entry) -> Color {
-        entry.item.kind == .free ? Ink.free : accent
+        entry.item.kind == .free || entry.item.kind == .unblock ? Ink.free : accent
     }
 
-    private func range(_ item: TodayItem) -> String {
-        "\(short(item.start))–\(short(item.end))"
-    }
+    private func isFree(_ item: TodayItem) -> Bool { item.kind == .free }
 
-    @ViewBuilder private func chip(_ entry: DayThread.Entry) -> some View {
+    /// The chip names only what the left label doesn't: "ended", or the end.
+    @ViewBuilder private func chips(_ entry: DayThread.Entry) -> some View {
         let item = entry.item
-        switch (item.kind, entry.phase) {
-        case (.wake, _):
-            StateChip(kind: .blocked, text: tr(item.needsTap ? "Wake-up tap needed" : "Wake-up wait"))
-        case (.free, .now):
-            StateChip(kind: .free, text: tr("Free"))
-        case (.free, _):
-            StateChip(kind: entry.phase == .past ? .neutral : .free,
-                      text: "\(tr("Free")) · \(range(item))")
-        case (_, .now):
-            StateChip(kind: item.kind == .unblock ? .free : .blocked, text: tr("On now"))
-        case (_, .upcoming):
-            StateChip(kind: .upcoming, text: range(item))
-        case (_, .past):
-            StateChip(kind: .neutral, text: range(item))
+        switch entry.phase {
+        case .past:
+            HStack(spacing: DemoraSpace.xs) {
+                StateChip(kind: .neutral, text: tr("Ended"))
+                if entry.beganBeforeToday {
+                    Text(String(format: tr("Since %@"), short(item.start)))
+                        .demoraType(.meta)
+                        .foregroundStyle(Ink.inkSoft)
+                        .lineLimit(1)
+                }
+            }
+        case .now where item.needsTap:
+            StateChip(kind: .blocked, text: tr("Wake-up tap needed"))
+        case .now:
+            StateChip(kind: item.kind == .free || item.kind == .unblock ? .free : .blocked,
+                      text: until(item))
+        case .upcoming:
+            StateChip(kind: isFree(item) ? .free : .upcoming, text: until(item))
+        }
+    }
+
+    /// "until 3:00 pm" / "until sat 5:00 am"; a free period says it's free.
+    private func until(_ item: TodayItem) -> String {
+        let free = isFree(item)
+        return String(format: tr(free ? "Free until %@" : "Until %@"), short(item.end))
+    }
+
+    /// One VoiceOver sentence per row, e.g. "bad apps, ended at 5:00 am".
+    private func sentence(_ entry: DayThread.Entry) -> String {
+        let item = entry.item
+        let name = item.name
+        let free = isFree(item)
+        switch entry.phase {
+        case .past:
+            return entry.beganBeforeToday
+                ? String(format: tr("%@, started %@, ended at %@"), name, short(item.start), clock(item.end))
+                : String(format: tr("%@, ended at %@"), name, clock(item.end))
+        case .now where item.needsTap:
+            return String(format: tr("%@, wake-up tap needed"), name)
+        case .now:
+            return String(format: tr(free ? "%@, free now until %@" : "%@, on now until %@"),
+                          name, short(item.end))
+        case .upcoming:
+            return String(format: tr(free ? "%@, free from %@ until %@" : "%@, from %@ until %@"),
+                          name, clock(item.start), short(item.end))
         }
     }
 }

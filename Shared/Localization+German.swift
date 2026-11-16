@@ -1684,4 +1684,14 @@ let germanStrings: [String: String] = [
     "This window closes before your stricter wait ends.": "Dieses Zeitfenster endet, bevor deine strengere Wartezeit vorbei ist.",
     "A change to this rule lands first. Check in after it lands.": "Zuerst greift eine Änderung dieser Regel. Checke danach ein.",
     "Its rule changed while it waited. Cancel it in Changes, then check in again.": "Ihre Regel hat sich beim Warten geändert. Brich sie unter Änderungen ab und checke erneut ein.",
+    // Fixes batch F3–F5 (2026-11-15)
+    "Ended": "Beendet",
+    "Since %@": "Seit %@",
+    "%@, ended at %@": "%@, endete um %@",
+    "%@, started %@, ended at %@": "%@, begann %@, endete um %@",
+    "%@, wake-up tap needed": "%@, Aufwachbestätigung nötig",
+    "%@, on now until %@": "%@, jetzt aktiv bis %@",
+    "%@, free now until %@": "%@, jetzt frei bis %@",
+    "%@, from %@ until %@": "%@, von %@ bis %@",
+    "%@, free from %@ until %@": "%@, frei von %@ bis %@",
 ]

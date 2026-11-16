@@ -1677,4 +1677,14 @@ let polishStrings: [String: String] = [
     "This window closes before your stricter wait ends.": "To okno kończy się, zanim minie twoje bardziej rygorystyczne opóźnienie.",
     "A change to this rule lands first. Check in after it lands.": "Najpierw wejdzie zmiana tej zasady. Sprawdź po niej.",
     "Its rule changed while it waited. Cancel it in Changes, then check in again.": "Jej zasada zmieniła się podczas czekania. Anuluj ją w Zmianach i sprawdź ponownie.",
+    // Fixes batch F3–F5 (2026-11-15)
+    "Ended": "Zakończone",
+    "Since %@": "Od %@",
+    "%@, ended at %@": "%@, zakończone o %@",
+    "%@, started %@, ended at %@": "%@, początek %@, zakończone o %@",
+    "%@, wake-up tap needed": "%@, wymagane potwierdzenie pobudki",
+    "%@, on now until %@": "%@, trwa teraz do %@",
+    "%@, free now until %@": "%@, wolne teraz do %@",
+    "%@, from %@ until %@": "%@, od %@ do %@",
+    "%@, free from %@ until %@": "%@, wolne od %@ do %@",
 ]

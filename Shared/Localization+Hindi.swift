@@ -1677,4 +1677,14 @@ let hindiStrings: [String: String] = [
     "This window closes before your stricter wait ends.": "यह समय आपकी सख्त देरी ख़त्म होने से पहले बंद हो जाता है।",
     "A change to this rule lands first. Check in after it lands.": "पहले इस नियम का एक बदलाव लागू होगा। उसके बाद चेक इन करें।",
     "Its rule changed while it waited. Cancel it in Changes, then check in again.": "इंतज़ार के दौरान इसका नियम बदल गया। इसे बदलावों में रद्द करें, फिर से चेक इन करें।",
+    // Fixes batch F3–F5 (2026-11-15)
+    "Ended": "समाप्त",
+    "Since %@": "%@ से",
+    "%@, ended at %@": "%@, %@ पर समाप्त हुआ",
+    "%@, started %@, ended at %@": "%@, %@ को शुरू हुआ, %@ पर समाप्त हुआ",
+    "%@, wake-up tap needed": "%@, जागने के लिए दबाना ज़रूरी है",
+    "%@, on now until %@": "%@, अभी %@ तक चालू",
+    "%@, free now until %@": "%@, अभी %@ तक खुला",
+    "%@, from %@ until %@": "%@, %@ से %@ तक",
+    "%@, free from %@ until %@": "%@, %@ से %@ तक खुला",
 ]

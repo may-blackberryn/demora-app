@@ -154,29 +154,90 @@ check(farAway.contains("Nov") && farAway.contains("12"), "a week or more: date s
 let yesterday = TodayTimeText.short(ny(11, 1, 22), now: now, calendar: ny, locale: en)
 check(yesterday.contains("Sun"), "yesterday evening: weekday shown (\(yesterday))")
 
-// MARK: Day thread
+// MARK: Day thread (three bands, docs/fixes-2.0-batch.md F3)
 let day = DateInterval(start: ny(11, 2), end: ny(11, 3))
+func ids(_ r: DayThread.Result) -> [String] { r.entries.map(\.item.id) }
+func phases(_ r: DayThread.Result) -> [DayThread.Phase] { r.entries.map(\.phase) }
+/// The left column only ever shows today's clock.
+func labelsToday(_ r: DayThread.Result, _ d: DateInterval) -> Bool {
+    r.entries.allSatisfy { e in e.label.map { d.contains($0) } ?? (e.phase == .now) }
+}
 let tail = block("t", "Night", ny(11, 1, 22), ny(11, 2, 6))
 let gone = block("g", "Gone", ny(11, 1, 20), ny(11, 1, 23))
-let tap = TodayItem(id: "w", name: "Morning", kind: .wake, start: ny(11, 2, 6), end: ny(11, 2, 6), needsTap: true)
+let tap = TodayItem(id: "w", name: "Morning", kind: .wake, start: ny(11, 2, 6), end: now, needsTap: true)
 var thread = DayThread.make(items: [evening, study, tail, gone, lunch, tap], now: now, day: day)
-check(thread.entries.map(\.item.id) == ["t", "w", "p1", "e1", "s1"], "time order, yesterday's finished rule dropped")
-check(thread.entries.map(\.phase) == [.past, .now, .now, .now, .upcoming], "phases")
-check(thread.nowIndex == 4 && thread.hiddenCount == 0, "now marker before upcoming")
-let crowd = (0..<8).map { block("c\($0)", "C\($0)", ny(11, 2, 1 + $0), ny(11, 2, 1 + $0, 30)) }
-    + [block("u1", "U1", ny(11, 2, 20), ny(11, 2, 21)), block("u2", "U2", ny(11, 2, 21), ny(11, 2, 22))]
-thread = DayThread.make(items: crowd, now: ny(11, 2, 12), day: day)
-check(thread.entries.map(\.item.id) == ["c5", "c6", "c7", "u1", "u2"] && thread.hiddenCount == 5,
-      "cap keeps upcoming, fills with most recent past")
-check(thread.nowIndex == 3, "marker after past")
+check(ids(thread) == ["t", "w", "e1", "p1", "s1"],
+      "bands: ended, then on now by soonest end (tap first), then later; yesterday's rule dropped: \(ids(thread))")
+check(phases(thread) == [.past, .now, .now, .now, .upcoming], "phases")
+check(thread.nowIndex == 1 && thread.hiddenCount == 0, "now line under the ended band, nothing hidden")
+check(thread.entries[0].label == ny(11, 2, 6) && thread.entries[0].beganBeforeToday, "ended row: its end, since yesterday")
+check(thread.entries[1].label == nil && thread.entries[2].label == nil, "on-now rows have no left label")
+check(thread.entries[4].label == ny(11, 2, 18) && !thread.entries[4].beganBeforeToday, "later row: its start")
+check(labelsToday(thread, day), "labels on today's clock")
+
+// An ongoing overnight tail at 3 am: on now, no left label, ends this morning.
+let overnight = block("o", "Bad apps", ny(11, 1, 22), ny(11, 2, 5))
+thread = DayThread.make(items: [overnight, evening], now: ny(11, 2, 3), day: day)
+check(ids(thread) == ["o", "s1"] && phases(thread) == [.now, .upcoming], "3 am: tail on now, evening later")
+check(thread.nowIndex == 0 && thread.entries[0].label == nil, "3 am: now line on top; no 'thu 10:00 pm' label")
+check(TodayTimeText.short(overnight.end, now: ny(11, 2, 3), calendar: ny, locale: en)
+      == ny(11, 2, 5).formatted(sameDay), "3 am: chip end is today's time only")
+check(labelsToday(thread, day), "3 am labels on today's clock")
+
+// The same tail at noon: ended, labelled by its end, with a soft "since".
+thread = DayThread.make(items: [overnight, evening], now: ny(11, 2, 12), day: day)
+check(ids(thread) == ["o", "s1"] && phases(thread) == [.past, .upcoming] && thread.nowIndex == 1, "noon: tail ended")
+check(thread.entries[0].label == ny(11, 2, 5) && thread.entries[0].beganBeforeToday, "noon: 5:00 am, since yesterday")
+let since = TodayTimeText.short(overnight.start, now: ny(11, 2, 12), calendar: ny, locale: en)
+check(since.contains("Sun") && since.contains("10:00"), "noon: 'since' carries yesterday's weekday (\(since))")
+check(TodayTimeText.clock(ny(11, 2, 5), calendar: ny, locale: en) == ny(11, 2, 5).formatted(sameDay), "clock is time only")
+
+// Tonight's block running past midnight: later by its start; the chip names tomorrow.
+let tonight = block("n2", "Sleep", ny(11, 2, 22), ny(11, 3, 7))
+thread = DayThread.make(items: [tonight, overnight], now: ny(11, 2, 12), day: day)
+check(ids(thread) == ["o", "n2"] && thread.entries[1].label == ny(11, 2, 22), "tonight: later, labelled 22:00")
+let tonightEnd = TodayTimeText.short(tonight.end, now: ny(11, 2, 12), calendar: ny, locale: en)
+check(tonightEnd.contains("Tue") && tonightEnd.contains("7:00"), "tonight: 'until tue 7:00 am' (\(tonightEnd))")
+thread = DayThread.make(items: [tonight, overnight], now: ny(11, 2, 23, 30), day: day)
+check(ids(thread) == ["o", "n2"] && phases(thread) == [.past, .now] && thread.entries[1].label == nil,
+      "23:30: tonight is on now, no label")
+check(DayThread.make(items: [tonight], now: ny(11, 3, 1), day: DateInterval(start: ny(11, 3), end: ny(11, 4)))
+      .entries.map(\.beganBeforeToday) == [false], "on now since yesterday needs no 'since' (it isn't ended)")
+
+// The cap: on now first, then later today, then ended (most recent), at most 2 ended.
+let onNowRows = [block("a", "A", ny(11, 2, 11), ny(11, 2, 15)), block("b", "B", ny(11, 2, 10), ny(11, 2, 13)),
+                 block("c", "C", ny(11, 2, 9), ny(11, 2, 14))]
+let laterRows = (0..<4).map { block("l\($0)", "L\($0)", ny(11, 2, 17 + $0), ny(11, 2, 18 + $0)) }
+let endedRows = (0..<5).map { block("x\($0)", "X\($0)", ny(11, 2, 1 + $0), ny(11, 2, 2 + $0)) }
+thread = DayThread.make(items: endedRows + laterRows.reversed() + onNowRows, now: ny(11, 2, 12), day: day)
+check(ids(thread) == ["b", "c", "a", "l0", "l1"] && thread.hiddenCount == 7 && thread.nowIndex == 0,
+      "cap: on now by soonest end, then later by start; ended left out: \(ids(thread))")
+thread = DayThread.make(items: endedRows + [laterRows[0], onNowRows[0]], now: ny(11, 2, 12), day: day)
+check(ids(thread) == ["x3", "x4", "a", "l0"] && thread.hiddenCount == 3 && thread.nowIndex == 2,
+      "at most 2 ended, the most recent, in end order; full day shows: \(ids(thread))")
+thread = DayThread.make(items: [endedRows[0], laterRows[0]], now: ny(11, 2, 12), day: day)
+check(thread.hiddenCount == 0, "nothing hidden: no full day link")
 thread = DayThread.make(items: (0..<7).map { block("f\($0)", "F", ny(11, 2, 13 + $0), ny(11, 2, 14 + $0)) },
                         now: ny(11, 2, 12), day: day)
-check(thread.entries.count == 5 && thread.nowIndex == 0 && thread.hiddenCount == 2, "all upcoming, capped")
+check(thread.entries.count == 5 && thread.nowIndex == 0 && thread.hiddenCount == 2, "all later, capped")
+let ties = [block("z", "Zed", ny(11, 2, 13), ny(11, 2, 14)), block("y", "Ann", ny(11, 2, 13), ny(11, 2, 15))]
+check(ids(DayThread.make(items: ties, now: ny(11, 2, 12), day: day)) == ["y", "z"], "same start: by name")
 check(DayThread.make(items: [], now: now, day: day).entries.isEmpty, "empty day")
+
+// A 23-hour daylight-saving day (spring forward, New York 2026-03-08).
 let dstDay = DateInterval(start: ny(3, 8), end: ny(3, 9))
 check(dstDay.duration == 23 * 3600, "DST day is 23 h")
-thread = DayThread.make(items: [block("d", "Late", ny(3, 8, 23), ny(3, 9, 1))], now: ny(3, 8, 12), day: dstDay)
-check(thread.entries.count == 1 && thread.entries[0].phase == .upcoming, "DST day keeps its late block")
+let dstTail = block("dt", "Sleep", ny(3, 7, 23), ny(3, 8, 7))
+let dstLate = block("d", "Late", ny(3, 8, 23), ny(3, 9, 1))
+let tomorrowOnly = block("tm", "Tomorrow", ny(3, 9, 0, 30), ny(3, 9, 2))
+thread = DayThread.make(items: [dstLate, dstTail, tomorrowOnly], now: ny(3, 8, 12), day: dstDay)
+check(ids(thread) == ["dt", "d"] && phases(thread) == [.past, .upcoming], "DST noon: tail ended, late block later")
+check(thread.entries[0].label == ny(3, 8, 7) && thread.entries[0].beganBeforeToday, "DST: tail labelled 7:00 am")
+check(labelsToday(thread, dstDay), "DST labels on that day's clock")
+thread = DayThread.make(items: [dstLate, dstTail], now: ny(3, 8, 1, 30), day: dstDay)
+check(phases(thread) == [.now, .upcoming] && thread.entries[0].label == nil, "DST 1:30 am: tail on now")
+thread = DayThread.make(items: [dstLate, dstTail], now: ny(3, 8, 23, 30), day: dstDay)
+check(phases(thread) == [.past, .now], "DST 23:30: late block on now")
 
 // MARK: Ledger grouping
 func bucket(_ d: Date, _ n: Date, _ c: Calendar = ny) -> LedgerGrouping.Bucket {
@@ -434,6 +495,16 @@ assert 'CountdownText(to: until)' in today_src, 'extra-time wait is a TimeGuard 
 # Report host: refresh arrow gone (Insights I6), pull-to-refresh and refresh-on-appear kept.
 assert 'arrow.clockwise' not in host and 'tr("Refresh")' not in host
 assert '.onAppear { onScreen = true; requestRefresh() }' in host and '.onChange(of: reloadRequest)' in host
+# F3: "full day" only when rows were hidden; the thread view draws the bands.
+thread_host = section(home, '    @ViewBuilder private func dayThread(at now: Date) -> some View {', '\n    }\n')
+assert 'if result.hiddenCount > 0 {\n                        SectionHeaderLink(title: tr("Full day"))' in thread_host
+thread_view = section(today_src, 'struct DayThreadView: View {', '\n}\n')
+assert '@ScaledMetric(relativeTo: .subheadline) private var timeWidth' in thread_view, 'fixed left column'
+assert 'time.frame(width: timeWidth' in thread_view and 'minWidth' not in thread_view
+assert 'TodayTimeText.clock(' in thread_view and 'entry.label.map(clock)' in thread_view, 'left label: clock only'
+assert 'isLast ? Color.clear : Ink.hairline' in thread_view, 'the thread stops at the last dot'
+assert thread_view.count('.accessibilityLabel(Text(sentence(entry)))') == 2, 'one sentence per row'
+assert 'children: .combine' not in thread_view
 print('Today layout guards passed: section order, Changes-only navigation, visible inbox task, pinned Block now, event-only reads, rule names only, report refresh')
 
 # --- Report restyle (§5.5) and its palette copy -----------------------------

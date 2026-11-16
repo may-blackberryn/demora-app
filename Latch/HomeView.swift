@@ -312,7 +312,10 @@ struct HomeView: View {
         if !result.entries.isEmpty {
             VStack(alignment: .leading, spacing: DemoraSpace.cardGap) {
                 SectionHeader(tr("Today")) {
-                    SectionHeaderLink(title: tr("Full day")) { showCalendar = true }
+                    // Only when the caps left rows out (F3).
+                    if result.hiddenCount > 0 {
+                        SectionHeaderLink(title: tr("Full day")) { showCalendar = true }
+                    }
                 }
                 DayThreadView(result: result, now: now) { item in
                     if let ref = RuleRef(todayItemID: item.id) { ruleSheet = RuleSummaryRequest(ref: ref) }

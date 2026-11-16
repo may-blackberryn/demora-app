@@ -1874,3 +1874,25 @@ Phone checks added to "F2: what to try on two phones": (a) open a waiting
 contact's page, Apply now from another contact, then Remove…: the notice
 appears and the normal removal receipt opens; (b) turn contact approvals
 off: the row reads "Paused · can approve from …".
+
+## F3: Today thread in three bands (2026-11-15)
+Step F3 of the approved `docs/fixes-2.0-batch.md`; amends
+`docs/today-redesign.md` §5.6. Cause: `DayThread.make` sorted every row by
+its raw start and the view labelled it with that start, so yesterday's
+overnight tail ("Sun 10:00 PM") led Friday's card and on-now rows sat above
+the now line. Evidence: `Tests/TodayPresentationHarness.py` compiles the
+real `TodayPresentation.swift`; the old order assertions were replaced
+deliberately with the band cases. No phone yet.
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| `DayThread.make` returns ended (by end) + on now (soonest end) + later (by start); `nowIndex` is the ended count; `Entry.label` is the end / nothing / the start | One pure place decides order and labels; the view only draws | Yes |
+| Cap filled on now → later → ended (≤ 2, most recent end), shown in end order; `hiddenCount` counts every row left out, including ended rows past 2 | "Full day" then shows exactly when something is hidden | Yes |
+| Item sources (`HomeDaySources`, `HomeDayProjection.recurring`) unchanged | The intervals were right; only order and labels were wrong | Yes |
+| A wake gate waiting for its tap is on now and sorts first (its `end` is now); chip stays "Wake-up tap needed" | "until now" would mean nothing; the tap is the most urgent row | Yes |
+| A running wake wait, an unblock session and blocks on now all say "Until …"; free periods say "Free until …" (on now and later) | The spec's chips are written for blocks; colour alone mustn't carry "free", and both strings already existed in all languages | Yes, flagged |
+| `beganBeforeToday` set only on ended rows | The soft "since …" belongs to the ended band only | Yes |
+| Left column: `@ScaledMetric` 64 pt, one line, shrinks to 80 % before truncating; `TodayTimeText.clock` (time only). The now line's time uses the same width | Fixed width keeps every dot on one line; the band rules guarantee the label is today's | Yes |
+| Dots: ended 6 pt filled `inkSoft` at 45 %; on now 9 pt filled; later 9 pt hollow 1.5 pt stroke; free/unblock in `Ink.free`, others in the accent. The line runs above the dot (not on the first row) and below it (not on the last) | "Stops at the last dot", and the line no longer has a 5 pt gap at each row's top | Yes |
+| VoiceOver: one `accessibilityLabel` per row from 7 sentence formats (ended / ended since / tap / on now / free now / later / free later); the rule-sheet hint and button trait kept | One sentence per row, without the chip and label read separately | Yes |
+| New strings in all eight languages: "Ended", "Since %@" and the 7 sentences; harness string scan now also covers `LimitsUsageReportView.swift` (87 keys × 7 tables) | The scan couldn't read `tr(isFree(item) ? …)`; the code now uses a local `free` so every key is checked | Yes |

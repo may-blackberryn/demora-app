@@ -116,6 +116,27 @@ Placed directly under the Now card because it is time-sensitive.
   `inkSoft`. Cap at 5 items; "Full day" → Rules → Calendar.
 - Hidden when there is nothing today.
 
+**Amendment (2026-11-15, `docs/fixes-2.0-batch.md` F3, owner-approved).**
+The single time order above is replaced by three bands, each in its own order:
+
+| Band | Order | Left label | Chip | Dot |
+| --- | --- | --- | --- | --- |
+| Ended earlier today | by end | end time | "Ended", plus a soft "since thu 10:00 pm" when it began before today | small, dim, filled |
+| *now line* (current time) | | | | |
+| On now (or waiting for a wake tap) | soonest end first | none | "Until 3:00 pm" / "Until sat 5:00 am" (free: "Free until …"; tap: "Wake-up tap needed") | filled, state colour |
+| Later today | by start | start time | the end only: "Until …" (free: "Free until …") | hollow, state colour |
+
+- The left column has a fixed (Dynamic Type–scaled) width and only shows
+  today's clock; weekdays go in the chip. At accessibility sizes the label
+  moves above the row as before, and on-now rows have none.
+- At most 2 ended rows. Cap 5, filled in priority: on now, later today,
+  ended (most recent end). The thread line stops at the last dot.
+- "Full day" shows only when the caps hid rows.
+- VoiceOver reads one sentence per row ("bad apps, ended at 5:00 am").
+- Pure logic: `DayThread.make` in `Latch/TodayPresentation.swift`; cases in
+  `Tests/TodayPresentationHarness.py` (3 am tail, noon tail, tonight past
+  midnight, the cap, a 23-hour day).
+
 ### 5.7 Changing soon
 - `SectionHeader("Changing soon", trailing: "All 5")` → Changes ledger.
 - The next two pending changes by `appliesAt`, as **ChangeRow** (§5.9).

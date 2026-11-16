@@ -1759,4 +1759,14 @@ let spanishStrings: [String: String] = [
     "This window closes before your stricter wait ends.": "Este horario termina antes de que acabe tu demora más estricta.",
     "A change to this rule lands first. Check in after it lands.": "Antes llega un cambio a esta regla. Comprueba cuando se aplique.",
     "Its rule changed while it waited. Cancel it in Changes, then check in again.": "Su regla cambió mientras esperaba. Cancélalo en Cambios y vuelve a comprobar.",
+    // Fixes batch F3–F5 (2026-11-15)
+    "Ended": "Terminado",
+    "Since %@": "Desde %@",
+    "%@, ended at %@": "%@, terminó a las %@",
+    "%@, started %@, ended at %@": "%@, empezó el %@, terminó a las %@",
+    "%@, wake-up tap needed": "%@, toca Despertar para empezar",
+    "%@, on now until %@": "%@, activo ahora hasta %@",
+    "%@, free now until %@": "%@, libre ahora hasta %@",
+    "%@, from %@ until %@": "%@, de %@ a %@",
+    "%@, free from %@ until %@": "%@, libre de %@ a %@",
 ]
