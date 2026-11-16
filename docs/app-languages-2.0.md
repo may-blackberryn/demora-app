@@ -142,3 +142,126 @@ time; the description files in `../AppStore/locales/` are updated together.
 - **Q2. Keep one Portuguese (Brazil-style) and one Spanish for every store
   region?**
   - Recommendation: **yes.**
+
+## Translation kit (stage 2)
+
+Written by the infrastructure session (stage 1) on 2026-11-16.
+
+### One file per language
+
+Each language is **one file**: `Shared/Localization+<Name>.swift`. A stage-2
+session writes only its own languages' files. Nothing else.
+
+The other catalogs are **generated** from these files in stage 3. Translators
+don't touch or regenerate them:
+
+- `LatchWidgets/Localizable.xcstrings` (widget gallery);
+- `LatchReport/UsageInsightsLocalization.swift` (usage report);
+- `Latch/InfoPlist.xcstrings` (the location and camera permission text App
+  Review reads). These purpose strings are ordinary keys in the dictionary.
+
+| Code | File (`Shared/…`) | Table | Store vocabulary (`../AppStore/locales/`) |
+|---|---|---|---|
+| ca | `Localization+Catalan.swift` | `catalanStrings` | `ca.md` |
+| cs | `Localization+Czech.swift` | `czechStrings` | `cs.md` |
+| da | `Localization+Danish.swift` | `danishStrings` | `da.md` |
+| el | `Localization+Greek.swift` | `greekStrings` | `el.md` |
+| fi | `Localization+Finnish.swift` | `finnishStrings` | `fi.md` |
+| hr | `Localization+Croatian.swift` | `croatianStrings` | `hr.md` |
+| hu | `Localization+Hungarian.swift` | `hungarianStrings` | `hu.md` |
+| it | `Localization+Italian.swift` | `italianStrings` | `it.md` |
+| nl | `Localization+Dutch.swift` | `dutchStrings` | `nl-NL.md` |
+| nb | `Localization+Norwegian.swift` | `norwegianStrings` | `no.md` |
+| ro | `Localization+Romanian.swift` | `romanianStrings` | `ro.md` |
+| ru | `Localization+Russian.swift` | `russianStrings` | `ru.md` |
+| sk | `Localization+Slovak.swift` | `slovakStrings` | `sk.md` |
+| sl | `Localization+Slovenian.swift` | `slovenianStrings` | `sl.md` |
+| sv | `Localization+Swedish.swift` | `swedishStrings` | `sv.md` |
+| uk | `Localization+Ukrainian.swift` | `ukrainianStrings` | `uk.md` |
+| id | `Localization+Indonesian.swift` | `indonesianStrings` | `id.md` |
+| ja | `Localization+Japanese.swift` | `japaneseStrings` | `ja.md` |
+| ko | `Localization+Korean.swift` | `koreanStrings` | `ko.md` |
+| ms | `Localization+Malay.swift` | `malayStrings` | `ms.md` |
+| th | `Localization+Thai.swift` | `thaiStrings` | `th.md` |
+| vi | `Localization+Vietnamese.swift` | `vietnameseStrings` | `vi.md` |
+| zh-Hans | `Localization+ChineseSimplified.swift` | `chineseSimplifiedStrings` | `zh-Hans.md` |
+| zh-Hant | `Localization+ChineseTraditional.swift` | `chineseTraditionalStrings` | `zh-Hant.md` |
+| bn | `Localization+Bengali.swift` | `bengaliStrings` | `bn-IN.md` |
+| gu | `Localization+Gujarati.swift` | `gujaratiStrings` | `gu.md` |
+| kn | `Localization+Kannada.swift` | `kannadaStrings` | `kn.md` |
+| ml | `Localization+Malayalam.swift` | `malayalamStrings` | `ml.md` |
+| mr | `Localization+Marathi.swift` | `marathiStrings` | `mr.md` |
+| or | `Localization+Odia.swift` | `odiaStrings` | `or.md` |
+| pa | `Localization+Punjabi.swift` | `punjabiStrings` | `pa.md` |
+| ta | `Localization+Tamil.swift` | `tamilStrings` | `ta.md` |
+| te | `Localization+Telugu.swift` | `teluguStrings` | `te.md` |
+| ar | `Localization+Arabic.swift` | `arabicStrings` | `ar-SA.md` |
+| he | `Localization+Hebrew.swift` | `hebrewStrings` | `he.md` |
+| ur | `Localization+Urdu.swift` | `urduStrings` | `ur.md` |
+
+### Steps for a translator
+
+1. Print a complete skeleton. It has every key, English values, and the
+   Spanish file's section comments:
+   `python3 Tests/AppLanguagesHarness.py --template ja`
+2. Replace the language's placeholder file with it, then translate every value.
+   - Read the reviewed Spanish (`Shared/Localization.swift`) for meaning.
+   - Read the store copy (table above) and reuse its words: the four tabs
+     (Today · Rules · Insights · You), wait / delay, New session, When & where,
+     Hold to confirm, the app name **demora**.
+3. When every value is done, change the header line `// Translation: pending`
+   to `// Translation: complete`.
+4. Run the check for your languages only:
+   `python3 Tests/AppLanguagesHarness.py --language ja`
+5. Commit only your own files, staging them by name. Never push.
+
+### Rules the check enforces
+
+- **Keys.** Every key in the Spanish reference table, and no other key.
+  - Keys are the exact English text: same apostrophes, `…`, `·`, `→`, case
+    and spacing.
+  - Never edit a key.
+  - No duplicate keys. A duplicate crashes the app.
+- **Placeholders.** `%@`, `%d` and `%%` must match the English exactly, in
+  order.
+  - To reorder them, number every placeholder in that value: `%2$@ … %1$@`.
+  - Never mix numbered and plain placeholders in one value.
+- **Values.**
+  - No empty values.
+  - No Swift interpolation: `\(`.
+  - Escape `"` as `\"` and `\` as `\\`.
+- **Leftover English.** When a file is marked complete, at most 10% of its
+  values may equal the English. The real share is about 1–2%: `OK`, `%@ h`,
+  brand names.
+- **Pending.** A pending file may be partial. The check still rejects
+  duplicates, unknown keys and placeholder mismatches in the entries present.
+  It reports progress as "pending: n of N".
+
+### Writing rules (L5)
+
+- Calm, plain, second person. Use the informal "you" wherever the language
+  has one (as the Spanish does), unless the store copy uses the formal form.
+- **Plurals.** The app has no plural engine: one value serves every count.
+  Phrase counts neutrally where the grammar needs forms (ru, uk, pl, cs, sk,
+  sl, hr, ar, he), for example "Days: %d".
+- **Gender.** Avoid gendered forms for the user.
+- **Length.** Labels sit on chips and buttons. Keep them near the English
+  length; prefer the shorter of two good options.
+- **Not ours to change.**
+  - Brand names: demora, Screen Time / Apple's own term for it.
+  - The EFF word list.
+  - The fixed phrase text users type.
+- **RTL (ar, he, ur).**
+  - Write naturally.
+  - Don't add direction marks.
+  - The layout mirrors by itself.
+
+### After stage 2 (stage 3)
+
+1. Regenerate the three generated catalogs:
+   - `python3 Tests/GenerateWidgetLocalization.py --patch`
+   - `python3 Tests/GenerateUsageLocalization.py --patch`
+   - `python3 Tests/GenerateInfoPlistLocalization.py --patch`
+2. Apply each patch.
+3. `python3 Tests/AppLanguagesHarness.py --strict` must pass, then the full
+   verify.
