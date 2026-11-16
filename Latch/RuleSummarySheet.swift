@@ -632,7 +632,8 @@ struct RuleSummarySheet: View {
                     if let selection { SelectedAppsView(selection: selection) }
                 }
                 .padding(DemoraSpace.xl)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: DemoraSpace.maxContentWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
             .background(Ink.paper.ignoresSafeArea())
             .casedNavigationTitle(tr("What"))

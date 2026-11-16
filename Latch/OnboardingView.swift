@@ -179,6 +179,8 @@ struct OnboardingView: View {
                             dayNightStep
                         }
                         .padding(DemoraSpace.pageGutter)
+                        .frame(maxWidth: DemoraSpace.maxContentWidth)
+                        .frame(maxWidth: .infinity)
                     }
                     .paper()
                     .toolbar { ToolbarItem(placement: .confirmationAction) {
@@ -196,6 +198,8 @@ struct OnboardingView: View {
                             overridesStep
                         }
                         .padding(DemoraSpace.pageGutter)
+                        .frame(maxWidth: DemoraSpace.maxContentWidth)
+                        .frame(maxWidth: .infinity)
                     }
                     .paper()
                     .toolbar { ToolbarItem(placement: .confirmationAction) {

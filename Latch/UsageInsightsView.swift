@@ -82,7 +82,11 @@ struct UsageInsightsView: View {
         let today = calendar.startOfDay(for: refreshedAt)
         // Four complete seven-day periods plus today's separate partial day.
         let start = calendar.date(byAdding: .day, value: -28, to: today) ?? today
-        // Phone/tablet model, not a promise to identify a single physical device.
+        // Which device's Screen Time data to read: phone or tablet model, not
+        // a promise to identify a single physical device. This is data, not
+        // layout, so it stays on the device model rather than the size class:
+        // an unfolded iPhone Duo is still an iPhone (regular width, phone
+        // model), and an iPad in narrow Split View is still an iPad (F6).
         let devices: DeviceActivityFilter.Devices = .init([
             UIDevice.current.userInterfaceIdiom == .pad ? .iPad : .iPhone
         ])
@@ -284,7 +288,10 @@ struct UsageInsightsView: View {
             VStack(alignment: .leading, spacing: 20) {
                 WeeklyUsageEstimateDraft(enabled: $estimateEnabled, minutes: $estimateMinutes)
                 if saveFailed { Text(tr("Couldn't save your estimate. Try again.")).foregroundStyle(Ink.danger) }
-            }.padding(24)
+            }
+            .padding(24)
+            .frame(maxWidth: DemoraSpace.maxContentWidth)
+            .frame(maxWidth: .infinity)
         }
         .background(Ink.cardRaised.ignoresSafeArea())
         .casedNavigationTitle(tr("Your starting point"))

@@ -33,13 +33,15 @@ struct LatchApp: App {
                 .preferredColorScheme(
                     (Appearance(rawValue: appearanceRaw) ?? .system).colorScheme)
                 // Hidden screenshot helper: tap to flip light ⇄ dark. Invisible.
-                // Top-center on iPhone (over the wordmark); on iPad the tab bar
-                // and nav sit at the top, so it lives at the bottom-center there.
+                // Top-center at every width (over Today's wordmark). The app's
+                // own tab bar sits at the bottom on iPhone, iPad and the iPhone
+                // Duo alike, so no device or size-class branch is needed; the
+                // old iPad bottom-leading spot covered the Today tab whenever
+                // the window was narrower than about 1,020 pt (F6).
                 // DEBUG-only so it never ships to TestFlight / the App Store —
                 // users set the theme in Settings → Appearance instead.
                 #if DEBUG
-                .overlay(alignment: UIDevice.current.userInterfaceIdiom == .pad
-                         ? .bottomLeading : .top) {
+                .overlay(alignment: .top) {
                     Color.clear
                         .frame(width: 160, height: 44)
                         .contentShape(Rectangle())

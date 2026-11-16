@@ -343,7 +343,10 @@ final class SquareCropViewController: UIViewController, UIScrollViewDelegate {
     private let scrollView = UIScrollView()
     private let imageView = UIImageView()
     private let maskLayer = CAShapeLayer()
-    private var configured = false
+    /// The size the crop square was last fitted to. The window can resize
+    /// mid-crop (iPhone Duo fold/unfold, iPad rotation or Split View), and
+    /// `croppedImage()` maps through the current insets, so they must follow.
+    private var configuredSize: CGSize?
 
     init(image: UIImage,
          onCrop: @escaping (UIImage) -> Void,
@@ -399,8 +402,8 @@ final class SquareCropViewController: UIViewController, UIScrollViewDelegate {
         maskLayer.path = path.cgPath
         maskLayer.frame = view.bounds
 
-        guard !configured else { return }
-        configured = true
+        guard scrollView.bounds.size != configuredSize else { return }
+        configuredSize = scrollView.bounds.size
 
         scrollView.contentInset = UIEdgeInsets(top: vInset, left: hInset,
                                                bottom: vInset, right: hInset)
