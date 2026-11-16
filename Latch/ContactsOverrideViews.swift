@@ -343,10 +343,14 @@ final class SquareCropViewController: UIViewController, UIScrollViewDelegate {
     private let scrollView = UIScrollView()
     private let imageView = UIImageView()
     private let maskLayer = CAShapeLayer()
-    /// The size the crop square was last fitted to. The window can resize
-    /// mid-crop (iPhone Duo fold/unfold, iPad rotation or Split View), and
-    /// `croppedImage()` maps through the current insets, so they must follow.
-    private var configuredSize: CGSize?
+    /// The on-screen crop square (view and scroll-view coordinates match),
+    /// or nil before the first layout. The window can resize mid-crop (iPhone
+    /// Duo fold/unfold, iPad rotation, Split View) and its safe area can
+    /// change, so the square, the insets and `croppedImage()` all follow it.
+    private var cropRect: CGRect?
+    /// Bottom margin + a 44 pt button row + a gap: the square never sits
+    /// under Cancel / Use photo.
+    private let buttonBand: CGFloat = 16 + 44 + 12
 
     init(image: UIImage,
          onCrop: @escaping (UIImage) -> Void,
@@ -366,6 +370,9 @@ final class SquareCropViewController: UIViewController, UIScrollViewDelegate {
         scrollView.delegate = self
         scrollView.showsVerticalScrollIndicator = false
         scrollView.showsHorizontalScrollIndicator = false
+        // The insets below are the crop geometry; no automatic safe-area
+        // insets on top of them.
+        scrollView.contentInsetAdjustmentBehavior = .never
         view.addSubview(scrollView)
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -389,34 +396,63 @@ final class SquareCropViewController: UIViewController, UIScrollViewDelegate {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        guard scrollView.bounds.width > 0 else { return }
+        guard scrollView.bounds.width > 0, scrollView.bounds.height > 0 else { return }
 
-        let side = min(scrollView.bounds.width, scrollView.bounds.height)
-        let vInset = (scrollView.bounds.height - side) / 2
-        let hInset = (scrollView.bounds.width - side) / 2
+        // The largest square inside the safe area, above the button band,
+        // centred in that space (asymmetric safe areas stay asymmetric).
+        let safe = view.safeAreaLayoutGuide.layoutFrame
+        var room = safe
+        room.size.height = max(1, safe.height - buttonBand)
+        let side = max(1, floor(min(room.width, room.height)))
+        let square = CGRect(x: (room.midX - side / 2).rounded(),
+                            y: (room.midY - side / 2).rounded(),
+                            width: side, height: side)
 
-        // Update the dimming mask (full screen minus the crop square).
-        let cropRect = CGRect(x: hInset, y: vInset, width: side, height: side)
+        // Dim everything outside the crop square.
         let path = UIBezierPath(rect: view.bounds)
-        path.append(UIBezierPath(rect: cropRect))
+        path.append(UIBezierPath(rect: square))
         maskLayer.path = path.cgPath
         maskLayer.frame = view.bounds
 
-        guard scrollView.bounds.size != configuredSize else { return }
-        configuredSize = scrollView.bounds.size
+        guard square != cropRect else { return }
+        refit(to: square)
+    }
 
-        scrollView.contentInset = UIEdgeInsets(top: vInset, left: hInset,
-                                               bottom: vInset, right: hInset)
-        let minScale = max(side / image.size.width, side / image.size.height)
+    /// Fits the scroll geometry to `square`. The first fit fills the square
+    /// with the image, centred; a later fit (after a resize) keeps the image
+    /// point under the square's centre and the zoom relative to "fill".
+    private func refit(to square: CGRect) {
+        let bounds = scrollView.bounds.size
+        let old = cropRect
+        let oldZoom = scrollView.zoomScale
+        let oldMin = scrollView.minimumZoomScale
+        let oldOffset = scrollView.contentOffset
+        cropRect = square
+
+        scrollView.contentInset = UIEdgeInsets(top: square.minY, left: square.minX,
+                                               bottom: bounds.height - square.maxY,
+                                               right: bounds.width - square.maxX)
+        let minScale = max(square.width / image.size.width, square.height / image.size.height)
+        let maxScale = max(minScale * 4, minScale)
         scrollView.minimumZoomScale = minScale
-        scrollView.maximumZoomScale = max(minScale * 4, minScale)
-        scrollView.zoomScale = minScale
+        scrollView.maximumZoomScale = maxScale
 
-        // Center the image within the crop square.
-        let contentW = image.size.width * minScale
-        let contentH = image.size.height * minScale
-        scrollView.contentOffset = CGPoint(x: (contentW - side) / 2 - hInset,
-                                           y: (contentH - side) / 2 - vInset)
+        // Image point (in image pixels) to put under the square's centre.
+        var focus = CGPoint(x: image.size.width / 2, y: image.size.height / 2)
+        var zoom = minScale
+        if let old, oldZoom > 0, oldMin > 0 {
+            focus = CGPoint(x: (oldOffset.x + old.midX) / oldZoom,
+                            y: (oldOffset.y + old.midY) / oldZoom)
+            zoom = min(maxScale, max(minScale, minScale * oldZoom / oldMin))
+        }
+        scrollView.zoomScale = zoom
+
+        // Keep the square inside the image.
+        let contentW = image.size.width * zoom
+        let contentH = image.size.height * zoom
+        let x = min(max(focus.x * zoom - square.midX, -square.minX), contentW - square.maxX)
+        let y = min(max(focus.y * zoom - square.midY, -square.minY), contentH - square.maxY)
+        scrollView.contentOffset = CGPoint(x: x, y: y)
     }
 
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }
@@ -451,16 +487,15 @@ final class SquareCropViewController: UIViewController, UIScrollViewDelegate {
     @objc private func useTapped() { onCrop(croppedImage()) }
 
     private func croppedImage() -> UIImage {
-        let side = min(scrollView.bounds.width, scrollView.bounds.height)
+        guard let square = cropRect, scrollView.zoomScale > 0 else { return image }
         let zoom = scrollView.zoomScale
         let offset = scrollView.contentOffset
-        let inset = scrollView.contentInset
         // Map the on-screen crop square back into image pixels. `image` is
         // orientation-normalized at scale 1, so points == pixels.
-        var rect = CGRect(x: (offset.x + inset.left) / zoom,
-                          y: (offset.y + inset.top) / zoom,
-                          width: side / zoom,
-                          height: side / zoom)
+        var rect = CGRect(x: (offset.x + square.minX) / zoom,
+                          y: (offset.y + square.minY) / zoom,
+                          width: square.width / zoom,
+                          height: square.height / zoom)
         // Keep the square inside the image (a mid-bounce tap could overshoot).
         rect.origin.x = min(max(0, rect.origin.x), max(0, image.size.width - rect.width))
         rect.origin.y = min(max(0, rect.origin.y), max(0, image.size.height - rect.height))

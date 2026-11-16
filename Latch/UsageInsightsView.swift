@@ -196,7 +196,8 @@ struct UsageInsightsView: View {
         .padding(.horizontal, DemoraSpace.pageGutter)
         .padding(.top, DemoraSpace.xs)
         .padding(.bottom, DemoraSpace.s)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: DemoraSpace.maxContentWidth, alignment: .leading)
+        .frame(maxWidth: .infinity)
     }
 
     private func headerButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {

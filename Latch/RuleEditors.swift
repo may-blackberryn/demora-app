@@ -133,7 +133,8 @@ struct EditorHelpSheet: View {
                     }
                 }
                 .padding(DemoraSpace.xl)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: DemoraSpace.maxContentWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
             .background(Ink.cardRaised.ignoresSafeArea())
             .casedNavigationTitle(title)

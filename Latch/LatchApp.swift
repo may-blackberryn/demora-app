@@ -33,13 +33,13 @@ struct LatchApp: App {
                 .preferredColorScheme(
                     (Appearance(rawValue: appearanceRaw) ?? .system).colorScheme)
                 // Hidden screenshot helper: tap to flip light ⇄ dark. Invisible.
-                // Top-center at every width (over Today's wordmark). The app's
-                // own tab bar sits at the bottom on iPhone, iPad and the iPhone
-                // Duo alike, so no device or size-class branch is needed; the
-                // old iPad bottom-leading spot covered the Today tab whenever
-                // the window was narrower than about 1,020 pt (F6).
+                // A 160 × 44 pt strip at the top centre of the window, below
+                // the status bar, at every width. The app's own tab bar is at
+                // the bottom on every device, so no device or size-class branch
+                // is needed; the old iPad bottom-leading spot could cover the
+                // Today tab in windows narrower than about 1,020 pt (F6).
                 // DEBUG-only so it never ships to TestFlight / the App Store —
-                // users set the theme in Settings → Appearance instead.
+                // users set the theme in You → Appearance instead.
                 #if DEBUG
                 .overlay(alignment: .top) {
                     Color.clear
@@ -289,11 +289,12 @@ private struct DemoraTabBar: View {
         .padding(.horizontal, 16)
         .padding(.top, 10)
         .padding(.bottom, 4)
+        .frame(maxWidth: 700)
+        .frame(maxWidth: .infinity)
+        // The hairline spans the paper, edge to edge, not just the 700 pt items.
         .overlay(alignment: .top) {
             Rectangle().fill(Ink.hairline).frame(height: 1)
         }
-        .frame(maxWidth: 700)
-        .frame(maxWidth: .infinity)
         .background(Ink.paper.ignoresSafeArea(edges: .bottom))
     }
 

@@ -33,6 +33,13 @@
 		<key>CheckIn</key>
 		<string>Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.</string>
 	</dict>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict/>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
