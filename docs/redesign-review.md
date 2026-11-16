@@ -2013,6 +2013,44 @@ Duo runtime (iOS 27.1 or the Duo-specific 27.2 runtime; the generic 27.2
 refuses it). All F6 simulators were shut down afterwards.
 Screenshots (not in the repo): the F6 session's scratchpad `shots/`.
 
+### F6: iPhone Duo simulator pass (2026-11-16)
+Runtime iOS 27.2 (24B91016s, `SimRuntime.iOS-27-2-iPhone19-4`), device
+"iPhone Duo", Debug simulator build of `d794a9b`, screens reached with the
+Debug screenshot demo mode (`-DemoraDemoMode 1 -DemoraDemoScreen …`).
+Fix: `44c2727`.
+
+**Pose.** The Duo boots **folded**: the app runs on the outer display
+(screen 1, 1398 × 2034 px, 466 × 678 pt at 3×) with the status bar, and
+toolbar items such as back / "Select" / "Aa", in a column along the right
+(sensor) edge, an asymmetric side safe area. The inner display (screen 3,
+2007 × 2853 px, 669 × 951 pt) stays black. `simctl` has no fold, hinge or
+posture control (SpringBoard has a continuous-fold controller, but nothing
+reaches it from the command line), and `simctl io screenConfig power off`
+on the outer screen doesn't move the app to the inner one (it left both
+dark until a reboot). **The unfolded pose was not reachable**: it needs
+Device Hub's fold control or someone at the Simulator.
+
+| # | Check | Result |
+| --- | --- | --- |
+| 0 | Launch, scene/lifecycle console | **Done (folded).** One scene, no UIScene-lifecycle/manifest warnings; the scene gets the hinge-state settings extensions; only expected Family Controls errors |
+| 1 | Folded: Today, Rules, Insights, You and sheets | **Done.** Setup step 1, Today, Changes, Rules, receipt, When & where check-in, Insights, You (ways to skip), New session editor: content stays inside the side safe area, sheets span the width, nothing clipped |
+| 2 | Unfolded: centred column, tab bar edge to edge, New session in the column | **Not done** (inner display unreachable) |
+| 3 | Fold/unfold with a sheet open, pushed editor | **Not done** (no fold control) |
+| 4 | Split View / resizing | **Not done** (no fold or window control without the Simulator UI) |
+| 5, 7 | Cropper | **Not done** (camera only) |
+| 6 | Onboarding | **Partly**: Setup step 1 folded, correct |
+| 8 | Single window | **Done**: Info.plist `false`, one scene |
+| L | Largest text size (AX5), folded | **Done; bug fixed.** Tab labels broke mid-word ("Rule s", "To-day", "In-sig…") and the bar took about a third of the 678 pt screen. Now the bar's text is capped at xLarge and each item has the large content viewer (long press), like the system tab bar; re-checked on the Duo. The two-line "New session" button and the Insights report's Day/Week/Trends segments truncating to "We…"/"Tre…" at AX5 are left as they are (report extension; system segmented control) |
+| H | Hairlines under the side safe area | **Fixed.** The tab bar and Insights header lines stopped at the safe area, short of the paper under the status column; both now ignore the horizontal safe area. Re-checked |
+| — | Xcode App Resizability check | **Not done** (Xcode UI) |
+
+Regression checks: `Tests/ResizableLayoutHarness.py` (cap, large content
+viewer, both hairlines). Full verify `verify_failed=0` (46 harnesses); the
+Debug simulator build after the fix has no warnings. No Release build was
+run for this small SwiftUI change. Screenshots: the F6 session's scratchpad
+`duo/` (not in the repo); the simulator was shut down and its build folder
+deleted afterwards.
+
 ## F6 review fixes (2026-11-15)
 A fresh review of `8b6a184` found no regression from the F6 diff (its own
 Debug build with Xcode 27.2 succeeded), one medium item that predates F6
