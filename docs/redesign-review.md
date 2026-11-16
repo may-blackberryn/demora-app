@@ -2185,3 +2185,32 @@ Verify: full `CLAUDE.md` verify plus all three generator checks and
 `AppLanguagesHarness --strict`: `verify_failed=0`. Unsigned Debug and Release
 were built afterwards (results in the commit message and report).
 Simulator: dev demora was uninstalled and the simulator shut down.
+
+## App languages: review fixes (2026-11-16)
+
+A fresh reviewer checked 15 languages and the infrastructure. Nothing
+crashed and every gate passed. Fixes are in `0c7589d` (Hindi and the garble
+check) and `7ed96b1` (wording and the permission meaning check).
+
+| # | Finding | Fix | Regression check |
+| --- | --- | --- | --- |
+| 1 (high) | **Hindi had garbled values that predate 2.0.** Twenty-seven started with "Demora — ", several with syllable noise ("simemaafafafaffe", "UDememorororora"). They included onboarding, the Screen Time denial, "Start using Demora", contacts, the passcode guide and two Guide paragraphs. Also: one value still English, one with a French word, "Testers" in English, and "Decline" = "निकासी" (withdrawal). | 30 values retranslated from the English and Spanish, using the file's own terms (विश्वसनीय संपर्क, स्क्रीन टाइम, देरी, कम/अधिक सख्त). The reviewer's suggested wording is used where given. | The garble check below |
+| 2 (high) | No check for machine-translation noise. | `garble_problems` runs on every table in every mode. It flags repeated-syllable noise, a "Demora — " prefix the English lacks, and mostly-Latin values in the 21 non-Latin-script languages. Names are allowed (brands, domains, Trello, email), and so are iOS setting names quoted in English. A full scan of all 44 tables found only Hindi; "Όριο email" (el) is a normal loanword. | Self-tests on the reviewer's samples; `--strict` runs it on all 44 |
+| 3 (high) | Dutch onboarding said "nu even niet" (not right now) for "just this once", reversing the message. | Reviewer's wording. | — |
+| 4 (med) | ko "can approve from %@" used a place particle (에서) for a time. | `%@부터` in all three keys. | — |
+| 5 (med) | "You can cancel it from Today" read as "from today on". | All 43 values were scanned. The Today tab is now named in ar, bn, th and ko (reviewer's wording), and in gu, mr, or, te, ur, vi, it, da, nb, sv, es and fr. Scripts without capitals had no cue at all; "desde Hoy", "da Oggi" and "fra I dag" read as "from today". | — |
+| 6 (med) | Hebrew :357 grammar; :379 "התפרצות" (outburst). | Reviewer's wording. | — |
+| 7 (med) | Extension binary sizes. | Release with all 44 languages: Latch 27.3 MB, LatchMonitor 10.0 MB, LatchShieldUI 7.6 MB (26 KB of code), LatchWidgets 0.6 MB, LatchReport 2.2 MB, bundle 61 MB uncompressed. About 5.5 MB per binary is string data in read-only file pages. **Decision: no restructuring.** The monitor uses `tr()` for notifications, change summaries and widget labels. Swift builds a table lazily, and only for the active language: measured +144–208 KB footprint per table (macOS, `-O`, ja and ta). Optional follow-up: a generated four-key shield table would cut about 5.5 MB of download size. On-device memory stays on the owner's checklist. | Measured, logged |
+| 8 (med) | The permission-swap check only compared lengths. | The camera prompt must also contain the table's own word for "Photo" (its longest prefix of 3+ letters, 2 for two-letter words), and neither location prompt may. Length order keeps the two location prompts apart. | The old swapped Arabic file fails both checks; all 43 current tables pass |
+| low | ja 反映日時; th "ก็ยังคงอยู่"; it "a mente calma"; "Hold to confirm" 28–31 chars in ru/nl/it; nl "toestemming apart"; nl mixed haar/hem for "wijziging"; pl camera prompt and "Take photo". | All applied. "Hold to confirm" is now Удерживайте / Ingedrukt houden / Tieni premuto. nl uses hem/hij for "wijziging" everywhere; "haar" stays only for "blokkering" and "schatting". | — |
+
+Verify:
+
+- Full `CLAUDE.md` verify plus the three generator checks and
+  `--strict`: `verify_failed=0`.
+- Unsigned Release (the size build above) and Debug: `BUILD SUCCEEDED`.
+- No simulator booted for these fixes.
+
+Not ours (noted): the Italian/Dutch store-copy tab names are fixed at
+store-edit time. Owner checklist (device only): iOS's per-app language
+setting and whether the extensions follow it; RTL sheets and alerts.
