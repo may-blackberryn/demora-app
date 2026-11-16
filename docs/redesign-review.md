@@ -2168,3 +2168,20 @@ Found, not fixed (follow-ups):
    may prefer SF Hebrew.
 6. German wording: "Leicht" (Light theme) should be "Hell"; "Regelmäßig"
    (text case "Regular") should be "Normal".
+
+## App languages: stage 3 follow-ups (2026-11-16)
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| **Language became a path route** (`YouRoute.language`), not a view `NavigationLink`. The "Translation in beta" notice is driven by `AppModel.betaNoticeLanguage`. | Applying a language rebuilt the You stack, which dropped the untracked picker page and its alert, so the L5 feedback invite never showed. A first attempt put the alert on YouView's root content; SwiftUI can't present from a root that's covered by a pushed page, so it moved back onto the picker, bound to the model flag. | Yes. Seen on the simulator: Arabic → German shows the German notice, the picker stays open, the back button flips |
+| **Dates, times and counts use the app language** (`Date.appFormatted`, `Int.appFormatted`, the Opens line, the Schedules month title). Widgets get the app locale through the snapshot (`Copy.localeIdentifier`). | Foundation formatting followed the device region: an English UI on an ar_SA device showed "٤:٢٢ ص", and an Arabic UI on an English device showed "AM 4:24". SwiftUI `Text` already used the root `\.locale`. Seen fixed on the simulator ("On until 4:56 AM" in English on ar_SA). | Yes |
+| **No digit change for Arabic was needed.** | Foundation formats `ar` (no region) with Western digits, the same as the countdowns. `Text(timerInterval:)` rendered Western digits under every locale tried (ar, ar@numbers=latn, bn, mr, en), so it can't be shown to follow the locale. It's left as is. A device region such as ar_SA still drives the calendar (Hijri dates), which is the user's own setting. | Checked with `ImageRenderer` on macOS |
+| **German: "Light" → "Hell", "Regular" → "Normal".** | Each key is used once, in Appearance (theme and text case). | Yes |
+| **Empty search line skipped.** | No existing key fits ("No country matches." is country-specific; "Nothing" is used in other contexts). A new key would need all 44 languages. | Not done (as agreed) |
+| Hebrew serif fallback | Left as an owner decision. | Logged |
+| `ChangeEngine` "Plan %@" summary date | Still formatted with the device locale. The text is stored with the pending change, so changing it touches engine output (L8). Left. | Not done |
+
+Verify: full `CLAUDE.md` verify plus all three generator checks and
+`AppLanguagesHarness --strict`: `verify_failed=0`. Unsigned Debug and Release
+were built afterwards (results in the commit message and report).
+Simulator: dev demora was uninstalled and the simulator shut down.

@@ -143,3 +143,28 @@ for name, count in (('Latch/Theme.swift', 2), ('Latch/ContactsOverrideViews.swif
     mirrored = re.findall(r'Image\(systemName: "arrow\.up\.right"\)\n(?:\s*//[^\n]*\n)?\s*\.flipsForRightToLeftLayoutDirection\(true\)', text)
     assert len(mirrored) == count, (name, len(mirrored))
 print('Open arrows mirror in RTL')
+
+# --- Stage 3 follow-ups ----------------------------------------------------
+# The beta invite survives applying a language: Language is a path route (an
+# untracked NavigationLink page was dropped when the stack rebuilt), and the
+# picker's alert is driven by a model flag, so a rebuilt page still shows it.
+you = (ROOT / 'Latch/YouView.swift').read_text()
+pages = (ROOT / 'Latch/YouPages.swift').read_text()
+model_src = (ROOT / 'Latch/AppModel.swift').read_text()
+assert 'case appearance, preventDisabling, help, credits, language' in you
+assert 'case .language: LanguagePickerView()' in you
+assert 'model.youPath.append(.language)' in pages and 'NavigationLink { LanguagePickerView() }' not in pages
+assert '@Published var betaNoticeLanguage: AppLanguage?' in model_src
+assert 'model.betaNoticeLanguage != nil' in picker and 'tr("Translation in beta")' in picker
+assert 'model.betaNoticeLanguage = selectedLanguage' in picker
+assert 'showLanguageBetaNotice' not in (ROOT / 'Latch/SettingsView.swift').read_text()
+# Dates, times and counts format in the app language, not the device region.
+assert 'func appFormatted(date: Date.FormatStyle.DateStyle, time: Date.FormatStyle.TimeStyle)' in localization
+for folder in ('Latch',):
+    for source in (ROOT / folder).glob('*.swift'):
+        for line in source.read_text().splitlines():
+            if re.search(r'\.formatted\(\s*date:', line) or re.search(r'\.formatted\(\)', line):
+                raise AssertionError((source.name, 'use appFormatted or pass the app locale', line.strip()))
+assert 'localeIdentifier: AppLanguage.current.rawValue' in snapshot
+assert widgets.count('.appLocale(WidgetPresentation.copy(snapshot: entry.snapshot).localeIdentifier)') == 2
+print('Stage 3 follow-ups passed: beta invite on the You stack, app-language formatting, widget locale')
