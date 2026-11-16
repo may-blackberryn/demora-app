@@ -78,7 +78,7 @@ def typecheck(codes):
         raise ValueError('swiftc rejected the dictionaries:\n' + (result.stderr or result.stdout)[-2000:])
 
 
-def check(codes, strict):
+def check(codes, strict, listing=False):
     keys = L.reference()
     failed = False
     summary = {'original': 0, 'complete': 0, 'pending': 0}
@@ -102,6 +102,10 @@ def check(codes, strict):
         else:
             print(f'ok   {code:8} {state:8} {len(table):5} keys'
                   + (' · ' + '; '.join(notes) if notes else ''))
+            if listing and state == 'original':
+                # A translator's own run lists every key still to add.
+                for key in (key for key in keys if key not in table):
+                    print('     missing: ' + json.dumps(key, ensure_ascii=False))
     if strict and not L.PUBLISH_NEW_LANGUAGES:
         failed = True
         print('FAIL strict: set PUBLISH_NEW_LANGUAGES = True in Tests/app_languages.py and regenerate the catalogs')
@@ -131,7 +135,7 @@ def main():
         for code, *_ in L.TABLES:
             if not L.path(code).exists():
                 raise ValueError(f'{L.path(code).name} is missing')
-        return check(codes, args.strict)
+        return check(codes, args.strict, listing=bool(args.language))
     except (OSError, ValueError) as error:
         print(str(error), file=sys.stderr)
         return 1
