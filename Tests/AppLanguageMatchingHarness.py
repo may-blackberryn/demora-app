@@ -135,3 +135,11 @@ onboarding = (ROOT / 'Latch/OnboardingView.swift').read_text()
 assert 'ForEach(AppLanguage.pickerOrder(applied: model.language))' in onboarding and '.pickerStyle(.menu)' in onboarding
 assert 'static func pickerOrder(applied: AppLanguage) -> [AppLanguage]' in localization
 print('Language picker passed: ordered, searchable, native names; onboarding uses a submenu')
+
+# "Open" arrows (GridCard, the Theme time card, the contacts row) mirror in RTL (stage 3 simulator pass).
+for name, count in (('Latch/Theme.swift', 2), ('Latch/ContactsOverrideViews.swift', 1)):
+    text = (ROOT / name).read_text()
+    assert text.count('Image(systemName: "arrow.up.right")') == count, name
+    mirrored = re.findall(r'Image\(systemName: "arrow\.up\.right"\)\n(?:\s*//[^\n]*\n)?\s*\.flipsForRightToLeftLayoutDirection\(true\)', text)
+    assert len(mirrored) == count, (name, len(mirrored))
+print('Open arrows mirror in RTL')

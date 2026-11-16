@@ -94,6 +94,8 @@ struct GridCard: View {
                     Circle().fill(Ink.danger).frame(width: 7, height: 7)
                 }
                 Image(systemName: "arrow.up.right")
+                    // "Open" points toward the reading direction: mirrors in RTL.
+                    .flipsForRightToLeftLayoutDirection(true)
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(Ink.faint)
             }
@@ -165,6 +167,7 @@ struct DemoraDelayRow: View {
                     .font(.subheadline).foregroundStyle(Ink.faint)
                 Spacer()
                 Image(systemName: "arrow.up.right")
+                    .flipsForRightToLeftLayoutDirection(true)
                     .font(.callout.weight(.light)).foregroundStyle(accent)
             }
             Text(duration)

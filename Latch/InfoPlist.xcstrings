@@ -5,10 +5,46 @@
       "comment": "NSLocationTemporaryUsageDescriptionDictionary → CheckIn: iOS's one-time precise-location prompt during a When & where check.",
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تحتاج Demora إلى موقعك الدقيق لهذا الفحص، لمعرفة هل أنت داخل مكان القاعدة أو بلدها."
+          }
+        },
+        "bn": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "এই যাচাইয়ের জন্য Demora-র আপনার নিখুঁত লোকেশন লাগে, আপনি কোনো নিয়মের জায়গা বা দেশের ভেতরে কি না বুঝতে।"
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora necessita la teva ubicació precisa per a aquesta comprovació, per saber si ets dins del lloc o país d'una regla."
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora potřebuje vaši přesnou polohu pro tuto kontrolu, aby poznala, zda jste uvnitř místa nebo země pravidla."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora har brug for din præcise position til dette tjek, for at afgøre, om du er inde i en regels sted eller land."
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Demora braucht für diese Prüfung deinen genauen Standort, um zu erkennen, ob du dich im Ort oder im Land einer Regel befindest."
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Το Demora χρειάζεται την ακριβή τοποθεσία σου για αυτόν τον έλεγχο, ώστε να καταλάβει αν βρίσκεσαι μέσα στο μέρος ή τη χώρα ενός κανόνα."
           }
         },
         "en": {
@@ -23,16 +59,118 @@
             "value": "Demora necesita tu ubicación exacta para esta comprobación, para saber si estás dentro del lugar o del país de una regla."
           }
         },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora tarvitsee tarkan sijaintisi tähän tarkistukseen selvittääkseen, oletko säännön paikan tai maan sisällä."
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Demora a besoin de votre position exacte pour cette vérification, afin de savoir si vous êtes dans le lieu ou le pays d'une règle."
           }
         },
+        "gu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "આ ચકાસણી માટે Demora ને તમારું ચોક્કસ લોકેશન જોઈએ, તમે કોઈ નિયમની જગ્યા કે દેશમાં છો કે નહીં તે નક્કી કરવા."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora צריכה את המיקום המדויק שלכם לבדיקה הזו, כדי לדעת אם אתם בתוך המקום או המדינה של כלל."
+          }
+        },
         "hi": {
           "stringUnit": {
             "state": "translated",
             "value": "इस जाँच के लिए Demora को आपकी सटीक लोकेशन चाहिए, ताकि पता चल सके कि आप किसी नियम की जगह या देश के अंदर हैं या नहीं।"
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora treba tvoju preciznu lokaciju za ovu provjeru, da zna jesi li unutar mjesta ili države nekog pravila."
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A Demorának a pontos helyzetedre van szüksége ehhez az ellenőrzéshez, hogy megállapítsa, egy szabály helyén vagy országában vagy-e."
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora butuh lokasimu yang akurat untuk pemeriksaan ini, untuk menentukan apakah kamu berada di tempat atau negara sebuah aturan."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora ha bisogno della tua posizione precisa per questo controllo, per capire se sei dentro il luogo o il paese di una regola."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この確認で、ルールの場所や国の中にいるかを判別するために、正確な位置情報が必要です。"
+          }
+        },
+        "kn": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ಈ ಪರಿಶೀಲನೆಗೆ Demora ಗೆ ನಿಮ್ಮ ನಿಖರ ಸ್ಥಳ ಬೇಕು, ನೀವು ನಿಯಮದ ಸ್ಥಳ ಅಥವಾ ದೇಶದ ಒಳಗಿದ್ದೀರಾ ಎಂದು ತಿಳಿಯಲು."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "demora는 내가 규칙의 장소나 국가 안에 있는지 확인하려고 이 확인에 정확한 위치가 필요해요."
+          }
+        },
+        "ml": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ഈ പരിശോധനയ്ക്ക് നിങ്ങളുടെ കൃത്യമായ ലൊക്കേഷൻ Demora-യ്ക്ക് വേണം, ഒരു നിയമത്തിന്റെ സ്ഥലത്തോ രാജ്യത്തോ ആണോ നിങ്ങൾ എന്ന് അറിയാൻ."
+          }
+        },
+        "mr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "या तपासणीसाठी Demora ला तुमचे अचूक लोकेशन हवे आहे, तुम्ही नियमाच्या ठिकाणात किंवा देशात आहात का ते ठरवण्यासाठी."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora memerlukan lokasi tepat anda untuk semakan ini, bagi mengetahui sama ada anda berada di dalam tempat atau negara sesuatu peraturan."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora trenger din nøyaktige posisjon for denne sjekken, for å avgjøre om du er innenfor stedet eller landet til en regel."
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora heeft je nauwkeurige locatie nodig voor deze controle, om te bepalen of je binnen de plek of het land van een regel bent."
+          }
+        },
+        "or": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ଏହି ଯାଞ୍ଚ ପାଇଁ Demora କୁ ଆପଣଙ୍କ ସଠିକ୍ ଲୋକେସନ୍ ଦରକାର, ଆପଣ ଏକ ନିୟମର ସ୍ଥାନ କିମ୍ବା ଦେଶ ଭିତରେ ଅଛନ୍ତି କି ନାହିଁ ଜାଣିବାକୁ।"
+          }
+        },
+        "pa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora ਨੂੰ ਇਸ ਜਾਂਚ ਲਈ ਤੁਹਾਡੀ ਸਟੀਕ ਲੋਕੇਸ਼ਨ ਚਾਹੀਦੀ ਹੈ, ਇਹ ਦੱਸਣ ਲਈ ਕਿ ਤੁਸੀਂ ਕਿਸੇ ਨਿਯਮ ਦੀ ਥਾਂ ਜਾਂ ਦੇਸ਼ ਦੇ ਅੰਦਰ ਹੋ ਜਾਂ ਨਹੀਂ।"
           }
         },
         "pl": {
@@ -47,10 +185,88 @@
             "value": "O Demora precisa da sua localização exata para esta verificação, para saber se você está dentro do lugar ou do país de uma regra."
           }
         },
+        "ro": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora are nevoie de locația ta precisă pentru această verificare, ca să stabilească dacă ești în locul sau țara unei reguli."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для этой проверки Demora нужна ваша точная геопозиция, чтобы понять, находитесь ли вы в месте или стране правила."
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora potrebuje vašu presnú polohu pre túto kontrolu, aby zistila, či ste v mieste alebo krajine pravidla."
+          }
+        },
+        "sl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora za to preverjanje potrebuje tvojo natančno lokacijo, da ugotovi, ali si znotraj kraja ali države pravila."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora behöver din exakta plats för den här kontrollen, för att avgöra om du är inom en regels plats eller land."
+          }
+        },
+        "ta": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "இந்தச் சரிபார்ப்புக்கு Demora-வுக்கு உங்கள் துல்லிய இருப்பிடம் தேவை; ஒரு விதியின் இடத்துக்குள் அல்லது நாட்டுக்குள் இருக்கிறீர்களா என்று அறிய."
+          }
+        },
+        "te": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ఈ తనిఖీకి Demoraకు మీ ఖచ్చితమైన లొకేషన్ కావాలి, మీరు నియమం యొక్క చోటు లేదా దేశంలో ఉన్నారో లేదో చెప్పడానికి."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora ต้องการตำแหน่งที่แม่นยำของคุณสำหรับการตรวจสอบนี้ เพื่อบอกว่าคุณอยู่ในสถานที่หรือประเทศของกฎหรือไม่"
+          }
+        },
         "tr": {
           "stringUnit": {
             "state": "translated",
             "value": "Demora'nın bu kontrol için tam konumuna ihtiyacı var; böylece bir kuralın yerinin ya da ülkesinin içinde olup olmadığını anlayabilir."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для цієї перевірки Demora потрібна ваша точна геопозиція, щоб зрозуміти, чи перебуваєте ви в місці або країні правила."
+          }
+        },
+        "ur": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "اس جانچ کے لیے Demora کو آپ کی درست لوکیشن چاہیے، یہ جاننے کے لیے کہ آپ کسی اصول کی جگہ یا ملک کے اندر ہیں یا نہیں۔"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora cần vị trí chính xác của bạn cho lần kiểm tra này, để biết bạn có ở trong nơi chốn hay quốc gia của một quy tắc không."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora 需要你的精确位置来做这次检查，以判断你是否位于规则的地点或国家之内。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora 需要你的精確位置來進行這項檢查，以判斷你是否位於規則的地點或國家內。"
           }
         }
       }
@@ -59,10 +275,82 @@
       "comment": "Camera permission prompt (a trusted contact's picture). Must match INFOPLIST_KEY_NSCameraUsageDescription in English.",
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "التقط صورة لاستخدامها صورةً لجهة اتصال موثوقة."
+          }
+        },
+        "bn": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "বিশ্বস্ত মানুষের ছবি হিসেবে ব্যবহার করতে একটা ছবি তুলুন।"
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fes una foto per fer-la servir com a imatge d'un contacte de confiança."
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vyfotografujte fotku, kterou použijete jako obrázek důvěryhodného kontaktu."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tag et foto, der kan bruges som en betroet persons billede."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nimm ein Foto auf, um es als Bild eines vertrauenswürdigen Kontakts zu verwenden."
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Τράβηξε μια φωτογραφία για να τη χρησιμοποιήσεις ως εικόνα ενός έμπιστου προσώπου."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Take a photo to use as a trusted contact's picture."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haz una foto para usarla como imagen de un contacto de confianza."
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ota kuva yhteyshenkilön kuvaksi."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prenez une photo à utiliser comme image d'une personne de confiance."
+          }
+        },
+        "gu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "વિશ્વાસુ વ્યક્તિના ચિત્ર તરીકે વાપરવા ફોટો લો."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "צלמו תמונה לשימוש כתמונה של איש קשר מהימן."
           }
         },
         "hi": {
@@ -71,16 +359,184 @@
             "value": "भरोसेमंद संपर्क की तस्वीर के रूप में इस्तेमाल करने के लिए फ़ोटो लें।"
           }
         },
+        "hr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Snimi fotografiju koju ćeš koristiti kao sliku osobe od povjerenja."
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Készíts fotót, hogy egy megbízható személy képeként használd."
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ambil foto untuk dipakai sebagai gambar kontak tepercaya."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scatta una foto da usare come immagine di un contatto di fiducia."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "信頼できる人の写真として使う写真を撮ります。"
+          }
+        },
+        "kn": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ನಂಬಿಕಸ್ಥ ಸಂಪರ್ಕದ ಚಿತ್ರವಾಗಿ ಬಳಸಲು ಫೋಟೋ ತೆಗೆಯಿರಿ."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "믿을 만한 사람의 사진으로 쓸 사진을 찍으세요."
+          }
+        },
+        "ml": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ഒരു വിശ്വസ്ത കോൺടാക്റ്റിന്റെ ചിത്രമായി ഉപയോഗിക്കാൻ ഒരു ഫോട്ടോ എടുക്കൂ."
+          }
+        },
+        "mr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "विश्वासू व्यक्तीचे चित्र म्हणून वापरण्यासाठी फोटो काढा."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ambil foto untuk digunakan sebagai gambar kenalan dipercayai."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta et bilde som kan brukes som bildet til en betrodd person."
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maak een foto om als afbeelding van een vertrouwd contact te gebruiken."
+          }
+        },
+        "or": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ଭରସାଯୋଗ୍ୟ ବ୍ୟକ୍ତିଙ୍କ ଛବି ଭାବେ ବ୍ୟବହାର କରିବାକୁ ଏକ ଫଟୋ ଉଠାନ୍ତୁ।"
+          }
+        },
+        "pa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ਕਿਸੇ ਭਰੋਸੇਯੋਗ ਸੰਪਰਕ ਦੀ ਤਸਵੀਰ ਵਜੋਂ ਵਰਤਣ ਲਈ ਇੱਕ ਫ਼ੋਟੋ ਖਿੱਚੋ।"
+          }
+        },
         "pl": {
           "stringUnit": {
             "state": "translated",
             "value": "Zrób zdjęcie, które będzie obrazkiem zaufanego kontaktu."
           }
         },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tire uma foto para usar como imagem de uma pessoa de confiança."
+          }
+        },
+        "ro": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fă o fotografie pentru a o folosi drept imagine a unui contact de încredere."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сделайте фото, чтобы использовать его как изображение доверенного человека."
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Na fotku, ktorú použijete ako obrázok dôveryhodného kontaktu, odfoťte snímku."
+          }
+        },
+        "sl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fotografiraj, da uporabiš sliko kot podobo zaupnega stika."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta ett foto att använda som en betrodd persons bild."
+          }
+        },
+        "ta": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "நம்பகமான தொடர்பின் படமாகப் பயன்படுத்த ஒரு புகைப்படம் எடுங்கள்."
+          }
+        },
+        "te": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "విశ్వసనీయ కాంటాక్ట్ చిత్రంగా వాడడానికి ఫోటో తీయండి."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ถ่ายรูปเพื่อใช้เป็นรูปของผู้ติดต่อที่ไว้ใจ"
+          }
+        },
         "tr": {
           "stringUnit": {
             "state": "translated",
             "value": "Güvenilir kişinin resmi olarak kullanmak için bir fotoğraf çek."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зробіть фото, щоб використати його як зображення довіреної особи."
+          }
+        },
+        "ur": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "بھروسے مند رابطے کی تصویر کے طور پر استعمال کرنے کے لیے تصویر لیں۔"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chụp ảnh để dùng làm ảnh của một liên hệ tin cậy."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拍一张照片，用作信任联系人的头像。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拍一張照片，作為信任聯絡人的圖片。"
           }
         }
       }
@@ -89,10 +545,46 @@
       "comment": "Location permission prompt (While Using only). Must match INFOPLIST_KEY_NSLocationWhenInUseUsageDescription in English.",
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تقرأ Demora موقعك مرة واحدة عندما تضغط تسجيل الحضور أو تحدد مكانًا أو تستخدم البلد الذي أنت فيه، لترى هل ينطبق مكان القاعدة أو بلدها. لا يُرسل موقعك إلى أي مكان؛ لا يُحتفظ إلا بالأماكن التي تحفظها."
+          }
+        },
+        "bn": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "চেক ইন ট্যাপ করলে, জায়গা ঠিক করলে বা আপনার দেশ ব্যবহার করলে Demora একবার আপনার লোকেশন পড়ে, কোনো নিয়মের জায়গা বা দেশ প্রযোজ্য কি না দেখতে। আপনার লোকেশন কোথাও পাঠানো হয় না; শুধু আপনার সেভ করা জায়গা থাকে।"
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora llegeix la teva ubicació una vegada quan toques Check-in, fixes un lloc o fas servir el país on ets, per veure si s'aplica el lloc o país d'una regla. La teva ubicació no s'envia enlloc; només es conserven els llocs que deses."
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora zjistí vaši polohu jednou, když klepnete na Přihlásit se, nastavíte místo nebo použijete zemi, ve které jste, aby zjistila, zda platí místo nebo země pravidla. Vaše poloha se nikam neodesílá; ukládají se jen místa, která uložíte."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora læser din position én gang, når du trykker på Tjek ind, sætter et sted eller bruger det land, du er i, for at se, om en regels sted eller land gælder. Din position sendes ikke nogen steder; kun de steder, du gemmer, bevares."
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Demora liest deinen Standort einmal, wenn du auf „Einchecken“ tippst, einen Ort festlegst oder das Land verwendest, in dem du bist, um zu prüfen, ob der Ort oder das Land einer Regel zutrifft. Dein Standort wird nirgendwohin gesendet; gespeichert werden nur die Orte, die du speicherst."
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Το Demora διαβάζει την τοποθεσία σου μία φορά όταν πατάς Check-in, ορίζεις ένα μέρος ή χρησιμοποιείς τη χώρα όπου βρίσκεσαι, για να δει αν ισχύει το μέρος ή η χώρα ενός κανόνα. Η τοποθεσία σου δεν στέλνεται πουθενά· κρατιούνται μόνο τα μέρη που αποθηκεύεις."
           }
         },
         "en": {
@@ -107,16 +599,118 @@
             "value": "Demora lee tu ubicación una vez cuando tocas Comprobar, defines un lugar o usas el país en el que estás, para ver si se cumple el lugar o el país de una regla. Tu ubicación no se envía a ningún sitio; solo se guardan los lugares que guardas."
           }
         },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora lukee sijaintisi kerran, kun napautat Kirjaudu sisään, asetat paikan tai käytät maata, jossa olet, nähdäkseen, koskeeko säännön paikka tai maa sinua. Sijaintiasi ei lähetetä minnekään; vain tallentamasi paikat säilytetään."
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Demora lit votre position une seule fois lorsque vous touchez Vérifier, définissez un lieu ou utilisez le pays où vous êtes, pour savoir si le lieu ou le pays d'une règle s'applique. Votre position n'est envoyée nulle part ; seuls les lieux que vous enregistrez sont conservés."
           }
         },
+        "gu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "તમે ચેક ઇન ટૅપ કરો, જગ્યા નક્કી કરો કે તમારો દેશ વાપરો ત્યારે નિયમની જગ્યા કે દેશ લાગુ પડે છે કે નહીં તે જોવા Demora એકવાર તમારું લોકેશન વાંચે છે. તમારું લોકેશન ક્યાંય મોકલાતું નથી; ફક્ત તમે સાચવેલી જગ્યાઓ રખાય છે."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora קוראת את המיקום שלכם פעם אחת כשאתם מקישים על צ׳ק-אין, מגדירים מקום או משתמשים במדינה שבה אתם נמצאים, כדי לראות אם המקום או המדינה של כלל חלים. המיקום שלכם לא נשלח לשום מקום; רק מקומות שתשמרו נשמרים."
+          }
+        },
         "hi": {
           "stringUnit": {
             "state": "translated",
             "value": "जब आप चेक इन पर टैप करते हैं, कोई जगह सेट करते हैं या जिस देश में आप हैं उसे इस्तेमाल करते हैं, तब Demora एक बार आपकी लोकेशन पढ़ता है, यह देखने के लिए कि किसी नियम की जगह या देश लागू होता है या नहीं। आपकी लोकेशन कहीं नहीं भेजी जाती; सिर्फ़ आपकी सहेजी गई जगहें रखी जाती हैं।"
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora jednom čita tvoju lokaciju kad dodirneš Prijavi se, postaviš mjesto ili koristiš državu u kojoj si, da vidi vrijedi li mjesto ili država nekog pravila. Tvoja lokacija se nigdje ne šalje; čuvaju se samo mjesta koja spremiš."
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A Demora egyszer olvassa le a helyzetedet, amikor a Bejelentkezést érinted, helyet állítasz be, vagy azt az országot használod, ahol vagy, hogy lássa, érvényes-e egy szabály helye vagy országa. A helyzetedet sehová nem küldi el; csak az általad mentett helyek maradnak meg."
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora membaca lokasimu sekali saat kamu mengetuk Check-in, menetapkan tempat, atau memakai negara tempatmu berada, untuk melihat apakah tempat atau negara aturan berlaku. Lokasimu tidak dikirim ke mana pun; hanya tempat yang kamu simpan yang disimpan."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora legge la tua posizione una volta quando tocchi Check-in, imposti un luogo o usi il paese in cui sei, per vedere se si applica il luogo o il paese di una regola. La tua posizione non viene inviata da nessuna parte; vengono conservati solo i luoghi che salvi."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "demoraは、「チェックイン」をタップしたとき、場所を設定したとき、いる国を使うときに、一度だけ現在地を確認し、ルールの場所や国が当てはまるかを調べます。位置情報はどこにも送信されず、保存した場所だけが残ります。"
+          }
+        },
+        "kn": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ನೀವು ಚೆಕ್ ಇನ್ ಟ್ಯಾಪ್ ಮಾಡಿದಾಗ, ಸ್ಥಳ ಹೊಂದಿಸಿದಾಗ ಅಥವಾ ನೀವಿರುವ ದೇಶ ಬಳಸಿದಾಗ, ನಿಯಮದ ಸ್ಥಳ ಅಥವಾ ದೇಶ ಅನ್ವಯಿಸುತ್ತದೆಯೇ ಎಂದು ನೋಡಲು Demora ನಿಮ್ಮ ಸ್ಥಳವನ್ನು ಒಮ್ಮೆ ಮಾತ್ರ ಓದುತ್ತದೆ. ನಿಮ್ಮ ಸ್ಥಳ ಎಲ್ಲಿಗೂ ಕಳುಹಿಸಲಾಗುವುದಿಲ್ಲ; ನೀವು ಉಳಿಸುವ ಸ್ಥಳಗಳು ಮಾತ್ರ ಉಳಿಯುತ್ತವೆ."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "demora는 체크인을 누르거나, 장소를 설정하거나, 현재 국가를 사용할 때 규칙의 장소나 국가가 적용되는지 확인하려고 위치를 한 번 읽어요. 위치는 어디로도 전송되지 않으며 저장한 장소만 보관돼요."
+          }
+        },
+        "ml": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ചെക്ക് ഇൻ ടാപ്പ് ചെയ്യുമ്പോഴോ സ്ഥലം സജ്ജമാക്കുമ്പോഴോ നിങ്ങൾ ഉള്ള രാജ്യം ഉപയോഗിക്കുമ്പോഴോ, ഒരു നിയമത്തിന്റെ സ്ഥലമോ രാജ്യമോ ബാധകമാണോ എന്ന് നോക്കാൻ Demora നിങ്ങളുടെ ലൊക്കേഷൻ ഒരു തവണ വായിക്കും. നിങ്ങളുടെ ലൊക്കേഷൻ എവിടേക്കും അയയ്ക്കില്ല; നിങ്ങൾ സേവ് ചെയ്യുന്ന സ്ഥലങ്ങൾ മാത്രം സൂക്ഷിക്കും."
+          }
+        },
+        "mr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "तुम्ही चेक इन टॅप करता, ठिकाण ठरवता किंवा तुम्ही ज्या देशात आहात तो वापरता तेव्हा नियमाचे ठिकाण किंवा देश लागू होतो का ते पाहण्यासाठी Demora एकदा तुमचे लोकेशन वाचते. तुमचे लोकेशन कुठेही पाठवले जात नाही; फक्त तुम्ही सेव्ह केलेली ठिकाणे राखली जातात."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora membaca lokasi anda sekali apabila anda mengetik Daftar masuk, menetapkan tempat atau menggunakan negara tempat anda berada, untuk melihat sama ada tempat atau negara sesuatu peraturan terpakai. Lokasi anda tidak dihantar ke mana-mana; hanya tempat yang anda simpan disimpan."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora leser posisjonen din én gang når du trykker på Sjekk inn, setter et sted eller bruker landet du er i, for å se om stedet eller landet til en regel gjelder. Posisjonen din sendes ingen steder; bare stedene du lagrer, beholdes."
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora leest je locatie één keer wanneer je op Inchecken tikt, een plek instelt of het land gebruikt waar je bent, om te zien of de plek of het land van een regel van toepassing is. Je locatie wordt nergens naartoe verstuurd; alleen de plekken die je opslaat worden bewaard."
+          }
+        },
+        "or": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ଆପଣ ଚେକ୍ ଇନ୍ ଟ୍ୟାପ୍ କଲେ, ଏକ ସ୍ଥାନ ଠିକ୍ କଲେ କିମ୍ବା ଆପଣ ଥିବା ଦେଶ ବ୍ୟବହାର କଲେ, ନିୟମର ସ୍ଥାନ କିମ୍ବା ଦେଶ ଲାଗୁ ହେଉଛି କି ନାହିଁ ଦେଖିବାକୁ Demora ଥରେ ଆପଣଙ୍କ ଲୋକେସନ୍ ପଢ଼େ। ଆପଣଙ୍କ ଲୋକେସନ୍ କେଉଁଠି ପଠାଯାଏ ନାହିଁ; କେବଳ ଆପଣ ସେଭ୍ କରିଥିବା ସ୍ଥାନ ରଖାଯାଏ।"
+          }
+        },
+        "pa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora ਤੁਹਾਡੀ ਲੋਕੇਸ਼ਨ ਇੱਕ ਵਾਰ ਪੜ੍ਹਦਾ ਹੈ ਜਦੋਂ ਤੁਸੀਂ ਚੈੱਕ ਇਨ ਛੂਹਦੇ ਹੋ, ਕੋਈ ਥਾਂ ਤੈਅ ਕਰਦੇ ਹੋ ਜਾਂ ਉਹ ਦੇਸ਼ ਵਰਤਦੇ ਹੋ ਜਿਸ ਵਿੱਚ ਤੁਸੀਂ ਹੋ, ਇਹ ਦੇਖਣ ਲਈ ਕਿ ਨਿਯਮ ਦੀ ਥਾਂ ਜਾਂ ਦੇਸ਼ ਲਾਗੂ ਹੁੰਦਾ ਹੈ ਜਾਂ ਨਹੀਂ। ਤੁਹਾਡੀ ਲੋਕੇਸ਼ਨ ਕਿਤੇ ਨਹੀਂ ਭੇਜੀ ਜਾਂਦੀ; ਸਿਰਫ਼ ਉਹ ਥਾਵਾਂ ਰੱਖੀਆਂ ਜਾਂਦੀਆਂ ਹਨ ਜੋ ਤੁਸੀਂ ਸੰਭਾਲਦੇ ਹੋ।"
           }
         },
         "pl": {
@@ -131,10 +725,88 @@
             "value": "O Demora lê sua localização uma vez quando você toca em Verificar, define um lugar ou usa o país em que está, para ver se o lugar ou o país de uma regra se aplica. Sua localização não é enviada a lugar nenhum; só os lugares que você salva são guardados."
           }
         },
+        "ro": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora îți citește locația o singură dată, când atingi Check-in, stabilești un loc sau folosești țara în care ești, ca să vadă dacă se aplică locul sau țara unei reguli. Locația ta nu este trimisă nicăieri; doar locurile pe care le salvezi sunt păstrate."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora один раз определяет ваше местоположение, когда вы нажимаете «Отметиться», задаёте место или используете страну, где вы находитесь, чтобы понять, действует ли место или страна правила. Ваше местоположение никуда не отправляется; сохраняются только места, которые вы записали."
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora raz prečíta vašu polohu, keď klepnete na Ohlásiť sa, nastavíte miesto alebo použijete krajinu, v ktorej ste, aby zistila, či platí miesto alebo krajina pravidla. Vaša poloha sa nikam neodosiela; ukladajú sa len miesta, ktoré uložíte."
+          }
+        },
+        "sl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora enkrat prebere tvojo lokacijo, ko tapneš Prijavi se, nastaviš kraj ali uporabiš državo, v kateri si, da vidi, ali velja kraj ali država pravila. Tvoja lokacija se nikamor ne pošlje; shranjeni so samo kraji, ki jih shraniš."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora läser din plats en gång när du trycker på Checka in, anger en plats eller använder landet du är i, för att se om en regels plats eller land gäller. Din plats skickas ingenstans; bara de platser du sparar behålls."
+          }
+        },
+        "ta": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "செக் இன் தட்டும்போது, இடத்தை அமைக்கும்போது அல்லது நீங்கள் இருக்கும் நாட்டைப் பயன்படுத்தும்போது, ஒரு விதியின் இடமோ நாடோ பொருந்துகிறதா என்று பார்க்க Demora உங்கள் இருப்பிடத்தை ஒருமுறை படிக்கும். உங்கள் இருப்பிடம் எங்கும் அனுப்பப்படாது; நீங்கள் சேமிக்கும் இடங்கள் மட்டுமே வைக்கப்படும்."
+          }
+        },
+        "te": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "మీరు చెక్ ఇన్ నొక్కినప్పుడు, చోటును సెట్ చేసినప్పుడు లేదా మీరు ఉన్న దేశాన్ని వాడినప్పుడు, నియమం యొక్క చోటు లేదా దేశం వర్తిస్తుందో చూడడానికి Demora మీ లొకేషన్‌ను ఒక్కసారి చదువుతుంది. మీ లొకేషన్ ఎక్కడికీ పంపబడదు; మీరు సేవ్ చేసిన చోట్లు మాత్రమే ఉంటాయి."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora อ่านตำแหน่งของคุณหนึ่งครั้งเมื่อคุณแตะเช็กอิน ตั้งสถานที่ หรือใช้ประเทศที่คุณอยู่ เพื่อดูว่าสถานที่หรือประเทศของกฎใช้ได้หรือไม่ ตำแหน่งของคุณไม่ถูกส่งไปที่ใด บันทึกเฉพาะสถานที่ที่คุณบันทึก"
+          }
+        },
         "tr": {
           "stringUnit": {
             "state": "translated",
             "value": "Demora, Kontrol et'e dokunduğunda, bir yer belirlediğinde veya bulunduğun ülkeyi kullandığında konumunu bir kez okur; böylece bir kuralın yerinin ya da ülkesinin geçerli olup olmadığını görür. Konumun hiçbir yere gönderilmez; yalnızca kaydettiğin yerler saklanır."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora один раз визначає ваше місцеперебування, коли ви торкаєтеся «Відмітитися», задаєте місце або використовуєте країну, де ви перебуваєте, щоб зрозуміти, чи діє місце або країна правила. Ваше місцеперебування нікуди не надсилається; зберігаються лише місця, які ви записали."
+          }
+        },
+        "ur": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora آپ کی لوکیشن ایک بار پڑھتا ہے جب آپ چیک اِن پر ٹیپ کریں، جگہ مقرر کریں یا جس ملک میں ہیں وہی استعمال کریں، تاکہ دیکھ سکے کہ اصول کی جگہ یا ملک لاگو ہوتا ہے یا نہیں۔ آپ کی لوکیشن کہیں نہیں بھیجی جاتی؛ صرف آپ کی محفوظ کی ہوئی جگہیں رکھی جاتی ہیں۔"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demora đọc vị trí của bạn một lần khi bạn chạm Check-in, đặt một nơi hoặc dùng quốc gia bạn đang ở, để xem nơi chốn hay quốc gia của một quy tắc có áp dụng không. Vị trí của bạn không được gửi đi đâu cả; chỉ các nơi bạn lưu mới được giữ."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当你轻点「签到」、设置地点或使用你所在的国家时，Demora 会读取一次你的位置，以判断某条规则的地点或国家是否适用。你的位置不会被发送到任何地方；只保存你保存的地点。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "當你點「簽到」、設定地點或使用你所在的國家時，Demora 會讀取一次你的位置，以判斷規則的地點或國家是否適用。你的位置不會傳送到任何地方；只會保留你儲存的地點。"
           }
         }
       }

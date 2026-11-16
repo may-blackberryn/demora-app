@@ -38,6 +38,7 @@ struct LatchApp: App {
                 // RTL (ar, he, ur) follows the in-app language, not the device.
                 // Sheets and covers inherit it from here.
                 .environment(\.layoutDirection, model.language.layoutDirection)
+                .background(UIKitDirectionSync(rightToLeft: model.language.isRightToLeft))
                 .onChange(of: model.language) { language in
                     language.applyUIKitLayoutDirection()
                 }
@@ -326,5 +327,34 @@ extension AppLanguage {
     func applyUIKitLayoutDirection() {
         UIView.appearance().semanticContentAttribute =
             isRightToLeft ? .forceRightToLeft : .forceLeftToRight
+    }
+}
+
+
+/// Brings UIKit views that already exist (an open navigation bar and its back
+/// button) to the language's direction when it changes, so switching between
+/// an RTL and an LTR language needs no relaunch. Reaches the window through its
+/// own view, not the app's scenes. The appearance proxy covers views made later.
+private struct UIKitDirectionSync: UIViewRepresentable {
+    let rightToLeft: Bool
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        let attribute: UISemanticContentAttribute = rightToLeft ? .forceRightToLeft : .forceLeftToRight
+        DispatchQueue.main.async {
+            guard let root = view.window, root.semanticContentAttribute != attribute else { return }
+            Self.apply(attribute, to: root)
+        }
+    }
+
+    private static func apply(_ attribute: UISemanticContentAttribute, to view: UIView) {
+        view.semanticContentAttribute = attribute
+        view.subviews.forEach { apply(attribute, to: $0) }
+        view.setNeedsLayout()
     }
 }

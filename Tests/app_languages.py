@@ -81,7 +81,7 @@ LEFTOVER_LIMIT = 0.10
 # report, Info.plist) publish only the original eight, so a translator finishing
 # a language in stage 2 doesn't make every generated --check stale. Stage 3 sets
 # it True and regenerates; AppLanguagesHarness.py --strict requires True.
-PUBLISH_NEW_LANGUAGES = False
+PUBLISH_NEW_LANGUAGES = True
 
 
 def path(code):
@@ -219,6 +219,15 @@ def validate(code, keys=None):
             problems.append(f'{key!r}: {why}')
     table = dict(pairs)
     missing = [key for key in keys if key not in table]
+    # Stage 3 found 24 files with the camera and check-in prompts swapped.
+    # In English and every language checked, camera < check-in < location in
+    # length, by a wide margin; an inverted order means swapped values.
+    plist = infoplist_keys()
+    prompts = [table.get(plist[name]) for name in
+               ('NSCameraUsageDescription', 'CheckIn', 'NSLocationWhenInUseUsageDescription')]
+    if all(prompts) and not len(prompts[0]) < len(prompts[1]) < len(prompts[2]):
+        problems.append('Info.plist prompts look swapped: the camera value should be the '
+                        'shortest and the While Using location value the longest')
     if state == 'complete':
         if missing:
             problems.append(f'marked complete but {len(missing)} keys are missing: {missing[:5]}')

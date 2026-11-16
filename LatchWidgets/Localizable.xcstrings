@@ -4,10 +4,46 @@
     "Changing soon": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يتغير قريبًا"
+          }
+        },
+        "bn": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "শিগগিরই বদলাবে"
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Canvia aviat"
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brzy se změní"
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ændres snart"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Ändert sich bald"
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Αλλάζει σύντομα"
           }
         },
         "en": {
@@ -22,16 +58,118 @@
             "value": "Cambia pronto"
           }
         },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muuttuu pian"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Bientôt modifié"
           }
         },
+        "gu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "જલદી બદલાશે"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "משתנה בקרוב"
+          }
+        },
         "hi": {
           "stringUnit": {
             "state": "translated",
             "value": "जल्द बदलेगा"
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uskoro se mijenja"
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hamarosan változik"
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Segera berubah"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambia a breve"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "まもなく変更"
+          }
+        },
+        "kn": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ಶೀಘ್ರದಲ್ಲಿ ಬದಲಾಗುತ್ತದೆ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "곧 바뀜"
+          }
+        },
+        "ml": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ഉടൻ മാറും"
+          }
+        },
+        "mr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "लवकरच बदलेल"
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Akan berubah tidak lama lagi"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Endres snart"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verandert binnenkort"
+          }
+        },
+        "or": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ଶୀଘ୍ର ବଦଳିବ"
+          }
+        },
+        "pa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ਜਲਦੀ ਬਦਲ ਰਿਹਾ ਹੈ"
           }
         },
         "pl": {
@@ -46,10 +184,88 @@
             "value": "Muda em breve"
           }
         },
+        "ro": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se schimbă în curând"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скоро изменится"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Čoskoro sa mení"
+          }
+        },
+        "sl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kmalu se spremeni"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ändras snart"
+          }
+        },
+        "ta": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "விரைவில் மாறும்"
+          }
+        },
+        "te": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "త్వరలో మారుతుంది"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กำลังจะเปลี่ยน"
+          }
+        },
         "tr": {
           "stringUnit": {
             "state": "translated",
             "value": "Yakında değişecek"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скоро зміниться"
+          }
+        },
+        "ur": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "جلد بدلنے والا"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sắp thay đổi"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "即将变化"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "即將改變"
           }
         }
       }
@@ -57,10 +273,46 @@
     "Now & next": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الآن والتالي"
+          }
+        },
+        "bn": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "এখন ও পরে"
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ara i després"
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teď a dál"
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nu og næste"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Jetzt & danach"
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Τώρα & μετά"
           }
         },
         "en": {
@@ -75,16 +327,118 @@
             "value": "Ahora y después"
           }
         },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nyt ja seuraavaksi"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Maintenant et après"
           }
         },
+        "gu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "હમણાં અને આગળ"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עכשיו והבא"
+          }
+        },
         "hi": {
           "stringUnit": {
             "state": "translated",
             "value": "अभी और आगे"
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sad i sljedeće"
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Most és következő"
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sekarang & berikutnya"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ora e dopo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今と次"
+          }
+        },
+        "kn": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ಈಗ ಮತ್ತು ಮುಂದೆ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금과 다음"
+          }
+        },
+        "ml": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ഇപ്പോഴും അടുത്തതും"
+          }
+        },
+        "mr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "आत्ता आणि पुढे"
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kini & seterusnya"
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nå og neste"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nu en straks"
+          }
+        },
+        "or": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ଏବେ ଓ ପରେ"
+          }
+        },
+        "pa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ਹੁਣ ਤੇ ਅੱਗੇ"
           }
         },
         "pl": {
@@ -99,10 +453,88 @@
             "value": "Agora e a seguir"
           }
         },
+        "ro": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acum și apoi"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сейчас и дальше"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teraz a ďalej"
+          }
+        },
+        "sl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zdaj in naslednje"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nu och nästa"
+          }
+        },
+        "ta": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "இப்போது & அடுத்து"
+          }
+        },
+        "te": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ఇప్పుడు & తర్వాత"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ตอนนี้และถัดไป"
+          }
+        },
         "tr": {
           "stringUnit": {
             "state": "translated",
             "value": "Şimdi ve sonra"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зараз і далі"
+          }
+        },
+        "ur": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ابھی اور آگے"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bây giờ & tiếp theo"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "现在与接下来"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在與接下來"
           }
         }
       }
@@ -110,10 +542,46 @@
     "See what's on now and what's next.": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "اطّلع على ما هو قيد التشغيل الآن وما يأتي بعده."
+          }
+        },
+        "bn": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "এখন কী চালু আর এরপর কী, দেখুন।"
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mira què hi ha activat ara i què ve després."
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Podívejte se, co platí teď a co přijde dál."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se, hvad der gælder nu, og hvad der kommer næste gang."
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Sieh, was gerade aktiv ist und was als Nächstes kommt."
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Δες τι ισχύει τώρα και τι έρχεται μετά."
           }
         },
         "en": {
@@ -128,16 +596,118 @@
             "value": "Ve qué está activo ahora y qué viene después."
           }
         },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Katso, mikä on voimassa nyt ja mitä tulee seuraavaksi."
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Voyez ce qui est actif et ce qui vient ensuite."
           }
         },
+        "gu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "હમણાં શું ચાલુ છે અને આગળ શું છે, જુઓ."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ראו מה פעיל עכשיו ומה הבא בתור."
+          }
+        },
         "hi": {
           "stringUnit": {
             "state": "translated",
             "value": "देखें कि अभी क्या सक्रिय है और आगे क्या होगा।"
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pogledaj što je sada aktivno i što slijedi."
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nézd meg, mi aktív most, és mi jön következőnek."
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lihat apa yang aktif sekarang dan apa yang berikutnya."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guarda cosa è attivo adesso e cosa viene dopo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今の状態と、次の予定を確認できます。"
+          }
+        },
+        "kn": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ಈಗ ಏನು ಜಾರಿಯಲ್ಲಿದೆ ಮತ್ತು ಮುಂದೆ ಏನು ಎಂದು ನೋಡಿ."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 켜진 것과 다음에 올 것을 확인해요."
+          }
+        },
+        "ml": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ഇപ്പോൾ എന്താണ് ഓണായിരിക്കുന്നതെന്നും അടുത്തത് എന്തെന്നും കാണുക."
+          }
+        },
+        "mr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "आत्ता काय चालू आहे आणि पुढे काय आहे, ते पाहा."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lihat apa yang aktif sekarang dan apa yang seterusnya."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se hva som gjelder nå, og hva som kommer neste gang."
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zie wat er nu actief is en wat er daarna komt."
+          }
+        },
+        "or": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ଏବେ କ’ଣ ଚାଲୁ ଅଛି ଓ ପରେ କ’ଣ ଅଛି, ଦେଖନ୍ତୁ।"
+          }
+        },
+        "pa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ਦੇਖੋ ਹੁਣ ਕੀ ਚੱਲ ਰਿਹਾ ਹੈ ਅਤੇ ਅੱਗੇ ਕੀ ਹੈ।"
           }
         },
         "pl": {
@@ -152,10 +722,88 @@
             "value": "Veja o que está ativo agora e o que vem a seguir."
           }
         },
+        "ro": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vezi ce este activ acum și ce urmează."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Что действует сейчас и что дальше."
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pozrite, čo platí teraz a čo bude ďalej."
+          }
+        },
+        "sl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poglej, kaj velja zdaj in kaj sledi."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se vad som gäller nu och vad som kommer härnäst."
+          }
+        },
+        "ta": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "இப்போது என்ன இயங்குகிறது, அடுத்து என்ன என்று பாருங்கள்."
+          }
+        },
+        "te": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ఇప్పుడు ఏది అమలులో ఉంది, తర్వాత ఏది వస్తుందో చూడండి."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ดูว่าอะไรเปิดอยู่ตอนนี้และอะไรจะมาถัดไป"
+          }
+        },
         "tr": {
           "stringUnit": {
             "state": "translated",
             "value": "Şu an neyin etkin olduğunu ve sırada ne olduğunu görün."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Що діє зараз і що далі."
+          }
+        },
+        "ur": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "دیکھیں ابھی کیا چل رہا ہے اور آگے کیا ہے۔"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xem điều gì đang bật và điều gì sắp tới."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看现在生效的和接下来的安排。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看目前生效的規則與接下來的安排。"
           }
         }
       }
@@ -163,10 +811,46 @@
     "Your next change and when it lands.": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تغييرك التالي ووقت سريانه."
+          }
+        },
+        "bn": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "আপনার পরের বদল আর সেটা কখন কার্যকর হবে।"
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El teu proper canvi i quan arriba."
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vaše nejbližší změna a kdy začne platit."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Din næste ændring, og hvornår den træder i kraft."
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Deine nächste Änderung und wann sie wirksam wird."
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Η επόμενη αλλαγή σου και πότε θα ισχύσει."
           }
         },
         "en": {
@@ -181,16 +865,118 @@
             "value": "Tu próximo cambio y cuándo se aplica."
           }
         },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seuraava muutoksesi ja milloin se tulee voimaan."
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Votre prochain changement et quand il s’applique."
           }
         },
+        "gu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "તમારો આગળનો ફેરફાર અને તે ક્યારે લાગુ થશે."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "השינוי הבא שלכם ומתי הוא נכנס לתוקף."
+          }
+        },
         "hi": {
           "stringUnit": {
             "state": "translated",
             "value": "आपका अगला बदलाव और वह कब लागू होगा।"
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tvoja sljedeća promjena i kada stupa na snagu."
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A következő változtatásod és mikor lép életbe."
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perubahan berikutnya dan kapan berlaku."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La tua prossima modifica e quando arriva."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "次の変更と、反映される時刻です。"
+          }
+        },
+        "kn": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ನಿಮ್ಮ ಮುಂದಿನ ಬದಲಾವಣೆ ಮತ್ತು ಅದು ಯಾವಾಗ ಜಾರಿಗೆ ಬರುತ್ತದೆ."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다음 변경과 적용 시점이에요."
+          }
+        },
+        "ml": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "നിങ്ങളുടെ അടുത്ത മാറ്റവും അത് എപ്പോൾ പ്രാബല്യത്തിൽ വരുമെന്നും."
+          }
+        },
+        "mr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "तुमचा पुढचा बदल आणि तो कधी लागू होईल."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perubahan anda yang seterusnya dan bila ia berkuat kuasa."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Din neste endring, og når den trer i kraft."
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Je volgende wijziging en wanneer die ingaat."
+          }
+        },
+        "or": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ଆପଣଙ୍କ ପରବର୍ତ୍ତୀ ବଦଳ ଓ ତାହା କେବେ ଲାଗୁ ହେବ।"
+          }
+        },
+        "pa": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ਤੁਹਾਡੀ ਅਗਲੀ ਤਬਦੀਲੀ ਅਤੇ ਉਹ ਕਦੋਂ ਲਾਗੂ ਹੋਵੇਗੀ।"
           }
         },
         "pl": {
@@ -205,10 +991,88 @@
             "value": "Sua próxima alteração e quando ela entra em vigor."
           }
         },
+        "ro": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Următoarea ta schimbare și când se aplică."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ваше следующее изменение и когда оно вступит в силу."
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vaša najbližšia zmena a kedy nastane."
+          }
+        },
+        "sl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tvoja naslednja sprememba in kdaj začne veljati."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Din nästa ändring och när den träder i kraft."
+          }
+        },
+        "ta": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "உங்கள் அடுத்த மாற்றமும் அது எப்போது அமலாகும் என்பதும்."
+          }
+        },
+        "te": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "మీ తదుపరి మార్పు, అది ఎప్పుడు అమలవుతుందో."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การเปลี่ยนแปลงครั้งถัดไปของคุณและเวลาที่จะมีผล"
+          }
+        },
         "tr": {
           "stringUnit": {
             "state": "translated",
             "value": "Sıradaki değişikliğiniz ve ne zaman uygulanacağı."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ваша наступна зміна і коли вона набуде чинності."
+          }
+        },
+        "ur": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "آپ کی اگلی تبدیلی اور وہ کب لاگو ہوگی۔"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thay đổi tiếp theo của bạn và khi nào nó có hiệu lực."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的下一个更改及其生效时间。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的下一項更改與生效時間。"
           }
         }
       }

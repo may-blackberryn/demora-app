@@ -592,6 +592,7 @@ struct ContactSquare<Destination: View>: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "arrow.up.right")
+                    .flipsForRightToLeftLayoutDirection(true)
                     .font(.callout.weight(.light)).foregroundStyle(Ink.faint)
             }
             .demoraSurface()
