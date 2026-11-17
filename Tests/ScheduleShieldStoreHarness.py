@@ -115,8 +115,13 @@ final class MemoryDefaults {
     var rejectWrites = false
     var rejectSynchronize = false
     var corruptWrittenValue = false
+    /// 2.0.1: the count reads back as missing (a failed verification) while
+    /// the written value is kept in `values`.
+    var failCountReadback = false
     func object(forKey key: String) -> Any? {
-        SharedStore.recordRuntimeRead(); return values[key]
+        SharedStore.recordRuntimeRead()
+        if failCountReadback && key == "latch.scheduleCategoryStores.v1" { return nil }
+        return values[key]
     }
     func bool(forKey key: String) -> Bool { object(forKey: key) as? Bool ?? false }
     func dictionaryRepresentation() -> [String: Any] { values }
@@ -243,6 +248,7 @@ func reset() {
     SharedStore.defaults.values = ["latch.scheduleCategoryStores.swept42.v1": true]
     SharedStore.defaults.writes = 0
     SharedStore.defaults.rejectWrites = false; SharedStore.defaults.rejectSynchronize = false
+    SharedStore.defaults.failCountReadback = false
     SharedStore.defaults.corruptWrittenValue = false
     SharedStore.enforcementDegraded = false; SharedStore.rejectCoordination = false
     SharedStore.coordinationCalls = 0; SharedStore.state = LatchState(); SharedStore.blockedIDs = []
@@ -339,13 +345,26 @@ failing.sessions = [BlockSession(name: "Free", kind: .free, selection: selection
 ShieldController.applyForHarness(failing)
 expect(named(0).shield.applicationCategories == nil && named(0).shield.webDomainCategories == nil, "actual free apply clears app/site cohort stores")
 
-// Failed synchronize may leave the larger count in process memory. The true
+// 2.0.1 device regression: synchronize() reporting false must NOT block
+// publishing (it did on a real iPhone, forever). Only the read-back decides.
+reset()
+expect(ShieldController.renderForHarness([spentC]), "synchronize-false fixture installed")
+SharedStore.defaults.rejectSynchronize = true
+expect(ShieldController.renderForHarness([spentC, newD]), "synchronize false alone publishes")
+expect(named(1).shield.applicationCategories == .specific(["D"]), "synchronize false still installs the new cohort")
+expect(!SharedStore.defaults.bool(forKey: unverified), "synchronize false leaves no stuck unverified flag")
+// A stuck flag from an older build clears on the next good read-back.
+SharedStore.defaults.values[unverified] = true
+expect(ShieldController.renderForHarness([spentC, newD]) && !SharedStore.defaults.bool(forKey: unverified),
+       "older build's stuck unverified flag clears")
+
+// A failed read-back may leave the larger count in process memory. The true
 // unverified flag must force a retry rather than trust that cached oldCount.
 reset()
 expect(ShieldController.renderForHarness([spentC]), "cached-count retry fixture installed")
-SharedStore.defaults.rejectSynchronize = true
+SharedStore.defaults.failCountReadback = true
 expect(!ShieldController.renderForHarness([spentC, newD]), "failed growth aborts renderer")
-expect(SharedStore.defaults.object(forKey: manifest) as? Int == 2 && SharedStore.defaults.bool(forKey: unverified),
+expect(SharedStore.defaults.values[manifest] as? Int == 2 && SharedStore.defaults.bool(forKey: unverified),
        "failed growth leaves cached larger count explicitly unverified")
 Trace.events = []
 expect(!ShieldController.renderForHarness([spentC, newD]), "same-sized retry cannot trust unverified cached count")
@@ -354,7 +373,7 @@ expect(Trace.events.contains("manifest:" + manifest) && Trace.events.contains("s
 expect(named(1).shield.applicationCategories == nil && named(1).shield.webDomainCategories == nil,
        "repeated failed verification never installs new cohort")
 expect(SharedStore.defaults.bool(forKey: unverified), "repeated failure retains unverified flag")
-SharedStore.defaults.rejectSynchronize = false; Trace.events = []
+SharedStore.defaults.failCountReadback = false; Trace.events = []
 expect(ShieldController.renderForHarness([spentC, newD]), "retry recovers after successful verification")
 expect(!SharedStore.defaults.bool(forKey: unverified), "successful cached-count retry clears unverified flag")
 expect(named(1).shield.applicationCategories == .specific(["D"])
@@ -450,11 +469,11 @@ SharedStore.simulating = false
 // A failed manifest write/synchronize/readback must abort before NEW settings.
 // Exercise direct renderer and actual caller independently from the same saved
 // one-cohort fixture; no claim about a failed synchronize's disk durability.
-for failureMode in 0..<3 {
+// (2.0.1: a failed synchronize alone is no longer a failure; see above.)
+for failureMode in [0, 2] {
     reset()
     expect(ShieldController.renderForHarness([spentC]), "publish-failure fixture installed")
     SharedStore.defaults.rejectWrites = failureMode == 0
-    SharedStore.defaults.rejectSynchronize = failureMode == 1
     SharedStore.defaults.corruptWrittenValue = failureMode == 2
     Trace.events = []
     expect(!ShieldController.renderForHarness([spentC, newD]), "failed manifest publish returns false (mode \(failureMode))")

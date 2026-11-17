@@ -115,8 +115,14 @@ struct ShieldController {
                 // suite, so a retry cannot trust a failed growth as oldCount.
                 SharedStore.defaults.set(true, forKey: categoryStoreUnverifiedKey)
                 SharedStore.defaults.set(highWater, forKey: categoryStoreCountKey)
-                guard SharedStore.defaults.synchronize(),
-                      SharedStore.defaults.object(forKey: categoryStoreCountKey) as? Int == highWater
+                // 2.0.1: only the read-back decides. A defaults write reaches
+                // the preferences daemon when it's made; `synchronize()` is
+                // documented as unnecessary, and its result can stay false
+                // (seen on a device: every refresh then failed this step, the
+                // unverified flag never cleared and category shields never
+                // published). It's still called as a harmless flush hint.
+                _ = SharedStore.defaults.synchronize()
+                guard SharedStore.defaults.object(forKey: categoryStoreCountKey) as? Int == highWater
                 else { return false }
                 SharedStore.defaults.set(false, forKey: categoryStoreUnverifiedKey)
             }
@@ -303,10 +309,11 @@ struct ShieldController {
         } else {
             // Coordination failure cannot silently drop a spent category.
             // Preserve old cohorts and conservatively apply all current ones.
-            dayNightSelected.shield.applicationCategories = plan.blocked.categoryTokens.isEmpty ? nil
-                : .specific(plan.blocked.categoryTokens)
-            dayNightSelected.shield.webDomainCategories = plan.blocked.categoryTokens.isEmpty ? nil
-                : .specific(plan.blocked.categoryTokens)
+            // Every category any cohort blocks, not just the baseline's.
+            let fallback = plan.blocked.categoryTokens
+                .union(plan.categoryShields.flatMap(\.categoryTokens))
+            dayNightSelected.shield.applicationCategories = fallback.isEmpty ? nil : .specific(fallback)
+            dayNightSelected.shield.webDomainCategories = fallback.isEmpty ? nil : .specific(fallback)
             SharedStore.recordEnforcementFailure(SharedStore.EnforcementKey.categoryShields,
                                                  detail: "category shields not published")
         }

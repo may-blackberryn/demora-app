@@ -2370,3 +2370,21 @@ the categories iOS never exempted); a 15-minute warning on a 15-minute window
 windows keep their old registration until the next full rebuild; whether
 Apple's 50-token cap is per store or combined needs a device test with 51+
 apps.
+
+### 2.0.1 device finding — category shields never published (2026-11-17)
+
+The owner's Details page showed one recorded failure, `shields.categories:
+category shields not published`, and "socials" still not blocked. Cause:
+`applyCategoryShields` required `UserDefaults.synchronize()` to return true;
+on the device it kept returning false, the `unverified` flag stayed set and
+every refresh failed this step (code unchanged since 2.0.0, so this likely
+caused the original banner).
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| The manifest read-back decides; `synchronize()` is only a flush hint | Apple documents it as unnecessary; defaults writes reach cfprefsd when made. Write-before-install ordering, which prevents stranding, is unchanged | Yes |
+| Fallback blocks the union of baseline and cohort categories | Defensive; review notes the sets are equal today | Yes |
+| Details lists each limit: blocked now (same baseline test as shields), limit-reached time, extra time, free-time credit, free period running | Review: the fallback would have blocked a spent category, so the next question is upstream (spent marker, extra/free/unblock) | Yes |
+
+Harness: new regression checks — `synchronize()` false alone publishes, and an
+older build's stuck flag clears. Not yet seen on the phone.

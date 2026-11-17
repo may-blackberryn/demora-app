@@ -603,6 +603,17 @@ struct SharedStore {
         }
     }
 
+    /// Read-only, for the diagnostics page: when each limit last reached its
+    /// threshold today (2.0.1).
+    static func limitThresholdCallbackTimes() -> [UUID: Date] {
+        let values = defaults.dictionary(forKey: thresholdCallbackTimesKey) as? [String: Double] ?? [:]
+        var out: [UUID: Date] = [:]
+        for (key, value) in values {
+            if let id = UUID(uuidString: key) { out[id] = Date(timeIntervalSince1970: value) }
+        }
+        return out
+    }
+
     static func clearLimitThresholdCallbacks() {
         defaults.removeObject(forKey: thresholdCallbackTimesKey)
     }
