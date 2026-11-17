@@ -80,7 +80,9 @@ enum GlobalWake {
         guard !SharedStore.simulating else { return false }
         let state = SharedStore.loadState()
         guard status(state: state) == .needsTap else { return false }
-        let release = TimeGuard.now().addingTimeInterval(
+        // A loosening wait starts at the later clock (2.0.1), like pending
+        // changes: a guarded clock that is behind can't make it end early.
+        let release = TimeGuard.looseningStart().addingTimeInterval(
             TimeInterval(state.wakeRule.waitMinutes) * 60)
         SharedStore.defaults.set(release, forKey: releaseKey)
         SharedStore.defaults.set(SharedStore.dayKey(for: Date()), forKey: dayKey)
@@ -121,8 +123,8 @@ enum GlobalWake {
         do {
             try MonitorRegistration.start(activity, during: schedule)
         } catch {
+            // MonitorRegistration recorded the failure under this monitor's name.
             NSLog("Demora: global wake release monitor failed: %@", String(describing: error))
-            SharedStore.enforcementDegraded = true
         }
     }
 }
@@ -1281,12 +1283,22 @@ enum ChangeEngine {
     @discardableResult
     private static func applyNow(changeIDs: [UUID],
                                  validate: ((LatchState, [PendingChange]) -> Bool)? = nil) -> Int {
-        var state = SharedStore.loadState()
         let requested = Set(changeIDs)
-        let matching = state.pending.filter { requested.contains($0.id) }
-        guard !matching.isEmpty,
-              validate?(state, matching) ?? true,
-              !hasUnappliedDueChanges(state, excluding: requested) else {
+        // Validate and mark due inside the state lock (2.0.1), so a snapshot
+        // read outside it can't overwrite the other process's newer write.
+        let matching = SharedStore.coordinateStateMutation { () -> [PendingChange] in
+            var state = SharedStore.loadState()
+            let matching = state.pending.filter { requested.contains($0.id) }
+            guard !matching.isEmpty,
+                  validate?(state, matching) ?? true,
+                  !hasUnappliedDueChanges(state, excluding: requested) else { return [] }
+            for index in state.pending.indices
+            where requested.contains(state.pending[index].id) {
+                state.pending[index].appliesAt = .distantPast
+            }
+            return SharedStore.save(state) ? matching : []
+        } ?? []
+        guard !matching.isEmpty else {
             #if DEBUG
             print("⚠️ applyNow: pending authorization changed or maintenance is due")
             #endif
@@ -1295,11 +1307,6 @@ enum ChangeEngine {
         #if DEBUG
         print("   applyNow OK: \(matching.count) change(s)")
         #endif
-        for index in state.pending.indices
-        where requested.contains(state.pending[index].id) {
-            state.pending[index].appliesAt = .distantPast
-        }
-        SharedStore.save(state)
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(
                 withIdentifiers: matching.map { $0.id.uuidString })
@@ -1327,7 +1334,7 @@ enum ChangeEngine {
         // lock), so the save is a compare-and-save against these bytes.
         let snapshot = SharedStore.stateBlob()
         var state = SharedStore.loadState()
-        let due = state.pending.filter(\.isDue).sorted { $0.appliesAt < $1.appliesAt }
+        var due = state.pending.filter(\.isDue).sorted { $0.appliesAt < $1.appliesAt }
         guard !due.isEmpty else { return }
         let stateBefore = state
         let newWakeGates = Set(due.compactMap { change -> UUID? in
@@ -1342,7 +1349,19 @@ enum ChangeEngine {
                   limit.wakeDelayMinutes == nil else { return nil }
             return id
         })
-        guard LimitFeatures.prepareNewWakeGates(newWakeGates) else { return }
+        if !LimitFeatures.prepareNewWakeGates(newWakeGates) {
+            // 2.0.1: only the wake-gate changes wait for the next pass. Before,
+            // one unpreparable gate held back every due change in the batch,
+            // including stricter ones like a new limit or Block now.
+            due.removeAll { change in
+                switch change.action {
+                case .setGroupWakeDelay(let target, _), .setGroupWakeSchedule(let target, _, _):
+                    return newWakeGates.contains(target)
+                default: return false
+                }
+            }
+            guard !due.isEmpty else { return }
+        }
 
         // Starting a session, changing an override, etc. does not alter daily
         // limit events. Restarting the daily monitor for every change exposed
@@ -1369,16 +1388,22 @@ enum ChangeEngine {
             default: return nil
             }
         })
-        let editedFeatureIDs = Set(due.compactMap { change -> UUID? in
-            guard case .configureLimit(let updated) = change.action,
-                  let old = state.limits.first(where: { $0.id == updated.id }),
-                  old.selection != updated.selection
-                    || old.wakeDelayMinutes != updated.wakeDelayMinutes
-                    || old.split != updated.split
-                    || old.extraTime != updated.extraTime
-            else { return nil }
-            return updated.id
-        })
+        // 2.0.1: reset only what each edit invalidates. Before, any split,
+        // wake or extra-time edit also erased today's free-time credit, the
+        // wake tap and an in-flight extra-time grant.
+        func editedIDs(_ changed: (AppLimit, AppLimit) -> Bool) -> Set<UUID> {
+            Set(due.compactMap { change -> UUID? in
+                guard case .configureLimit(let updated) = change.action,
+                      let old = state.limits.first(where: { $0.id == updated.id }),
+                      changed(old, updated) else { return nil }
+                return updated.id
+            })
+        }
+        let editedFeatureIDs = LimitFeatures.EditedLimits(
+            selection: editedIDs { $0.selection != $1.selection },
+            wake: editedIDs { $0.wakeDelayMinutes != $1.wakeDelayMinutes },
+            split: editedIDs { $0.split != $1.split },
+            extraTime: editedIDs { $0.extraTime != $1.extraTime })
         let editedSplitIDs = Set(due.compactMap { change -> UUID? in
             guard case .configureLimit(let updated) = change.action,
                   let old = state.limits.first(where: { $0.id == updated.id }),
@@ -1474,6 +1499,11 @@ enum ChangeEngine {
             if attempt < 2, SharedStore.stateBlob() != snapshot { applyDueChanges(attempt: attempt + 1) }
             return
         }
+        // Enforce the committed rules before the slower Screen Time
+        // registrations below (2.0.1). If the process is stopped part-way, a
+        // new block or session is already shielded. The refresh at the end
+        // re-derives everything again once monitors are in place.
+        ShieldController.refresh()
 
         if !dailyLimitsChanged, due.contains(where: {
             switch $0.action {
@@ -1524,11 +1554,37 @@ enum ChangeEngine {
         rescheduleApplyActivities(state: SharedStore.loadState())
         pruneExpiredSessions()
         prunePastPlanned()
+        repairSessionCleanupActivities()
         reconcileFreeWindow()
         LimitFeatures.reconcile(state: SharedStore.loadState())
         GlobalWake.reconcile(state: SharedStore.loadState())
         DayNightWake.reconcile(state: SharedStore.loadState())
+        repairMissingDailyMonitor()
+        pruneEnforcementFailures()
         ShieldController.refresh()
+    }
+
+    /// Forget monitor failures that are fixed or no longer relevant (2.0.1).
+    static func pruneEnforcementFailures() {
+        guard !SharedStore.enforcementFailures.isEmpty else { return }
+        let state = SharedStore.loadState()
+        let running = Set(DeviceActivityCenter().activities.map(\.rawValue))
+        let needed = SharedStore.simulating ? [] : MonitoringBudget.reservations(state: state)
+        SharedStore.pruneEnforcementFailures(running: running, needed: needed)
+    }
+
+    /// Re-register the daily limit monitor only when it is missing (2.0.1).
+    /// Before, only an app foreground repaired it, so a failed midnight
+    /// restart left every limit without a threshold for the rest of the day.
+    /// A running monitor is never restarted here: restarts can deliver
+    /// spurious immediate threshold callbacks.
+    static func repairMissingDailyMonitor() {
+        guard !SharedStore.simulating, !SharedStore.stateRecoveryNeeded else { return }
+        let state = SharedStore.loadState()
+        guard !state.limits.isEmpty else { return }
+        let daily = DeviceActivityName(LatchConstants.dailyActivityName)
+        guard !DeviceActivityCenter().activities.contains(daily) else { return }
+        reconfigureDailyMonitoring(state: state)
     }
 
     /// Foreground fallback for the midnight reset. iOS doesn't guarantee the
@@ -1554,11 +1610,17 @@ enum ChangeEngine {
 
     /// Planned windows in the past expire on their own — no delay needed.
     static func prunePastPlanned() {
-        var state = SharedStore.loadState()
-        let past = state.planned.filter(\.isPast)
+        // Read-modify-write inside the state lock (2.0.1): a snapshot read
+        // outside it could overwrite a change the other process just saved.
+        let past = SharedStore.coordinateStateMutation { () -> [PlannedWindow] in
+            var state = SharedStore.loadState()
+            let past = state.planned.filter(\.isPast)
+            guard !past.isEmpty else { return [] }
+            state.planned.removeAll(where: \.isPast)
+            SharedStore.save(state)
+            return past
+        } ?? []
         guard !past.isEmpty else { return }
-        state.planned.removeAll(where: \.isPast)
-        SharedStore.save(state)
         DeviceActivityCenter().stopMonitoring(
             past.map { DeviceActivityName($0.activityName) })
     }
@@ -1890,7 +1952,13 @@ enum ChangeEngine {
                 || $0.hasPrefix("day-night-boundary-")
         })
         if runningWindows != expectedWindows {
-            reconfigureWindowMonitoring(state: state)
+            // 2.0.1: repair by difference. A full teardown here restarted every
+            // healthy window on every foreground whenever iOS refused one of
+            // them; now only extra names stop and only missing ones start.
+            reconfigureWindowMonitoring(state: state,
+                                        onlyMissing: expectedWindows.subtracting(runningWindows),
+                                        extra: runningWindows.subtracting(expectedWindows),
+                                        running: running)
         } else if !SharedStore.simulating {
             // Echoes are redundant midnight wake-ups. Restore only the missing
             // ones without tearing down healthy enforcement windows.
@@ -2018,13 +2086,16 @@ enum ChangeEngine {
         includeBlockedLimits: Bool = false,
         recheckControlID: UUID? = nil
     ) -> Bool {
-        // Optimistic reset; any startMonitoring failure below (or in the window
-        // pass that follows) flips it back on. Drives the "enforcement degraded"
-        // banner.
-        SharedStore.enforcementDegraded = false
+        // 2.0.1: no optimistic reset of the warning here. Failures are kept per
+        // monitor and clear when that monitor registers (MonitorRegistration).
         let credit = SharedStore.loadFreeCreditByLimit()
         let center = DeviceActivityCenter()
         let daily = DeviceActivityName(LatchConstants.dailyActivityName)
+        // Stop first, as since 1.x: a fresh registration is what makes iOS
+        // re-evaluate already-fired events (recheck, free-window re-arm), and a
+        // failed start must not leave yesterday's events running. 2.0.1 closes
+        // the stop-then-fail gap instead: housekeeping re-registers a missing
+        // daily monitor (repairMissingDailyMonitor).
         center.stopMonitoring([daily])
         // Tutorial simulation: don't start any real limit monitoring.
         if SharedStore.simulating {
@@ -2100,7 +2171,6 @@ enum ChangeEngine {
         } catch {
             print("Demora: failed to start daily monitoring: \(error)")
             SharedStore.defaults.removeObject(forKey: dailyMonitorFingerprintKey)
-            SharedStore.enforcementDegraded = true
             return false
         }
     }
@@ -2118,7 +2188,22 @@ enum ChangeEngine {
     /// always recomputed from the wall clock, so a missed callback only
     /// delays a transition until the next wake-up.
     static func reconfigureWindowMonitoring(state: LatchState) {
+        reconfigureWindowMonitoring(state: state, onlyMissing: nil, extra: [], running: nil)
+    }
+
+    /// `onlyMissing == nil`: full rebuild (configuration changes). Otherwise a
+    /// repair: stop `extra`, register only the `onlyMissing` names, and keep
+    /// every healthy window and echo running.
+    private static func reconfigureWindowMonitoring(state: LatchState, onlyMissing: Set<String>?,
+                                                    extra: Set<String>, running: Set<String>?) {
         let center = DeviceActivityCenter()
+        if let onlyMissing {
+            if !extra.isEmpty { center.stopMonitoring(extra.map { DeviceActivityName($0) }) }
+            if SharedStore.simulating { return }
+            registerWindows(state: state, only: onlyMissing)
+            startMissingEchoActivities(alreadyRunning: running ?? Set(center.activities.map(\.rawValue)))
+            return
+        }
         let stale = center.activities.filter {
             $0.rawValue.hasPrefix("sched-") || $0.rawValue.hasPrefix("exempt-")
                 || $0.rawValue.hasPrefix("planned-")
@@ -2130,7 +2215,26 @@ enum ChangeEngine {
         if !stale.isEmpty { center.stopMonitoring(stale) }
         // Tutorial simulation: don't start any real window monitoring.
         if SharedStore.simulating { return }
+        registerWindows(state: state, only: nil)
 
+        // Post-midnight echoes: fixed activities whose only job is waking the
+        // extension shortly after midnight (00:05, 01:00, 06:00) so a missed
+        // midnight rollover gets retried — the 06:00 sweep lands before most
+        // people pick up their phone. The rollover is day-key-gated, so these
+        // are no-ops whenever the midnight reset already ran. Registered LAST so
+        // real enforcement activities claim the 20-activity budget first: a
+        // dropped echo is tolerated redundancy (no enforcementDegraded), whereas
+        // a dropped schedule/window is real lost enforcement.
+        startMissingEchoActivities(alreadyRunning: [])
+    }
+
+    /// Register schedule, free-period, boundary and planned windows; with
+    /// `only`, just the named ones.
+    private static func registerWindows(state: LatchState, only: Set<String>?) {
+        func startWindowActivities(prefix: String, start: Int, end: Int, recurrence: Recurrence) {
+            ChangeEngine.startWindowActivities(prefix: prefix, start: start, end: end,
+                                               recurrence: recurrence, only: only)
+        }
         for s in state.schedules {
             startWindowActivities(prefix: "sched-\(s.id.uuidString)",
                                   start: s.startMinutes, end: s.endMinutes,
@@ -2158,7 +2262,7 @@ enum ChangeEngine {
                                   start: minute, end: minute + 15, recurrence: .daily)
         }
         let cal = Calendar.current
-        for w in state.planned where !w.isPast {
+        for w in state.planned where !w.isPast && (only?.contains(w.activityName) ?? true) {
             // Round BOTH ends UP to the next whole minute. Truncated (minute-
             // granular) bounds fire a few seconds early: the start fires before
             // the window is active (so it doesn't turn on until the app is
@@ -2180,19 +2284,8 @@ enum ChangeEngine {
                     DeviceActivityName(w.activityName), during: schedule)
             } catch {
                 print("Demora: failed to schedule planned window: \(error)")
-                SharedStore.enforcementDegraded = true
             }
         }
-
-        // Post-midnight echoes: fixed activities whose only job is waking the
-        // extension shortly after midnight (00:05, 01:00, 06:00) so a missed
-        // midnight rollover gets retried — the 06:00 sweep lands before most
-        // people pick up their phone. The rollover is day-key-gated, so these
-        // are no-ops whenever the midnight reset already ran. Registered LAST so
-        // real enforcement activities claim the 20-activity budget first: a
-        // dropped echo is tolerated redundancy (no enforcementDegraded), whereas
-        // a dropped schedule/window is real lost enforcement.
-        startMissingEchoActivities(alreadyRunning: [])
     }
 
     /// Register only absent post-midnight echo activities. These are fallback
@@ -2218,9 +2311,11 @@ enum ChangeEngine {
     }
 
     private static func startWindowActivities(prefix: String, start: Int,
-                                              end: Int, recurrence: Recurrence) {
+                                              end: Int, recurrence: Recurrence,
+                                              only: Set<String>? = nil) {
         for window in MonitoringBudget.windows(prefix: prefix, start: start, end: end,
-                                                recurrence: recurrence) {
+                                                recurrence: recurrence)
+        where only?.contains(window.name) ?? true {
             let schedule = DeviceActivitySchedule(intervalStart: window.start,
                                                   intervalEnd: window.end, repeats: true,
                                                   warningTime: boundaryWarning)
@@ -2228,7 +2323,6 @@ enum ChangeEngine {
                 try MonitorRegistration.start(DeviceActivityName(window.name), during: schedule)
             } catch {
                 print("Demora: failed to start window activity \(window.name): \(error)")
-                SharedStore.enforcementDegraded = true
             }
         }
     }
@@ -2237,25 +2331,45 @@ enum ChangeEngine {
 
     /// One-shot activity so the extension cleans up (or, for unblock
     /// sessions, re-blocks) at session end even if the app stays closed.
+    ///
+    /// 2.0.1: the interval STARTS at the session end (rounded up to the
+    /// minute, so the callback lands at-or-after `endsAt`) and lasts the
+    /// 15-minute minimum. That gives three wakes after the end: interval start
+    /// at E, the end warning at E+10 and the interval end at E+15. Before, the
+    /// interval ran from now to max(end, now+16 min): short sessions ended up
+    /// to ~17 minutes late and longer ones had a single end callback.
     private static func startSessionCleanupActivity(_ session: BlockSession) {
         let cal = Calendar.current
-        // DeviceActivity schedules are minute-granular (and must span ≥15 min).
-        // The interval end is truncated to the minute, so we round the session
-        // end UP to the next whole minute — otherwise intervalDidEnd fires a few
-        // seconds BEFORE endsAt, the session still reads as active, nothing gets
-        // pruned, and the apps stay unblocked until Demora is next opened.
-        let target = max(session.endsAt, Date().addingTimeInterval(16 * 60))
-        let end = ceilToMinute(target, cal)
+        let start = ceilToMinute(max(session.endsAt, Date().addingTimeInterval(60)), cal)
+        let end = start.addingTimeInterval(15 * 60)
         let schedule = DeviceActivitySchedule(
             intervalStart: cal.dateComponents([.year, .month, .day, .hour, .minute],
-                                              from: Date().addingTimeInterval(60)),
+                                              from: start),
             intervalEnd: cal.dateComponents([.year, .month, .day, .hour, .minute],
                                             from: end),
             repeats: false,
             warningTime: boundaryWarning
         )
-        try? MonitorRegistration.start(
-            DeviceActivityName(session.activityName), during: schedule)
+        do {
+            try MonitorRegistration.start(
+                DeviceActivityName(session.activityName), during: schedule)
+        } catch {
+            // MonitorRegistration records the failure; housekeeping retries.
+            NSLog("Demora: session end monitor failed: %@", String(describing: error))
+        }
+    }
+
+    /// Re-register the end monitor of any active session that lost it
+    /// (2.0.1): a failed registration, or a process stopped between saving
+    /// the session and registering, used to leave no end callback at all.
+    static func repairSessionCleanupActivities() {
+        guard !SharedStore.simulating else { return }
+        let active = SharedStore.loadState().sessions.filter(\.isActive)
+        guard !active.isEmpty else { return }
+        let running = Set(DeviceActivityCenter().activities.map(\.rawValue))
+        for session in active where !running.contains(session.activityName) {
+            startSessionCleanupActivity(session)
+        }
     }
 
     /// Round up to the next whole minute (unchanged if already on a boundary),
@@ -2267,13 +2381,25 @@ enum ChangeEngine {
     }
 
     static func pruneExpiredSessions() {
-        var state = SharedStore.loadState()
-        let expired = state.sessions.filter { !$0.isActive }
+        // Read-modify-write inside the state lock (2.0.1): saving a snapshot
+        // read outside it could drop a just-queued or just-started session
+        // (e.g. Block now) that the other process saved in between.
+        var stillUsed = Set<String>()
+        let expired = SharedStore.coordinateStateMutation { () -> [BlockSession] in
+            var state = SharedStore.loadState()
+            let expired = state.sessions.filter { !$0.isActive }
+            guard !expired.isEmpty else { return [] }
+            state.sessions.removeAll { !$0.isActive }
+            stillUsed = Set(state.sessions.map(\.activityName))
+            SharedStore.save(state)
+            return expired
+        } ?? []
         guard !expired.isEmpty else { return }
-        state.sessions.removeAll { !$0.isActive }
-        SharedStore.save(state)
-        DeviceActivityCenter().stopMonitoring(
-            expired.map { DeviceActivityName($0.activityName) })
+        // A new check-in of the same When & where rule reuses its name.
+        let stale = Set(expired.map(\.activityName)).subtracting(stillUsed)
+        if !stale.isEmpty {
+            DeviceActivityCenter().stopMonitoring(stale.map { DeviceActivityName($0) })
+        }
         // A free session may have just expired — credit its in-window usage.
         reconcileFreeWindow()
         ShieldController.refresh()
@@ -2347,6 +2473,41 @@ enum ChangeEngine {
             // before it could rearm tracking with the saved selection.
             startFreeWindowTracking()
         }
+        if active { noteFreeWindowSourceEnds() }
+    }
+
+    /// Remember how long the active free sources were meant to last (2.0.1).
+    /// A session or planned free window has a fixed end; a recurring free
+    /// period's end isn't tracked here, so it leaves only the elapsed cap.
+    private static func noteFreeWindowSourceEnds() {
+        guard SharedStore.freeWindowStart != nil else { return }
+        let state = SharedStore.loadState()
+        if state.exemptions.contains(where: { $0.isActive() }) {
+            if !SharedStore.freeWindowUnbounded { SharedStore.freeWindowUnbounded = true }
+        }
+        let ends = state.planned.filter { $0.kind == .free && $0.isActive }.map(\.endsAt)
+            + state.sessions.filter { $0.kind == .free && $0.isActive }.map(\.endsAt)
+        guard let latest = ends.max() else { return }
+        if (SharedStore.freeWindowKnownEnd ?? .distantPast) < latest {
+            SharedStore.freeWindowKnownEnd = latest
+        }
+    }
+
+    /// Whole minutes a free window can honestly have used (2.0.1): from its
+    /// start to now, or to the latest known end of its free sources when every
+    /// source had one. Checkpoints and credit never exceed this, so neither a
+    /// late-processed end nor a bogus early Screen Time callback can inflate
+    /// a limit's threshold.
+    static func freeWindowCreditCap(now: Date = TimeGuard.now()) -> Int? {
+        guard let start = SharedStore.freeWindowStart else { return nil }
+        // Each comparison stays on one clock: guarded elapsed time, and the
+        // wall-clock known end against the wall-clock start.
+        var seconds = now.timeIntervalSince(start)
+        if !SharedStore.freeWindowUnbounded, let known = SharedStore.freeWindowKnownEnd {
+            let wallStart = SharedStore.freeWindowWallStart ?? start
+            seconds = min(seconds, known.timeIntervalSince(wallStart))
+        }
+        return max(0, Int((seconds / 60).rounded(.up)))
     }
 
     static func exemptWindowStarted() {
@@ -2359,6 +2520,9 @@ enum ChangeEngine {
                 SharedStore.loadBlockedLimitIDs()
             SharedStore.clearFreeWindowSuppressedLimitIDs()
             SharedStore.freeWindowStart = TimeGuard.now()
+            SharedStore.freeWindowWallStart = Date()
+            SharedStore.freeWindowKnownEnd = nil
+            SharedStore.freeWindowUnbounded = false
             SharedStore.saveFreeWindowUsage([:])
             startFreeWindowTracking()
         }
@@ -2408,7 +2572,6 @@ enum ChangeEngine {
                 during: schedule, events: events)
         } catch {
             print("Demora: failed to start free-window tracking: \(error)")
-            SharedStore.enforcementDegraded = true
         }
     }
 
@@ -2433,8 +2596,10 @@ enum ChangeEngine {
             id = UUID(uuidString: String(identity))
         }
         guard let id else { return }
+        // A rung can't exceed the minutes the window has been open (2.0.1).
+        let capped = min(minutes, freeWindowCreditCap() ?? minutes)
         var usage = SharedStore.loadFreeWindowUsage()
-        usage[id] = max(usage[id] ?? 0, minutes)
+        usage[id] = max(usage[id] ?? 0, capped)
         SharedStore.saveFreeWindowUsage(usage)
     }
 
@@ -2449,7 +2614,9 @@ enum ChangeEngine {
         var shouldRearmDailyMonitoring = false
         var shouldRearmSplitMonitoring = false
         if SharedStore.freeWindowStart != nil {
-            let usage = SharedStore.loadFreeWindowUsage()
+            // Credit only the minutes the free sources really covered (2.0.1).
+            let cap = freeWindowCreditCap() ?? 0
+            let usage = SharedStore.loadFreeWindowUsage().mapValues { min($0, cap) }
             let suppressed = SharedStore.loadFreeWindowSuppressedLimitIDs()
             let suppressedSplit = LimitFeatures.takeSuppressedSplitIDs()
             var credit = SharedStore.loadFreeCreditByLimit()
@@ -2458,7 +2625,13 @@ enum ChangeEngine {
             }
             SharedStore.saveFreeCreditByLimit(credit)
             if let start = SharedStore.freeWindowStart {
-                LimitFeatures.creditFreeUsage(usage, from: start, to: Date(),
+                // Split portions are credited by when the free time really
+                // was, not when its end got processed (2.0.1).
+                var end = Date()
+                if !SharedStore.freeWindowUnbounded, let known = SharedStore.freeWindowKnownEnd {
+                    end = min(end, known)
+                }
+                LimitFeatures.creditFreeUsage(usage, from: start, to: end,
                                               state: SharedStore.loadState())
             }
 
@@ -2478,6 +2651,9 @@ enum ChangeEngine {
 
             SharedStore.saveFreeWindowUsage([:])
             SharedStore.freeWindowStart = nil
+            SharedStore.freeWindowWallStart = nil
+            SharedStore.freeWindowKnownEnd = nil
+            SharedStore.freeWindowUnbounded = false
             SharedStore.freeWindowTrackingEpoch = nil
             SharedStore.freeWindowBlockedSnapshot = nil
             SharedStore.clearFreeWindowSuppressedLimitIDs()

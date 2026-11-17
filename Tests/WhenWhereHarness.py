@@ -197,7 +197,14 @@ enum LimitFeatures {
     static func prepareNewWakeGates(_ ids: Set<UUID>) -> Bool {
         let hook = duringApply; duringApply = nil; hook?(); return true
     }
-    static func resetEditedLimits(_ ids: Set<UUID>) {}
+    struct EditedLimits {
+        var selection: Set<UUID> = []
+        var wake: Set<UUID> = []
+        var split: Set<UUID> = []
+        var extraTime: Set<UUID> = []
+        var all: Set<UUID> { selection.union(wake).union(split).union(extraTime) }
+    }
+    static func resetEditedLimits(_ edited: EditedLimits) {}
     static func clearSplitMarkers(for ids: Set<UUID>) {}
     static func reconfigureSplitMonitoring(state: LatchState) {}
     static func reconcile(state: LatchState) {}

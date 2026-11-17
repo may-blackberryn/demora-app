@@ -47,6 +47,20 @@ enum TimeGuard {
 enum SharedStore {
     static var state = LatchState()
     static var enforcementDegraded = false
+    // 2.0.1 failure API, mapped onto the stub flag: recording sets it,
+    // clearing a key never clears a flag another failure set.
+    enum EnforcementKey {
+        static let stateLock = "state.lock"
+        static let categoryShields = "shields.categories"
+        static let limitRuntime = "runtime.limits"
+        static let dayNightRuntime = "runtime.dayNight"
+    }
+    static var enforcementFailureKeys: Set<String> = []
+    static func recordEnforcementFailure(_ key: String, detail: String, capacity: Bool = false) {
+        enforcementFailureKeys.insert(key); enforcementDegraded = true
+    }
+    static func clearEnforcementFailure(_ key: String) { enforcementFailureKeys.remove(key) }
+    static func hasEnforcementFailure(_ key: String) -> Bool { enforcementFailureKeys.contains(key) }
     static var simulating = false
     static let suite = "demora-monitoring-budget-tests-" + UUID().uuidString
     static let defaults = UserDefaults(suiteName: suite)!

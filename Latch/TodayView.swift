@@ -76,6 +76,8 @@ struct TodayAttentionCard: View {
     @Environment(\.demoraAccentColor) private var accentValue
     let needsPermission: Bool
     let monitoringIncomplete: Bool
+    var capacityLimited = false
+    var onDetails: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: DemoraSpace.s) {
@@ -83,7 +85,9 @@ struct TodayAttentionCard: View {
             if needsPermission && monitoringIncomplete {
                 Rectangle().fill(Ink.hairline).frame(height: 1)
             }
-            if monitoringIncomplete { EnforcementBanner() }
+            if monitoringIncomplete {
+                EnforcementBanner(capacityLimited: capacityLimited, onDetails: onDetails)
+            }
         }
         .paperCard(fill: Ink.tint(Ink.loosenPair(for: accentValue)))
     }

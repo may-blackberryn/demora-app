@@ -38,7 +38,10 @@ struct ShieldController {
                     overflow.categoryTokens.formUnion(group.categoryTokens)
                 }
                 groups = Array(groups.prefix(categoryStoreCapacity - 1)) + [overflow]
-                if !SharedStore.enforcementDegraded { SharedStore.enforcementDegraded = true }
+                // Fails safe (over-blocks); still worth showing. Recording an
+                // unchanged failure again doesn't rewrite preferences.
+                SharedStore.recordEnforcementFailure(SharedStore.EnforcementKey.categoryShields,
+                                                     detail: "category exceptions merged")
             }
             let raw = SharedStore.defaults.object(forKey: categoryStoreCountKey)
             let recorded = raw as? Int
@@ -105,9 +108,11 @@ struct ShieldController {
             refreshCoordinated()
             return true
         }) == true else {
-            if !SharedStore.enforcementDegraded { SharedStore.enforcementDegraded = true }
+            SharedStore.recordEnforcementFailure(SharedStore.EnforcementKey.stateLock,
+                                                 detail: "shield refresh couldn't take the state lock")
             return
         }
+        SharedStore.clearEnforcementFailure(SharedStore.EnforcementKey.stateLock)
     }
 
     private static func refreshCoordinated() {
@@ -126,7 +131,18 @@ struct ShieldController {
             clearAll()
             return
         }
-        apply(state: SharedStore.loadState())
+        // Missing or undecodable saved state is unknown, not "no rules": keep
+        // whatever shields are in place rather than lifting every block and
+        // the deletion lock (2.0.1). The next refresh with readable state
+        // re-derives everything.
+        guard let state = SharedStore.loadStateForEnforcement() else {
+            // Except the deletion lock: with unreadable rules the app can't
+            // save or recover by itself, and reinstalling must stay possible.
+            NSLog("Demora: saved rules unreadable; keeping app shields, lifting deletion lock")
+            store.application.denyAppRemoval = nil
+            return
+        }
+        apply(state: state)
     }
 
     /// Remove every shield this store owns.
@@ -185,6 +201,9 @@ struct ShieldController {
         if categoriesApplied {
             dayNightSelected.clearAllSettings()
             dayNightOther.clearAllSettings()
+            if plan.categoryShields.count <= categoryStoreCapacity {
+                SharedStore.clearEnforcementFailure(SharedStore.EnforcementKey.categoryShields)
+            }
         } else {
             // Coordination failure cannot silently drop a spent category.
             // Preserve old cohorts and conservatively apply all current ones.
@@ -192,7 +211,8 @@ struct ShieldController {
                 : .specific(plan.blocked.categoryTokens)
             dayNightSelected.shield.webDomainCategories = plan.blocked.categoryTokens.isEmpty ? nil
                 : .specific(plan.blocked.categoryTokens)
-            if !SharedStore.enforcementDegraded { SharedStore.enforcementDegraded = true }
+            SharedStore.recordEnforcementFailure(SharedStore.EnforcementKey.categoryShields,
+                                                 detail: "category shields not published")
         }
 
         // App-deletion lock (blocks deleting ANY app, incl. this one).
@@ -212,6 +232,9 @@ struct ShieldController {
 
     /// New day: nothing has hit its threshold and no minutes are used yet.
     static func clearForNewDay() {
+        // A late rollover can clear a block earned after midnight; the daily
+        // re-registration that follows (includesPastActivity) re-fires every
+        // limit genuinely spent today, so nothing is kept here.
         SharedStore.saveBlockedLimitIDs([])
         SharedStore.clearUsageTracking()
         // The reset ran, so the "still blocked?" fallback nudge is moot.

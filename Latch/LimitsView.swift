@@ -272,10 +272,16 @@ struct SleepBlockEditor: View {
     }
 }
 
-/// Shown on Limits and Home when iOS couldn't schedule all background monitors
-/// (too many limits/schedules for the ~20-activity cap), so a user knows some
-/// blocking may not run in the background instead of it failing silently.
+/// Shown on Today while a background-blocking failure is recorded, so a user
+/// knows some blocking may not run in the background instead of it failing
+/// silently. 2.0.1: only blames the number of rules when iOS's monitor limit
+/// was the actual error, and opens the diagnostics page.
 struct EnforcementBanner: View {
+    var capacityLimited = false
+    /// The screen owns the Details sheet, so it stays open when a successful
+    /// "Try again" removes this banner.
+    var onDetails: () -> Void = {}
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -283,8 +289,14 @@ struct EnforcementBanner: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(tr("Background blocking may be incomplete"))
                     .font(.subheadline.weight(.semibold)).foregroundStyle(Ink.ink)
-                Text(tr("iOS limits how many limits and schedules can run in the background at once. Removing a few restores full enforcement."))
+                Text(capacityLimited
+                     ? tr("iOS limits how many limits and schedules can run in the background at once. Removing a few restores full enforcement.")
+                     : tr("Part of Demora's background blocking couldn't be set up. It keeps trying on its own."))
                     .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(tr("Details")) { onDetails() }
+                    .font(.caption.weight(.semibold))
+                    .padding(.top, 2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

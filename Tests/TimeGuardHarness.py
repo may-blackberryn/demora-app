@@ -76,7 +76,9 @@ assert "$0.appliesAt > guardedNow" in resched and "startMonitoring" not in resch
     "only waiting changes, through the one registration path (scheduleApplyActivity)"
 assert "max(1, change.appliesAt.timeIntervalSince(TimeGuard.now()))" in span(engine, "private static func scheduleNotification("), \
     "the ready notification uses guarded remaining time"
-did_start = span(monitor, "override func intervalDidStart(")
+# 2.0.1: the override defers display publishing and calls this handler.
+assert "DisplayPublishing.deferring { handleIntervalDidStart(activity) }" in span(monitor, "override func intervalDidStart(")
+did_start = span(monitor, "private func handleIntervalDidStart(")
 assert did_start.index("ChangeEngine.applyDueChanges()") < did_start.index("raw.hasPrefix(LatchConstants.applyActivityPrefix)") \
     < did_start.index("ChangeEngine.rescheduleApplyActivities("), "an early apply callback re-registers"
 tick = span(app_model, "func tick()")

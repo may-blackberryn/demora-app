@@ -96,6 +96,10 @@ struct SharedStore {
         return replacement
     }
 
+    /// Installed by the host app at launch (extensions leave it nil). Returns
+    /// the closure that ends the background-time assertion.
+    static var holdBackgroundTime: (() -> (() -> Void))?
+
     private static var stateCoordinationURL: URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: LatchConstants.appGroupID)?
             .appendingPathComponent("stateMutation.lock")
@@ -107,6 +111,11 @@ struct SharedStore {
         let threadKey = "demora.stateMutation.coordinating"
         if Thread.current.threadDictionary[threadKey] as? Bool == true { return body() }
         guard let url = stateCoordinationURL else { return nil }
+        // Host only: keep the app running while it holds the cross-process
+        // lock, so iOS can't suspend it mid-write and leave the monitor
+        // extension waiting on the lock until it is killed (2.0.1).
+        let releaseBackgroundTime = holdBackgroundTime?()
+        defer { releaseBackgroundTime?() }
         var result: T?
         var error: NSError?
         var publish = false
@@ -120,11 +129,7 @@ struct SharedStore {
         if error != nil { return nil }
         // Notification and WidgetKit services run only after coordination is
         // released. Project the latest saved state, not a stale caller snapshot.
-        if publish {
-            let state = loadState()
-            DemoraNotifications.rescheduleFreeBoundaries(state: state)
-            DemoraWidgetSnapshot.publish(state: state)
-        }
+        if publish { DisplayPublishing.publish(.all) }
         return result
     }
     static var stateRecoveryNeeded: Bool {
@@ -217,16 +222,149 @@ struct SharedStore {
     /// setup — usually because there are more limits/schedules than iOS will
     /// monitor at once. Surfaced to the user so background blocking degrading
     /// isn't silent. Cleared by a clean reconfigure.
-    static var enforcementDegraded: Bool {
-        get { defaults.bool(forKey: "latch.enforcementDegraded") }
-        set { defaults.set(newValue, forKey: "latch.enforcementDegraded") }
+    // MARK: - Enforcement failures (2.0.1)
+    //
+    // Before 2.0.1 one sticky Bool covered 22 different failures, said nothing
+    // about which, and only the daily monitor restart cleared it. Now each
+    // failure is recorded under its own key (a monitor's activity name, or a
+    // fixed key below) and cleared when that same thing next succeeds or is
+    // no longer needed. The warning shows while any failure is recorded.
+
+    struct EnforcementFailure: Codable, Equatable {
+        var key: String
+        /// Technical detail for the diagnostics page (error description).
+        var detail: String
+        /// iOS refused because too many monitors were registered.
+        var capacity: Bool
+        var at: Date
     }
+
+    enum EnforcementKey {
+        /// The cross-process state lock couldn't be taken for a shield refresh.
+        static let stateLock = "state.lock"
+        /// Category shields couldn't be published (or overflowed the stores).
+        static let categoryShields = "shields.categories"
+        /// The per-limit wake/split/extra-time runtime file couldn't be used.
+        static let limitRuntime = "runtime.limits"
+        /// The day/night wake runtime couldn't be read or saved.
+        static let dayNightRuntime = "runtime.dayNight"
+    }
+
+    private static let enforcementFailuresKey = "latch.enforcementFailures.v1"
+    private static let legacyDegradedKey = "latch.enforcementDegraded"
+
+    static var enforcementFailures: [EnforcementFailure] {
+        guard let data = defaults.data(forKey: enforcementFailuresKey),
+              let values = try? JSONDecoder().decode([String: EnforcementFailure].self, from: data)
+        else { return [] }
+        return values.values.sorted { $0.at > $1.at }
+    }
+
+    private static func saveEnforcementFailures(_ values: [String: EnforcementFailure]) {
+        if values.isEmpty {
+            defaults.removeObject(forKey: enforcementFailuresKey)
+        } else if let data = try? JSONEncoder().encode(values) {
+            defaults.set(data, forKey: enforcementFailuresKey)
+        }
+    }
+
+    private static func failureMap() -> [String: EnforcementFailure] {
+        Dictionary(uniqueKeysWithValues: enforcementFailures.map { ($0.key, $0) })
+    }
+
+    /// Serializes the failure map across the app and extensions. Its body is
+    /// a defaults read-modify-write only (no other lock, no XPC), so taking it
+    /// inside another coordinated section cannot form a lock cycle.
+    private static func withFailureLock(_ body: () -> Void) {
+        guard let root = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: LatchConstants.appGroupID) else { body(); return }
+        var error: NSError?
+        var ran = false
+        NSFileCoordinator().coordinate(writingItemAt: root.appendingPathComponent("enforcementFailures.lock"),
+                                       options: .forMerging, error: &error) { _ in
+            ran = true
+            body()
+        }
+        if !ran { body() }
+    }
+
+    /// Keeps the first occurrence of an ongoing failure: repeating the same
+    /// failure on every refresh must not rewrite the observed suite.
+    static func recordEnforcementFailure(_ key: String, detail: String, capacity: Bool = false) {
+        if let existing = enforcementFailures.first(where: { $0.key == key }),
+           existing.detail == detail, existing.capacity == capacity { return }
+        withFailureLock {
+            var values = failureMap()
+            values[key] = EnforcementFailure(key: key, detail: detail, capacity: capacity, at: Date())
+            saveEnforcementFailures(values)
+        }
+    }
+
+    /// Writes only when the key was recorded: healthy paths call this often,
+    /// and SwiftUI observes this suite.
+    static func clearEnforcementFailure(_ key: String) {
+        guard hasEnforcementFailure(key) else { return }
+        withFailureLock {
+            var values = failureMap()
+            guard values.removeValue(forKey: key) != nil else { return }
+            saveEnforcementFailures(values)
+        }
+    }
+
+    static func hasEnforcementFailure(_ key: String) -> Bool {
+        enforcementFailures.contains { $0.key == key }
+    }
+
+    /// Drop monitor failures that no longer matter: the monitor is running
+    /// now, the rule that needed it is gone, or it is over a day old (a
+    /// one-shot release or session monitor that failed yesterday says nothing
+    /// about today). Also retires the pre-2.0.1 Bool, which nothing cleared
+    /// reliably. Fixed-key failures clear only when that thing next works.
+    static func pruneEnforcementFailures(running: Set<String>, needed: Set<String>,
+                                         now: Date = Date()) {
+        if defaults.object(forKey: legacyDegradedKey) != nil {
+            defaults.removeObject(forKey: legacyDegradedKey)
+        }
+        let fixed: Set<String> = [EnforcementKey.stateLock, EnforcementKey.categoryShields,
+                                  EnforcementKey.limitRuntime, EnforcementKey.dayNightRuntime]
+        withFailureLock {
+            var values = failureMap()
+            let before = values.count
+            values = values.filter { key, failure in
+                if fixed.contains(key) { return true }
+                guard !running.contains(key),
+                      needed.contains(key) || needed.contains(MonitoringBudget.normalize(key))
+                else { return false }
+                // The daily limit monitor stays visible for as long as it's missing.
+                return key == LatchConstants.dailyActivityName
+                    || now.timeIntervalSince(failure.at) < 24 * 3600
+            }
+            if values.count != before { saveEnforcementFailures(values) }
+        }
+    }
+
+    /// The warning banner shows while anything is recorded.
+    static var enforcementDegraded: Bool { !enforcementFailures.isEmpty }
+
+    /// Whether a recorded failure was iOS's monitor limit.
+    static var enforcementCapacityLimited: Bool { enforcementFailures.contains(where: \.capacity) }
 
     /// The saved state's raw bytes, for compare-and-save by a writer that
     /// must read its snapshot outside coordination (applyDueChanges, F2
     /// review). Read-only; nil before the first save.
     static func stateBlob() -> Data? {
         defaults.data(forKey: LatchConstants.stateKey)
+    }
+
+    /// The saved state for enforcement, or nil when it is missing or can't be
+    /// decoded. `loadState()` substitutes a blank setup in both cases, which
+    /// is right for editing but must never drive shields: applying a blank
+    /// setup would lift every block and the deletion lock (2.0.1). Missing
+    /// covers an unreadable App Group (e.g. before first unlock) too; keeping
+    /// the current shields is the safe answer until the rules can be read.
+    static func loadStateForEnforcement() -> LatchState? {
+        guard let data = defaults.data(forKey: LatchConstants.stateKey) else { return nil }
+        return try? JSONDecoder().decode(LatchState.self, from: data)
     }
 
     static func loadState() -> LatchState {
@@ -361,7 +499,18 @@ struct SharedStore {
 
     /// Limit IDs whose daily threshold has been reached today (written by the
     /// monitor extension, read by ShieldController).
+    ///
+    /// The file is the source of truth: writers replace it atomically under
+    /// file coordination and only then mirror it into defaults. A process's
+    /// defaults cache can lag another process's write, so a shield refresh in
+    /// the open app could otherwise drop a block the extension just added
+    /// (2.0.1). Reading the atomically renamed file needs no coordination, so
+    /// this stays safe inside `mutateBlockedLimitIDs`' closure callers too.
     static func loadBlockedLimitIDs() -> Set<UUID> {
+        if let data = try? Data(contentsOf: blockedLimitsFileURL),
+           let raw = try? JSONDecoder().decode([String].self, from: data) {
+            return Set(raw.compactMap(UUID.init(uuidString:)))
+        }
         guard let raw = defaults.array(forKey: LatchConstants.blockedKey) as? [String] else { return [] }
         return Set(raw.compactMap(UUID.init(uuidString:)))
     }
@@ -379,7 +528,7 @@ struct SharedStore {
                 }
             }
         }
-        DemoraWidgetSnapshot.publish(state: loadState())
+        DisplayPublishing.publish(.widget)
     }
 
     /// Safely load, modify, and save the blocked limit IDs with an atomic lock
@@ -409,7 +558,7 @@ struct SharedStore {
                 }
             }
         }
-        DemoraWidgetSnapshot.publish(state: loadState())
+        DisplayPublishing.publish(.widget)
     }
 
     // MARK: - Limit threshold verification
@@ -511,6 +660,39 @@ struct SharedStore {
         set { defaults.set(newValue?.timeIntervalSince1970 ?? 0, forKey: freeWindowStartKey) }
     }
 
+    /// Latest end of the free sources seen active in the current window
+    /// (sessions and planned free windows), or nil when unknown. 2.0.1 caps
+    /// the window's credit at the time up to this end, so usage after a free
+    /// session really ended (but before its end was processed) is not free.
+    private static let freeWindowKnownEndKey = "latch.freeWindowKnownEnd.v1"
+    /// Set when a recurring free period (no tracked end) took part in the
+    /// window: only the elapsed-time cap applies then.
+    private static let freeWindowUnboundedKey = "latch.freeWindowUnbounded.v1"
+
+    /// Wall-clock start of the current window (2.0.1), compared with the
+    /// wall-clock `freeWindowKnownEnd`; `freeWindowStart` stays guarded.
+    private static let freeWindowWallStartKey = "latch.freeWindowWallStart.v1"
+    static var freeWindowWallStart: Date? {
+        get {
+            let t = defaults.double(forKey: freeWindowWallStartKey)
+            return t > 0 ? Date(timeIntervalSince1970: t) : nil
+        }
+        set { defaults.set(newValue?.timeIntervalSince1970 ?? 0, forKey: freeWindowWallStartKey) }
+    }
+
+    static var freeWindowKnownEnd: Date? {
+        get {
+            let t = defaults.double(forKey: freeWindowKnownEndKey)
+            return t > 0 ? Date(timeIntervalSince1970: t) : nil
+        }
+        set { defaults.set(newValue?.timeIntervalSince1970 ?? 0, forKey: freeWindowKnownEndKey) }
+    }
+
+    static var freeWindowUnbounded: Bool {
+        get { defaults.bool(forKey: freeWindowUnboundedKey) }
+        set { defaults.set(newValue, forKey: freeWindowUnboundedKey) }
+    }
+
     /// Distinguishes callbacks from the current free-window monitor from
     /// delayed callbacks after a limit's selection changed and tracking was
     /// rearmed with different app tokens.
@@ -563,6 +745,9 @@ struct SharedStore {
         saveFreeCreditByLimit([:])
         saveFreeWindowUsage([:])
         freeWindowStart = nil
+        freeWindowKnownEnd = nil
+        freeWindowWallStart = nil
+        freeWindowUnbounded = false
         freeWindowTrackingEpoch = nil
         freeWindowBlockedSnapshot = nil
         clearFreeWindowSuppressedLimitIDs()
@@ -587,5 +772,51 @@ struct SharedStore {
     static func dayKey(for date: Date) -> String {
         let c = Calendar.current.dateComponents([.year, .month, .day], from: date)
         return "\(c.year ?? 0)-\(c.month ?? 0)-\(c.day ?? 0)"
+    }
+}
+
+/// Widget and notification projections are display-only. Inside a Screen Time
+/// monitor callback they must never run before shields are applied: the
+/// extension can be stopped at any point, and a block that never reached
+/// ManagedSettings is lost until the next wake (2.0.1). Callbacks wrap their
+/// work in `deferring`, which collects publish requests and runs them once at
+/// the end. Outside a deferral, publishing happens immediately as before.
+enum DisplayPublishing {
+    enum Kind { case widget, all }
+
+    private static let lock = NSLock()
+    private static var depth = 0
+    private static var pendingWidget = false
+    private static var pendingAll = false
+
+    static func deferring<T>(_ body: () -> T) -> T {
+        lock.lock(); depth += 1; lock.unlock()
+        let result = body()
+        lock.lock()
+        depth -= 1
+        let flush = depth == 0
+        let all = flush && pendingAll
+        let widget = flush && (pendingWidget || pendingAll)
+        if flush { pendingAll = false; pendingWidget = false }
+        lock.unlock()
+        if widget { run(all ? .all : .widget) }
+        return result
+    }
+
+    static func publish(_ kind: Kind) {
+        lock.lock()
+        if depth > 0 {
+            if kind == .all { pendingAll = true } else { pendingWidget = true }
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+        run(kind)
+    }
+
+    private static func run(_ kind: Kind) {
+        let state = SharedStore.loadState()
+        if kind == .all { DemoraNotifications.rescheduleFreeBoundaries(state: state) }
+        DemoraWidgetSnapshot.publish(state: state)
     }
 }

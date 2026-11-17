@@ -92,6 +92,7 @@ final class LocalDefaults {
     init() { storage = UserDefaults(suiteName: suite)! }
     func data(forKey key: String) -> Data? { storage.data(forKey: key) }
     func bool(forKey key: String) -> Bool { storage.bool(forKey: key) }
+    func object(forKey key: String) -> Any? { storage.object(forKey: key) }
     func set(_ value: Any?, forKey key: String) {
         writes.append(key)
         if !rejectWrites.contains(key) { storage.set(value, forKey: key) }
@@ -691,7 +692,10 @@ SharedStore.defaults.reset()
 if !failures.isEmpty { exit(1) }
 '''
 
-source = (infrastructure + store_logic + "\n}\n" + models + phrases + budget
+# 2.0.1: saves publish through the real DisplayPublishing (defined after
+# SharedStore in the same file), which calls the effect stubs above.
+source = (infrastructure + store_logic + "\n}\n" + block(store, "enum DisplayPublishing {") + "\n"
+          + models + phrases + budget
           + app_stub + block(app, "func completeInitialSetup(")
           + "\n" + block(app, "private func migrateScreenTimeCodeToKeychain()")
           + "\n" + block(app, "private func restoreFromReplay()") + "\n}\n" + checks)

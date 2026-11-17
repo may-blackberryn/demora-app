@@ -27,6 +27,7 @@ struct RulesView: View {
     @Environment(\.locale) private var locale
     @Environment(\.demoraAccentColor) private var accentValue
     @State private var path: [RulesRoute] = []
+    @State private var showDiagnostics = false
     // Read in events (appear, state refresh), never while drawing.
     @State private var blockedLimitIDs: Set<UUID> = []
     @State private var wakeOpens: [RuleRef: Date] = [:]
@@ -69,6 +70,8 @@ struct RulesView: View {
             .background(Ink.paper.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .refreshable { model.tick() }
+            // Owned here, not by the card: a successful "Try again" removes it.
+            .sheet(isPresented: $showDiagnostics) { BlockingDiagnosticsView() }
             .safeAreaInset(edge: .bottom) {
                 Button { showChooser = true } label: {
                     Label(tr("New rule"), systemImage: "plus")
@@ -158,12 +161,21 @@ struct RulesView: View {
         .accessibilityValue(dot ? tr("Rules overlap") : "")
     }
 
+    /// 2.0.1: blames the number of rules only when iOS's monitor limit was the
+    /// recorded error; opens the diagnostics page either way.
     private var monitoringCard: some View {
-        Text(tr("iOS can't watch all your rules in the background. Removing a few restores full blocking."))
-            .demoraType(.meta)
-            .foregroundStyle(Ink.ink)
-            .fixedSize(horizontal: false, vertical: true)
-            .paperCard(fill: Ink.tint(InkRole.loosen.pair(accent: accentValue)))
+        VStack(alignment: .leading, spacing: DemoraSpace.xs) {
+            Text(model.enforcementCapacityLimited
+                 ? tr("iOS can't watch all your rules in the background. Removing a few restores full blocking.")
+                 : tr("Part of Demora's background blocking couldn't be set up. It keeps trying on its own."))
+                .demoraType(.meta)
+                .foregroundStyle(Ink.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(tr("Details")) { showDiagnostics = true }
+                .font(.footnote.weight(.semibold))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .paperCard(fill: Ink.tint(InkRole.loosen.pair(accent: accentValue)))
     }
 
     // MARK: Your waits (§5.2)

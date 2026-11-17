@@ -46,9 +46,17 @@ final class AppModel: ObservableObject {
     @Published var todayRequest = UUID()
 
     /// Mirror of SharedStore.enforcementDegraded — drives the warning banner
-    /// when iOS couldn't schedule all the background monitors (too many
-    /// limits/schedules).
+    /// while any background-blocking failure is recorded (2.0.1: per monitor
+    /// or runtime, cleared when that thing next works).
     @Published var enforcementDegraded = false
+    /// Whether one of those failures was iOS's monitor limit, so the banner
+    /// only blames the number of rules when that's really the cause.
+    @Published var enforcementCapacityLimited = false
+
+    func refreshEnforcementStatus() {
+        enforcementDegraded = SharedStore.enforcementDegraded
+        enforcementCapacityLimited = SharedStore.enforcementCapacityLimited
+    }
 
     /// Demora-user contact codes that aren't currently reachable (their code
     /// isn't found in CloudKit — account gone, or a different build
@@ -138,7 +146,7 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             self.housekeepingInFlight = false
             self.state = SharedStore.loadState()
-            self.enforcementDegraded = SharedStore.enforcementDegraded
+            self.refreshEnforcementStatus()
             self.checkContactApprovals()
             self.checkContactInvites()
             self.sendPendingEmailInvites()
@@ -151,7 +159,7 @@ final class AppModel: ObservableObject {
             guard synced else { return }
             await ChangeEngine.housekeepingOffMain()
             self.state = SharedStore.loadState()
-            self.enforcementDegraded = SharedStore.enforcementDegraded
+            self.refreshEnforcementStatus()
         }
     }
 

@@ -77,6 +77,7 @@ struct HomeView: View {
     @State private var ledgerNavigationReset: UUID?
     @State private var ruleSheet: RuleSummaryRequest?
     @State private var showAddLimit = false
+    @State private var showDiagnostics = false
     @State private var showSession = false
     @State private var showCalendar = false
 
@@ -198,7 +199,9 @@ struct HomeView: View {
                     let needsPermission = model.state.isSetUp && !model.authorized
                     if needsPermission || model.enforcementDegraded {
                         TodayAttentionCard(needsPermission: needsPermission,
-                                           monitoringIncomplete: model.enforcementDegraded)
+                                           monitoringIncomplete: model.enforcementDegraded,
+                                           capacityLimited: model.enforcementCapacityLimited,
+                                           onDetails: { showDiagnostics = true })
                     }
                     TimelineView(.periodic(from: .now, by: 60)) { context in
                         let summary = NowSummary.make(state: model.state,
@@ -262,6 +265,7 @@ struct HomeView: View {
         }
         .sheet(item: $checkIn) { request in CheckInSheet(ruleID: request.ruleID) }
         .sheet(isPresented: $showAddLimit) { LimitEditorView(existing: nil) }
+        .sheet(isPresented: $showDiagnostics) { BlockingDiagnosticsView() }
         .sheet(isPresented: $showSession) { SessionStartView() }
         .sheet(isPresented: $showCalendar) {
             NavigationStack {

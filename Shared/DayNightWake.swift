@@ -75,9 +75,11 @@ enum DayNightWake {
         guard let entries = try? JSONDecoder().decode([String: Entry].self, from: data) else {
             // Preserve the unreadable data and the block, but don't leave a
             // nonfunctional wake action without a visible enforcement warning.
-            SharedStore.enforcementDegraded = true
+            SharedStore.recordEnforcementFailure(SharedStore.EnforcementKey.dayNightRuntime,
+                                                 detail: "wake times unreadable")
             return nil
         }
+        SharedStore.clearEnforcementFailure(SharedStore.EnforcementKey.dayNightRuntime)
         return entries
     }
 
@@ -93,7 +95,8 @@ enum DayNightWake {
                 guard status(group: group, at: wall, guardedNow: guarded) == .needsTap else { continue }
                 entries[group.id.uuidString] = Entry(day: cycle(group: group, at: wall),
                     epoch: group.wakeEpoch,
-                    release: guarded.addingTimeInterval(TimeInterval(group.wakeTiming(on: wall).waitMinutes) * 60))
+                    // Later clock (2.0.1): a lagging guarded clock can't end it early.
+                    release: TimeGuard.looseningStart(guarded: guarded, wall: wall).addingTimeInterval(TimeInterval(group.wakeTiming(on: wall).waitMinutes) * 60))
                 changed = true
             }
             guard changed else { return false }
@@ -160,12 +163,14 @@ enum DayNightWake {
                 repeats: false, warningTime: DateComponents(minute: 5)))
             if let data = try? JSONEncoder().encode(projection) {
                 SharedStore.defaults.set(data, forKey: projectionKey)
+                // A lost projection only costs one extra re-registration
+                // later; it isn't lost enforcement (2.0.1: no warning).
                 if SharedStore.defaults.data(forKey: projectionKey) != data {
-                    SharedStore.enforcementDegraded = true
+                    NSLog("Demora: day/night release projection not saved")
                 }
             }
         } catch {
-            SharedStore.enforcementDegraded = true
+            // MonitorRegistration recorded the failure under this monitor's name.
             NSLog("Demora: day/night release monitor failed: %@", String(describing: error))
         }
     }

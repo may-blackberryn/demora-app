@@ -100,6 +100,20 @@ enum SharedStore {
     static var storedBlob: Data? = try? JSONEncoder().encode(LatchState())
     static var simulating = false
     static var enforcementDegraded = false
+    // 2.0.1 failure API, mapped onto the stub flag: recording sets it,
+    // clearing a key never clears a flag another failure set.
+    enum EnforcementKey {
+        static let stateLock = "state.lock"
+        static let categoryShields = "shields.categories"
+        static let limitRuntime = "runtime.limits"
+        static let dayNightRuntime = "runtime.dayNight"
+    }
+    static var enforcementFailureKeys: Set<String> = []
+    static func recordEnforcementFailure(_ key: String, detail: String, capacity: Bool = false) {
+        enforcementFailureKeys.insert(key); enforcementDegraded = true
+    }
+    static func clearEnforcementFailure(_ key: String) { enforcementFailureKeys.remove(key) }
+    static func hasEnforcementFailure(_ key: String) -> Bool { enforcementFailureKeys.contains(key) }
     static var stateRecoveryNeeded = false
     static var rejectSave = false
     static var blockedIDs: Set<UUID> = []
@@ -212,8 +226,15 @@ enum LimitFeatures {
         edit(&values)
     }
     private static func scheduleWake(for id: UUID, at date: Date, prefix: String) {}
-    static func resetEditedLimits(_ ids: Set<UUID>) {
-        if !ids.isEmpty { SharedStore.usageResetCalls += 1 }
+    struct EditedLimits {
+        var selection: Set<UUID> = []
+        var wake: Set<UUID> = []
+        var split: Set<UUID> = []
+        var extraTime: Set<UUID> = []
+        var all: Set<UUID> { selection.union(wake).union(split).union(extraTime) }
+    }
+    static func resetEditedLimits(_ edited: EditedLimits) {
+        if !edited.all.isEmpty { SharedStore.usageResetCalls += 1 }
     }
     static func prepareNewWakeGates(_ ids: Set<UUID>) -> Bool { true }
     static func clearSplitMarkers(for ids: Set<UUID>) {}

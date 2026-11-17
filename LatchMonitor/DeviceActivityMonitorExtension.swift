@@ -13,10 +13,18 @@ import DeviceActivity
 import ManagedSettings
 import Foundation
 
+// 2.0.1: every callback defers widget/notification publishing until its
+// enforcement work is done (DisplayPublishing), and refreshes shields right
+// after the day rollover as well as at the end. iOS can stop this extension at
+// any point; shields must be the first thing that lands, not the last.
 class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
     override func intervalDidStart(for activity: DeviceActivityName) {
         super.intervalDidStart(for: activity)
+        DisplayPublishing.deferring { handleIntervalDidStart(activity) }
+    }
+
+    private func handleIntervalDidStart(_ activity: DeviceActivityName) {
         let raw = activity.rawValue
         DayNightWake.receivedActivity(raw)
         if raw == LatchConstants.dailyActivityName {
@@ -42,6 +50,9 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         // Every background wake can repair a missed midnight callback before
         // deriving weekday budgets and split/wake/pacing shields.
         ChangeEngine.rolloverIfNewDay()
+        // Clock-derived and idempotent: schedule, session and wake boundaries
+        // take effect now, before the slower maintenance below.
+        ShieldController.refresh()
         // The echo activities arrive here too; the guarded rollover above
         // is their retry path if midnight's daily callback was dropped.
         if raw.hasPrefix("exempt-") {
@@ -60,6 +71,10 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         if LimitFeatures.isFeatureActivity(raw) {
             LimitFeatures.receivedFeatureActivity(raw)
         }
+        // A session's end monitor starts at the session end (2.0.1).
+        if raw.hasPrefix("session-") {
+            ChangeEngine.pruneExpiredSessions()
+        }
         // Covers one-shot apply activities and schedule/session windows too.
         ChangeEngine.applyDueChanges()
         // An apply activity that started before its change was due would never
@@ -77,9 +92,14 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
     override func intervalDidEnd(for activity: DeviceActivityName) {
         super.intervalDidEnd(for: activity)
+        DisplayPublishing.deferring { handleIntervalDidEnd(activity) }
+    }
+
+    private func handleIntervalDidEnd(_ activity: DeviceActivityName) {
         let raw = activity.rawValue
         DayNightWake.receivedActivity(raw)
         ChangeEngine.rolloverIfNewDay()
+        ShieldController.refresh()
         if raw.hasPrefix("session-") {
             ChangeEngine.pruneExpiredSessions()
         }
@@ -103,12 +123,12 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     // callback left stale — missed window ends, due changes, day rollover.
     override func intervalWillStartWarning(for activity: DeviceActivityName) {
         super.intervalWillStartWarning(for: activity)
-        ChangeEngine.housekeeping()
+        DisplayPublishing.deferring { ChangeEngine.housekeeping() }
     }
 
     override func intervalWillEndWarning(for activity: DeviceActivityName) {
         super.intervalWillEndWarning(for: activity)
-        ChangeEngine.housekeeping()
+        DisplayPublishing.deferring { ChangeEngine.housekeeping() }
     }
 
     override func eventWillReachThresholdWarning(_ event: DeviceActivityEvent.Name,
@@ -124,6 +144,11 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name,
                                          activity: DeviceActivityName) {
         super.eventDidReachThreshold(event, activity: activity)
+        DisplayPublishing.deferring { handleThreshold(event, activity: activity) }
+    }
+
+    private func handleThreshold(_ event: DeviceActivityEvent.Name,
+                                 activity: DeviceActivityName) {
         let raw = event.rawValue
         if activity.rawValue == LatchConstants.dailyActivityName,
            raw.hasPrefix("recheck-control-"),

@@ -99,7 +99,7 @@ enum LimitFeatures {
     private static func loadAll() -> [UUID: LimitFeatureEntry] {
         guard let data = try? Data(contentsOf: fileURL) else {
             if FileManager.default.fileExists(atPath: fileURL.path) {
-                SharedStore.enforcementDegraded = true
+                SharedStore.recordEnforcementFailure(SharedStore.EnforcementKey.limitRuntime, detail: "limit runtime file")
                 SharedStore.defaults.set(false, forKey: splitReadyKey)
             }
             return [:]
@@ -107,10 +107,11 @@ enum LimitFeatures {
         guard let value = try? JSONDecoder().decode(
             [UUID: LimitFeatureEntry].self, from: data) else {
             NSLog("Demora: unreadable limit feature state; keeping split rules blocked")
-            SharedStore.enforcementDegraded = true
+            SharedStore.recordEnforcementFailure(SharedStore.EnforcementKey.limitRuntime, detail: "limit runtime file")
             SharedStore.defaults.set(false, forKey: splitReadyKey)
             return [:]
         }
+        SharedStore.clearEnforcementFailure(SharedStore.EnforcementKey.limitRuntime)
         return value
     }
 
@@ -129,7 +130,7 @@ enum LimitFeatures {
                         [UUID: LimitFeatureEntry].self, from: data) else {
                     // Preserve unreadable enforcement state; overwriting it
                     // with an empty dictionary could unspend today's rules.
-                    SharedStore.enforcementDegraded = true
+                    SharedStore.recordEnforcementFailure(SharedStore.EnforcementKey.limitRuntime, detail: "limit runtime file")
                     SharedStore.defaults.set(false, forKey: splitReadyKey)
                     return
                 }
@@ -144,17 +145,19 @@ enum LimitFeatures {
             } catch {
                 NSLog("Demora: failed to persist limit feature state: %@",
                       String(describing: error))
-                SharedStore.enforcementDegraded = true
+                SharedStore.recordEnforcementFailure(SharedStore.EnforcementKey.limitRuntime, detail: "limit runtime file")
                 SharedStore.defaults.set(false, forKey: splitReadyKey)
             }
         }
         if let coordinationError {
             NSLog("Demora: limit feature coordination failed: %@",
                   String(describing: coordinationError))
-            SharedStore.enforcementDegraded = true
+            SharedStore.recordEnforcementFailure(SharedStore.EnforcementKey.limitRuntime, detail: "limit runtime file")
             SharedStore.defaults.set(false, forKey: splitReadyKey)
         }
-        return saved && coordinationError == nil
+        let ok = saved && coordinationError == nil
+        if ok { SharedStore.clearEnforcementFailure(SharedStore.EnforcementKey.limitRuntime) }
+        return ok
     }
 
     private static func entry(_ id: UUID, at date: Date = Date()) -> LimitFeatureEntry {
@@ -233,7 +236,9 @@ enum LimitFeatures {
               let defaultWait = limit.wakeDelayMinutes, defaultWait >= 0,
               wakeState(for: limit, at: wall, guardedNow: now) == .needsTap else { return false }
         let delay = (limit.wakeSchedule ?? LimitWakeSchedule()).timing(on: wall, defaultWait: defaultWait).waitMinutes
-        let release = now.addingTimeInterval(TimeInterval(delay) * 60)
+        // Later clock (2.0.1): a lagging guarded clock can't end the wait early.
+        let release = TimeGuard.looseningStart(guarded: now, wall: wall)
+            .addingTimeInterval(TimeInterval(delay) * 60)
         let day = SharedStore.dayKey(for: wall)
         var installed = false
         guard mutate({ values in
@@ -296,7 +301,9 @@ enum LimitFeatures {
                 || ChangeEngine.wakeState(for: limit) == .awake),
               DeviceActivityCenter().activities.contains(
                   DeviceActivityName(LatchConstants.dailyActivityName)),
-              !SharedStore.enforcementDegraded else { return false }
+              // 2.0.1: only the daily monitor's health matters for extra time,
+              // not an unrelated failure elsewhere.
+              !SharedStore.hasEnforcementFailure(LatchConstants.dailyActivityName) else { return false }
         // The monitor lookup above is synchronous XPC. Never authorize from
         // the rule/policy snapshot taken before it, even on our serial queue.
         let state = SharedStore.loadState()
@@ -342,7 +349,7 @@ enum LimitFeatures {
             // coordination, maintenance, or monitor XPC in the validator.
             let fresh = SharedStore.loadState()
             let commitNow = TimeGuard.now()
-            guard !SharedStore.simulating, !SharedStore.enforcementDegraded,
+            guard !SharedStore.simulating, !SharedStore.hasEnforcementFailure(LatchConstants.dailyActivityName),
                   SharedStore.dayKey(for: commitNow) == requestDay,
                   extraTimeAuthorized(state: fresh, limit: limit, index: oldRequests,
                                       step: step, approvedPassword: approvedPassword,
@@ -419,7 +426,7 @@ enum LimitFeatures {
     /// granting an unverified allowance.
     static func extraUnblockedIDs(state: LatchState, at date: Date) -> Set<UUID> {
         guard state.limits.contains(where: { $0.extraTime != nil }),
-              !SharedStore.enforcementDegraded,
+              !SharedStore.hasEnforcementFailure(LatchConstants.dailyActivityName),
               DeviceActivityCenter().activities.contains(
                   DeviceActivityName(LatchConstants.dailyActivityName)) else {
             return []
@@ -625,24 +632,44 @@ enum LimitFeatures {
         }
     }
 
-    /// Retire usage events tied to an old selection/pacing policy. Keep an
-    /// already reached early block or cooldown, so editing cannot grant a
-    /// fresh allowance; require a new wake tap for the changed group.
-    static func resetEditedLimits(_ ids: Set<UUID>) {
+    /// Which applied `configureLimit` edits changed which part of a limit.
+    struct EditedLimits {
+        var selection: Set<UUID> = []
+        var wake: Set<UUID> = []
+        var split: Set<UUID> = []
+        var extraTime: Set<UUID> = []
+        var all: Set<UUID> { selection.union(wake).union(split).union(extraTime) }
+    }
+
+    /// Retire runtime tied to the part of a limit an edit changed (2.0.1:
+    /// only that part). Keep an already reached early block or cooldown, so
+    /// editing can never grant a fresh allowance.
+    /// - selection: free credits, wake tap and extra grant all described the
+    ///   old apps, so all reset (as before 2.0.1).
+    /// - wake: a new wake tap is required for the changed gate.
+    /// - split: portion credits no longer map onto the new portions.
+    /// - extra time: an in-flight grant must not carry into a different
+    ///   extra-time policy; the day's request count stays, so editing can't
+    ///   mint fresh requests.
+    static func resetEditedLimits(_ edited: EditedLimits) {
+        let ids = edited.all
         guard !ids.isEmpty else { return }
         mutate { values in
             for id in ids {
                 guard var value = values[id] else { continue }
-                value.wakeReleaseAt = nil
-                value.earlyFreeCredit = 0
-                value.middleFreeCredit = 0
-                value.lateFreeCredit = 0
-                // A delayed edit to the app selection or extra-time policy
-                // must not carry an in-flight grant into a different rule.
-                // Preserve the day's request count so editing cannot mint
-                // fresh requests.
-                value.extraActiveTier = 0
-                value.extraReleaseAt = nil
+                let selection = edited.selection.contains(id)
+                if selection || edited.wake.contains(id) {
+                    value.wakeReleaseAt = nil
+                }
+                if selection || edited.split.contains(id) {
+                    value.earlyFreeCredit = 0
+                    value.middleFreeCredit = 0
+                    value.lateFreeCredit = 0
+                }
+                if selection || edited.extraTime.contains(id) {
+                    value.extraActiveTier = 0
+                    value.extraReleaseAt = nil
+                }
                 value.paceCycleID = nil
                 value.paceCycleStart = nil
                 value.paceMonitorReady = false
@@ -651,11 +678,15 @@ enum LimitFeatures {
         }
         let center = DeviceActivityCenter()
         for id in ids {
-            center.stopMonitoring([
-                DeviceActivityName(pacePrefix + id.uuidString),
-                DeviceActivityName(paceTickPrefix + id.uuidString),
-                DeviceActivityName(extraReleasePrefix + id.uuidString),
-                DeviceActivityName(wakeReleasePrefix + id.uuidString)])
+            var names = [DeviceActivityName(pacePrefix + id.uuidString),
+                         DeviceActivityName(paceTickPrefix + id.uuidString)]
+            if edited.selection.contains(id) || edited.extraTime.contains(id) {
+                names.append(DeviceActivityName(extraReleasePrefix + id.uuidString))
+            }
+            if edited.selection.contains(id) || edited.wake.contains(id) {
+                names.append(DeviceActivityName(wakeReleasePrefix + id.uuidString))
+            }
+            center.stopMonitoring(names)
         }
     }
 
@@ -718,7 +749,11 @@ enum LimitFeatures {
         guard FileManager.default.fileExists(atPath: fileURL.path)
             || SharedStore.defaults.string(forKey: splitDayKey) != nil
         else { return }
-        mutate { $0.removeAll() }
+        // Keep entries already keyed to today's wall-clock day (2.0.1): a
+        // rollover that runs late must not erase a wake tap, split portion or
+        // extra-time grant earned after midnight. Older days are dropped.
+        let today = SharedStore.dayKey(for: Date())
+        mutate { entries in entries = entries.filter { $0.value.day == today } }
         SharedStore.defaults.removeObject(forKey: splitDayKey)
         SharedStore.defaults.set(false, forKey: splitReadyKey)
         let center = DeviceActivityCenter()
@@ -752,7 +787,32 @@ enum LimitFeatures {
              || !SharedStore.defaults.bool(forKey: splitReadyKey)))
     }
 
+    /// 2.0.1: the app and the monitor extension can rebuild at the same time
+    /// (midnight with the app open, a free period ending as the app opens).
+    /// Each rebuild writes a fresh epoch and drops callbacks from any other
+    /// epoch, so interleaved rebuilds could leave a bucket carrying a stale
+    /// epoch: that portion would never block. Rebuilds now run one at a time
+    /// across processes; the last one wins completely.
     static func reconfigureSplitMonitoring(state: LatchState) {
+        guard let root = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: LatchConstants.appGroupID) else {
+            reconfigureSplitMonitoringSerialized(state: state)
+            return
+        }
+        var error: NSError?
+        var ran = false
+        NSFileCoordinator().coordinate(writingItemAt: root.appendingPathComponent("splitRebuild.lock"),
+                                       options: .forMerging, error: &error) { _ in
+            ran = true
+            reconfigureSplitMonitoringSerialized(state: state)
+        }
+        if !ran {
+            NSLog("Demora: split rebuild lock failed: %@", String(describing: error))
+            reconfigureSplitMonitoringSerialized(state: state)
+        }
+    }
+
+    private static func reconfigureSplitMonitoringSerialized(state: LatchState) {
         let center = DeviceActivityCenter()
         SharedStore.defaults.set(false, forKey: splitReadyKey)
         let old = center.activities.filter { $0.rawValue.hasPrefix(splitPrefix) }
@@ -873,7 +933,6 @@ enum LimitFeatures {
         } catch {
             NSLog("Demora: split monitor %@ failed: %@", name,
                   String(describing: error))
-            SharedStore.enforcementDegraded = true
             return false
         }
     }
@@ -965,7 +1024,6 @@ enum LimitFeatures {
                 repeats: false))
         } catch {
             NSLog("Demora: wake-release monitor failed: %@", String(describing: error))
-            SharedStore.enforcementDegraded = true
         }
     }
 
@@ -1005,7 +1063,6 @@ enum LimitFeatures {
                 repeats: false))
         } catch {
             NSLog("Demora: pace wake monitor failed: %@", String(describing: error))
-            SharedStore.enforcementDegraded = true
         }
     }
 
@@ -1042,7 +1099,6 @@ enum LimitFeatures {
             }
         } catch {
             NSLog("Demora: pacing monitor failed: %@", String(describing: error))
-            SharedStore.enforcementDegraded = true
         }
     }
 

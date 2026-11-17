@@ -37,7 +37,10 @@ enum MonitorRegistration {
         }
         // A replacement is not another slot. Apple is still the final arbiter:
         // another process can register between occupancy and this XPC call.
-        do { try center.startMonitoring(name, during: schedule, events: events) }
+        do {
+            try center.startMonitoring(name, during: schedule, events: events)
+            SharedStore.clearEnforcementFailure(name.rawValue)
+        }
         catch {
             // Ask Apple first: an invalid schedule or denied authorization
             // must not evict working retries. Only a capacity error permits
@@ -55,19 +58,28 @@ enum MonitorRegistration {
                     }
                     do {
                         try center.startMonitoring(name, during: schedule, events: events)
+                        SharedStore.clearEnforcementFailure(name.rawValue)
                         return
                     } catch {
-                        SharedStore.enforcementDegraded = true
+                        record(name, error)
                         NSLog("Demora: monitor registration retry failed: %@", String(describing: error))
                         throw error
                     }
                 }
             }
             if !name.rawValue.hasPrefix("echo-") {
-                SharedStore.enforcementDegraded = true
+                record(name, error)
                 NSLog("Demora: monitor registration failed: %@", String(describing: error))
             }
             throw error
         }
+    }
+
+    /// Keyed by the activity name, so the warning clears when this monitor
+    /// next registers (or is no longer needed), not at an unrelated restart.
+    private static func record(_ name: DeviceActivityName, _ error: Error) {
+        let reason = error as? DeviceActivityCenter.MonitoringError
+        SharedStore.recordEnforcementFailure(name.rawValue, detail: String(describing: error),
+                                             capacity: reason == .excessiveActivities)
     }
 }

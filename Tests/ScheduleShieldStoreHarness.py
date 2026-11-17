@@ -163,6 +163,20 @@ enum SharedStore {
     static var isReplaying = false
     static var simulating = false
     static var enforcementDegraded = false
+    // 2.0.1 failure API, mapped onto the stub flag: recording sets it,
+    // clearing a key never clears a flag another failure set.
+    enum EnforcementKey {
+        static let stateLock = "state.lock"
+        static let categoryShields = "shields.categories"
+        static let limitRuntime = "runtime.limits"
+        static let dayNightRuntime = "runtime.dayNight"
+    }
+    static var enforcementFailureKeys: Set<String> = []
+    static func recordEnforcementFailure(_ key: String, detail: String, capacity: Bool = false) {
+        enforcementFailureKeys.insert(key); enforcementDegraded = true
+    }
+    static func clearEnforcementFailure(_ key: String) { enforcementFailureKeys.remove(key) }
+    static func hasEnforcementFailure(_ key: String) -> Bool { enforcementFailureKeys.contains(key) }
     static var rejectCoordination = false
     static var coordinationCalls = 0
     static var coordinationDepth = 0
@@ -181,9 +195,20 @@ enum SharedStore {
     }
     static func loadBackup() -> LatchState? { recordRuntimeRead(); return nil }
     static func loadState() -> LatchState { recordRuntimeRead(); return state }
+    /// 2.0.1: nil models missing/undecodable saved state (shields kept).
+    static var stateUnreadable = false
+    static func loadStateForEnforcement() -> LatchState? {
+        recordRuntimeRead(); return stateUnreadable ? nil : state
+    }
     static func loadBlockedLimitIDs() -> Set<UUID> { recordRuntimeRead(); return blockedIDs }
     static func saveBlockedLimitIDs(_ ids: Set<UUID>) { blockedIDs = ids }
-    static func clearUsageTracking() {}
+    static func clearUsageTracking() { thresholdTimes = [:] }
+    /// 2.0.1 midnight: blocks whose threshold fired after wall midnight stay.
+    static var thresholdTimes: [UUID: Date] = [:]
+    static func limitsConfirmedSince(_ date: Date, among ids: Set<UUID>) -> Set<UUID> {
+        Set(ids.filter { (thresholdTimes[$0] ?? .distantPast) >= date })
+    }
+    static func recordLimitThresholdCallback(_ id: UUID, at date: Date = Date()) { thresholdTimes[id] = date }
 }
 enum ChangeEngine { static func cancelResetNudge() {} }
 // Same-file extension only exposes private entry points to tests. It changes

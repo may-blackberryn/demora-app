@@ -24,6 +24,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = "da9b6d3889b11fff8919a8a8470300069e08c930"
+GUARDED_RELEASE = "5cc0eba"  # 2.0.0 as submitted; see guard_originals
 
 
 def span(source, signature):
@@ -265,7 +266,12 @@ def guard_originals():
     for name, signature in specs.items():
         path = "Shared/" + name
         old = subprocess.check_output(["git", "show", BASELINE + ":" + path], cwd=ROOT, text=True)
-        new = (ROOT / path).read_text()
+        # 2.0.1 (docs/blocking-fixes-2.0.1.md): the owner authorized engine
+        # changes to these files. This guard proves what it always proved —
+        # that the read-only wake reminder added nothing else — on the 2.0.0
+        # release, where that claim was verified. Behaviour checks below still
+        # run against the current sources.
+        new = subprocess.check_output(["git", "show", GUARDED_RELEASE + ":" + path], cwd=ROOT, text=True)
         allowed = [addition_lines(new, *span(new, signature))]
         if name == "ChangeEngine.swift":
             hook = "                DemoraWidgetSnapshot.refresh()\n"
@@ -290,8 +296,8 @@ def guard_originals():
             restored = without_when_where_insertions(old, restored)
         assert "".join(restored) == old, f"{path}: removal did not exactly restore baseline\n" + "".join(
             difflib.unified_diff(old.splitlines(True), restored))
-        sources[name] = new
-    print("Source guard: three engine files exactly match verified baseline after approved additions are removed", flush=True)
+        sources[name] = (ROOT / path).read_text()
+    print("Source guard: three engine files in 2.0.0 exactly match verified baseline after approved additions are removed", flush=True)
     sources["TimeGuard.swift"] = (ROOT / "Shared/TimeGuard.swift").read_text()
     return sources
 
@@ -382,6 +388,20 @@ enum SharedStore {
     static var state = LatchState()
     static var simulating = false
     static var enforcementDegraded = false { didSet { Effects.flags += 1 } }
+    // 2.0.1 failure API, mapped onto the stub flag: recording sets it,
+    // clearing a key never clears a flag another failure set.
+    enum EnforcementKey {
+        static let stateLock = "state.lock"
+        static let categoryShields = "shields.categories"
+        static let limitRuntime = "runtime.limits"
+        static let dayNightRuntime = "runtime.dayNight"
+    }
+    static var enforcementFailureKeys: Set<String> = []
+    static func recordEnforcementFailure(_ key: String, detail: String, capacity: Bool = false) {
+        enforcementFailureKeys.insert(key); enforcementDegraded = true
+    }
+    static func clearEnforcementFailure(_ key: String) { enforcementFailureKeys.remove(key) }
+    static func hasEnforcementFailure(_ key: String) -> Bool { enforcementFailureKeys.contains(key) }
     static var stateRecoveryNeeded = false { didSet { Effects.flags += 1 } }
     static func loadState() -> LatchState { state }
     static func coordinateStateMutation<T>(_ body: () -> T) -> T? {

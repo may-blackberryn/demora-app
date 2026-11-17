@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions:
             [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        SharedStore.holdBackgroundTime = { BackgroundTimeAssertion.begin() }
         #if DEBUG
         if DemoMode.isOn { return true }   // screenshot demo: no CloudKit or BG tasks
         #endif
@@ -102,5 +103,33 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             let applied = await ContactsRelay.processApprovalsInBackground()
             completionHandler(applied ? .newData : .noData)
         }
+    }
+}
+
+/// Asks iOS for a little background time while the app holds the shared state
+/// lock (2.0.1). Safe to call from any thread; the returned closure ends the
+/// assertion once (the expiration handler may end it first).
+enum BackgroundTimeAssertion {
+    private final class Token: @unchecked Sendable {
+        let lock = NSLock()
+        var id: UIBackgroundTaskIdentifier = .invalid
+        func end() {
+            lock.lock()
+            let current = id
+            id = .invalid
+            lock.unlock()
+            if current != .invalid { UIApplication.shared.endBackgroundTask(current) }
+        }
+    }
+
+    static func begin() -> () -> Void {
+        let token = Token()
+        let id = UIApplication.shared.beginBackgroundTask(withName: "demora.stateLock") {
+            token.end()
+        }
+        token.lock.lock()
+        token.id = id
+        token.lock.unlock()
+        return { token.end() }
     }
 }

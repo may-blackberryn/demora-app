@@ -57,11 +57,29 @@ struct FamilyActivitySelection: Codable, Equatable {
     var webDomainTokens: Set<String> = []
 }
 func tr(_ text: String) -> String { text }
-enum TimeGuard { static var date = Date(); static func now() -> Date { date } }
+enum TimeGuard {
+    static var date = Date(); static func now() -> Date { date }
+    /// Real rule is max(guarded, wall); this harness models one controlled clock.
+    static func looseningStart(guarded: Date = now(), wall: Date = Date()) -> Date { guarded }
+}
 enum SharedStore {
     static var state = LatchState()
     static var simulating = false
     static var enforcementDegraded = false
+    // 2.0.1 failure API, mapped onto the stub flag: recording sets it,
+    // clearing a key never clears a flag another failure set.
+    enum EnforcementKey {
+        static let stateLock = "state.lock"
+        static let categoryShields = "shields.categories"
+        static let limitRuntime = "runtime.limits"
+        static let dayNightRuntime = "runtime.dayNight"
+    }
+    static var enforcementFailureKeys: Set<String> = []
+    static func recordEnforcementFailure(_ key: String, detail: String, capacity: Bool = false) {
+        enforcementFailureKeys.insert(key); enforcementDegraded = true
+    }
+    static func clearEnforcementFailure(_ key: String) { enforcementFailureKeys.remove(key) }
+    static func hasEnforcementFailure(_ key: String) -> Bool { enforcementFailureKeys.contains(key) }
     static let suite = "demora-wake-runtime-test." + UUID().uuidString
     static let defaults = UserDefaults(suiteName: suite)!
     static func loadState() -> LatchState { state }

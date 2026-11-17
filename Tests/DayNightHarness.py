@@ -59,6 +59,9 @@ func tr(_ text: String) -> String { text }
 enum TimeGuard {
     static var date = Date()
     static func now() -> Date { date }
+    /// The real rule is max(guarded, wall). This harness models a single
+    /// controlled clock (wall == guarded), so the later clock is `guarded`.
+    static func looseningStart(guarded: Date = now(), wall: Date = Date()) -> Date { guarded }
 }
 final class LocalDefaults {
     let suite = "demora-day-night-tests-" + UUID().uuidString
@@ -101,8 +104,16 @@ enum MonitorFailure: Error { case injected }
 // Registration policy has its own production-body harness. This adapter keeps
 // these existing tests focused on wake state and injected monitor effects.
 enum MonitorRegistration {
+    /// Mirrors the real one (2.0.1): failures are recorded under the
+    /// monitor's name and cleared when it next registers.
     static func start(_ name: DeviceActivityName, during schedule: DeviceActivitySchedule) throws {
-        try DeviceActivityCenter().startMonitoring(name, during: schedule)
+        do {
+            try DeviceActivityCenter().startMonitoring(name, during: schedule)
+            SharedStore.clearEnforcementFailure(name.rawValue)
+        } catch {
+            SharedStore.recordEnforcementFailure(name.rawValue, detail: String(describing: error))
+            throw error
+        }
     }
 }
 struct DeviceActivityCenter {
@@ -132,6 +143,20 @@ enum SharedStore {
     static var simulating = false
     static var stateRecoveryNeeded = false
     static var enforcementDegraded = false
+    // 2.0.1 failure API, mapped onto the stub flag: recording sets it,
+    // clearing a key never clears a flag another failure set.
+    enum EnforcementKey {
+        static let stateLock = "state.lock"
+        static let categoryShields = "shields.categories"
+        static let limitRuntime = "runtime.limits"
+        static let dayNightRuntime = "runtime.dayNight"
+    }
+    static var enforcementFailureKeys: Set<String> = []
+    static func recordEnforcementFailure(_ key: String, detail: String, capacity: Bool = false) {
+        enforcementFailureKeys.insert(key); enforcementDegraded = true
+    }
+    static func clearEnforcementFailure(_ key: String) { enforcementFailureKeys.remove(key) }
+    static func hasEnforcementFailure(_ key: String) -> Bool { enforcementFailureKeys.contains(key) }
     static var rejectCoordination = false
     static var coordinationCalls = 0
     static let redesignMigrationKey = "latch.redesign2.migrated"
@@ -815,13 +840,15 @@ scenario("missing/corrupt projection repaired without overwriting gate runtime")
     expect(try entries() == firstEntries, "projection repair mutated gate runtime")
 }
 
-scenario("projection cache rejected writes/readback failures surface degradation and retry safely") {
+scenario("projection cache rejected writes/readback failures stay quiet and retry safely") {
     let named = group("Gate", tokens(["app"]), wait: 120)
     SharedStore.state.dayNightGroups = [named]
     SharedStore.defaults.rejectKeys = [projectionKey]
     expect(DayNightWake.tapAll(), "verified gate write failed solely because projection cache was rejected")
     let firstEntries = try entries()
-    expect(SharedStore.enforcementDegraded && releaseName() != nil, "projection write failure not surfaced with real registered monitor")
+    // 2.0.1: a lost projection only costs a later re-registration; it is not
+    // lost enforcement, so it no longer raises the warning.
+    expect(!SharedStore.enforcementDegraded && releaseName() != nil, "projection write failure raised the warning or lost the real registered monitor")
     expect(SharedStore.defaults.storage.data(forKey: projectionKey) == nil, "rejected cache write persisted")
     SharedStore.defaults.rejectKeys = []; SharedStore.enforcementDegraded = false
     DayNightWake.reconcile(state: SharedStore.state)
@@ -829,7 +856,7 @@ scenario("projection cache rejected writes/readback failures surface degradation
     TimeGuard.date = TimeGuard.date.addingTimeInterval(300)
     SharedStore.defaults.failReadbackKeys = [projectionKey]
     DayNightWake.reconcile(state: SharedStore.state)
-    expect(SharedStore.enforcementDegraded, "projection readback failure not surfaced")
+    expect(!SharedStore.enforcementDegraded, "projection readback failure raised the warning (2.0.1: not lost enforcement)")
     // Accepted bytes may survive a failed verification read, as with entries.
     expect(try projection() != nil, "accepted projection write unexpectedly rolled back")
     SharedStore.defaults.failReadbackKeys = []

@@ -128,6 +128,12 @@ def source_checks(app, baseline):
         "            self.state = SharedStore.loadState()\n"
         "            self.enforcementDegraded = SharedStore.enforcementDegraded\n", 1)
     assert expected_tick != original_tick, "baseline tick changed"
+    # 2.0.1 (docs/blocking-fixes-2.0.1.md): the warning mirror also carries
+    # whether iOS's monitor limit was the cause; same two call sites.
+    assert expected_tick.count("            self.enforcementDegraded = SharedStore.enforcementDegraded\n") == 2
+    expected_tick = expected_tick.replace(
+        "            self.enforcementDegraded = SharedStore.enforcementDegraded\n",
+        "            self.refreshEnforcementStatus()\n")
     equal_source(block(app, "func tick()"), expected_tick, "tick (F1 forced re-sync only)")
 
     # F2 (docs/fixes-2.0-batch.md): a decline before the contact's add lands

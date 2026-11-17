@@ -137,7 +137,10 @@ SharedStore.defaults.removePersistentDomain(forName: SharedStore.canarySuite)
 print("Developer demos: 200 randomized migration/regeneration/isolation cases passed; source safety checks passed")
 '''
 
-source = infrastructure + migration + "\n}\n" + models + phrases + fixture + checks
+# 2.0.1: coordinated saves publish through the real DisplayPublishing,
+# defined after SharedStore; it calls the empty effect stubs above.
+source = (infrastructure + migration + "\n}\n" + block(store, "enum DisplayPublishing {") + "\n"
+          + models + phrases + fixture + checks)
 with tempfile.TemporaryDirectory(prefix="demora-developer-demo-tests-") as directory:
     source_path = Path(directory) / "main.swift"
     binary_path = Path(directory) / "checks"

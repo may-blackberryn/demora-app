@@ -100,6 +100,12 @@ struct LimitsUsageReport: nonisolated DeviceActivityReportScene {
     ) async -> [LimitUsageRow] {
         var perApp: [ApplicationToken: TimeInterval] = [:]
         var perCat: [ActivityCategoryToken: TimeInterval] = [:]
+        var perWeb: [WebDomainToken: TimeInterval] = [:]
+        // Which category each app/site was reported under (2.0.1), so a
+        // limit that selects both a category and an app inside it counts
+        // that time once, as Screen Time's own threshold does.
+        var appCategory: [ApplicationToken: ActivityCategoryToken] = [:]
+        var webCategory: [WebDomainToken: ActivityCategoryToken] = [:]
 
         for await each in data {
             for await segment in each.activitySegments {
@@ -110,26 +116,54 @@ struct LimitsUsageReport: nonisolated DeviceActivityReportScene {
                     for await app in category.applications {
                         if let atok = app.application.token {
                             perApp[atok, default: 0] += app.totalActivityDuration
+                            if let ctok = category.category.token { appCategory[atok] = ctok }
+                        }
+                    }
+                    for await site in category.webDomains {
+                        if let wtok = site.webDomain.token {
+                            perWeb[wtok, default: 0] += site.totalActivityDuration
+                            if let ctok = category.category.token { webCategory[wtok] = ctok }
                         }
                     }
                 }
             }
         }
 
+        let credit = loadFreeCredit()
         return loadLimits().map { limit in
             var used: TimeInterval = 0
             var reported = false
+            let categories = limit.selection.categoryTokens
             for t in limit.selection.applicationTokens {
+                // Already inside a selected category's total.
+                if let c = appCategory[t], categories.contains(c) { continue }
                 if let seconds = perApp[t] { used += seconds; reported = true }
             }
             for t in limit.selection.categoryTokens {
                 if let seconds = perCat[t] { used += seconds; reported = true }
             }
+            for t in limit.selection.webDomainTokens {
+                if let c = webCategory[t], categories.contains(c) { continue }
+                if let seconds = perWeb[t] { used += seconds; reported = true }
+            }
+            // Free-period minutes don't count against the limit; Demora
+            // credits them back to its threshold, so the row does the same.
+            let counted = max(0, Int(used / 60) - (credit[limit.id] ?? 0))
             return LimitUsageRow(id: limit.id, name: limit.name,
-                                 usedMinutes: Int(used / 60),
+                                 usedMinutes: counted,
                                  budget: limit.minutes(on: Date()),
                                  hasData: reported)
         }
+    }
+
+    /// Today's free-period credit per limit (minutes), read-only.
+    private func loadFreeCredit() -> [UUID: Int] {
+        guard let raw = UserDefaults(suiteName: AppGroup.id)?
+                .dictionary(forKey: "latch.freeCreditByLimit.v1") as? [String: Int]
+        else { return [:] }
+        var out: [UUID: Int] = [:]
+        for (key, value) in raw { if let id = UUID(uuidString: key) { out[id] = value } }
+        return out
     }
 
     private func loadLimits() -> [MiniLimit] {
