@@ -150,6 +150,7 @@ enum SharedStore {
         static let categoryShields = "shields.categories"
         static let limitRuntime = "runtime.limits"
         static let dayNightRuntime = "runtime.dayNight"
+        static let tokenCap = "shields.tokenCap"
     }
     static var enforcementFailureKeys: Set<String> = []
     static func recordEnforcementFailure(_ key: String, detail: String, capacity: Bool = false) {

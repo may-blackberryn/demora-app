@@ -1279,6 +1279,7 @@ let tamilStrings: [String: String] = [
     "with a trusted contact": "நம்பகமான தொடர்புடன்",
     "Give it a name.": "ஒரு பெயர் கொடுங்கள்.",
     "Choose at least one app.": "குறைந்தது ஒரு ஆப்பைத் தேர்ந்தெடுங்கள்.",
+    "“All except” can keep apps and websites, not whole categories.": "“இவை தவிர அனைத்தும்” ஆப்ஸ் மற்றும் இணையதளங்களை மட்டும் விலக்கலாம், முழு வகைகளை அல்ல.",
     "Choose at least one day.": "குறைந்தது ஒரு நாளைத் தேர்ந்தெடுங்கள்.",
     "Start and end can't be the same time.": "தொடக்கமும் முடிவும் ஒரே நேரமாக இருக்க முடியாது.",
     "End after it starts.": "தொடங்கிய பிறகு முடியட்டும்.",

@@ -1279,6 +1279,7 @@ let teluguStrings: [String: String] = [
     "with a trusted contact": "నమ్మకమైన కాంటాక్ట్‌తో",
     "Give it a name.": "దానికి ఒక పేరు ఇవ్వండి.",
     "Choose at least one app.": "కనీసం ఒక యాప్ ఎంచుకోండి.",
+    "“All except” can keep apps and websites, not whole categories.": "“ఇవి తప్ప అన్నీ” యాప్‌లు, వెబ్‌సైట్‌లను మాత్రమే ఉంచగలదు, మొత్తం వర్గాలను కాదు.",
     "Choose at least one day.": "కనీసం ఒక రోజు ఎంచుకోండి.",
     "Start and end can't be the same time.": "ప్రారంభం, ముగింపు ఒకే సమయం కాకూడదు.",
     "End after it starts.": "ప్రారంభం తర్వాత ముగించండి.",

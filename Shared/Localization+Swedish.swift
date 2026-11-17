@@ -1279,6 +1279,7 @@ let swedishStrings: [String: String] = [
     "with a trusted contact": "med en betrodd person",
     "Give it a name.": "Ge den ett namn.",
     "Choose at least one app.": "Välj minst en app.",
+    "“All except” can keep apps and websites, not whole categories.": "”Allt utom” kan undanta appar och webbplatser, inte hela kategorier.",
     "Choose at least one day.": "Välj minst en dag.",
     "Start and end can't be the same time.": "Start och slut kan inte vara samma tid.",
     "End after it starts.": "Slut efter starten.",

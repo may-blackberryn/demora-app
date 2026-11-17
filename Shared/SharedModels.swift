@@ -843,9 +843,11 @@ struct BlockSchedule: Codable, Identifiable, Equatable {
 
     /// An empty allowlist blocks everything; an empty blocklist blocks nothing.
     /// Categories and websites are valid selections, not just applications.
+    /// 2.0.1: an allowlist can't keep categories — iOS's "all except" shield
+    /// only exempts apps and websites, so they were silently blocked.
     func acceptsSelection(_ candidate: FamilyActivitySelection) -> Bool {
-        mode == .blockAllExcept
-            || !candidate.applicationTokens.isEmpty
+        if mode == .blockAllExcept { return candidate.categoryTokens.isEmpty }
+        return !candidate.applicationTokens.isEmpty
             || !candidate.categoryTokens.isEmpty
             || !candidate.webDomainTokens.isEmpty
     }

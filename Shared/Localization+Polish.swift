@@ -1249,6 +1249,7 @@ let polishStrings: [String: String] = [
     "with a trusted contact": "z zaufanym kontaktem",
     "Give it a name.": "Nadaj nazwę.",
     "Choose at least one app.": "Wybierz co najmniej jedną aplikację.",
+    "“All except” can keep apps and websites, not whole categories.": "„Wszystko oprócz” może zostawić aplikacje i strony, nie całe kategorie.",
     "Choose at least one day.": "Wybierz co najmniej jeden dzień.",
     "Start and end can't be the same time.": "Początek i koniec nie mogą być o tej samej godzinie.",
     "End after it starts.": "Koniec musi być po początku.",

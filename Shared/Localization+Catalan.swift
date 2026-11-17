@@ -1279,6 +1279,7 @@ let catalanStrings: [String: String] = [
     "with a trusted contact": "amb un contacte de confiança",
     "Give it a name.": "Posa-li un nom.",
     "Choose at least one app.": "Tria almenys una app.",
+    "“All except” can keep apps and websites, not whole categories.": "«Tot excepte» pot mantenir apps i llocs web, no categories senceres.",
     "Choose at least one day.": "Tria almenys un dia.",
     "Start and end can't be the same time.": "L'inici i el final no poden ser la mateixa hora.",
     "End after it starts.": "Acaba després de l'inici.",

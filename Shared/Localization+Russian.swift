@@ -1279,6 +1279,7 @@ let russianStrings: [String: String] = [
     "with a trusted contact": "с доверенным человеком",
     "Give it a name.": "Дайте ему название.",
     "Choose at least one app.": "Выберите хотя бы одно приложение.",
+    "“All except” can keep apps and websites, not whole categories.": "«Всё, кроме» может оставлять приложения и сайты, но не целые категории.",
     "Choose at least one day.": "Выберите хотя бы один день.",
     "Start and end can't be the same time.": "Начало и конец не могут совпадать.",
     "End after it starts.": "Конец должен быть после начала.",

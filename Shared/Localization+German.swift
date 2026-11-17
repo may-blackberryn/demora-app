@@ -1275,6 +1275,7 @@ let germanStrings: [String: String] = [
     "with a trusted contact": "mit einem Vertrauenskontakt",
     "Give it a name.": "Gib ihm einen Namen.",
     "Choose at least one app.": "Wähle mindestens eine App.",
+    "“All except” can keep apps and websites, not whole categories.": "„Alles außer“ kann Apps und Websites freilassen, keine ganzen Kategorien.",
     "Choose at least one day.": "Wähle mindestens einen Tag.",
     "Start and end can't be the same time.": "Beginn und Ende dürfen nicht gleich sein.",
     "End after it starts.": "Das Ende muss nach dem Beginn liegen.",

@@ -1279,6 +1279,7 @@ let slovakStrings: [String: String] = [
     "with a trusted contact": "s dôveryhodným kontaktom",
     "Give it a name.": "Dajte tomu názov.",
     "Choose at least one app.": "Vyberte aspoň jednu aplikáciu.",
+    "“All except” can keep apps and websites, not whole categories.": "„Všetko okrem“ môže ponechať aplikácie a weby, nie celé kategórie.",
     "Choose at least one day.": "Vyberte aspoň jeden deň.",
     "Start and end can't be the same time.": "Začiatok a koniec nemôžu byť v rovnakom čase.",
     "End after it starts.": "Koniec musí byť po začiatku.",

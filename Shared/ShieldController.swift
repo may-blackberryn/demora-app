@@ -13,14 +13,76 @@ struct ShieldController {
     static let store = ManagedSettingsStore(named: .init("latch.main"))
     private static let dayNightSelected = ManagedSettingsStore(named: .init("latch.dayNight.selected"))
     private static let dayNightOther = ManagedSettingsStore(named: .init("latch.dayNight.other"))
-    // Three legacy stores + at most 46 category cohorts stay below Apple's 50
-    // named-store ceiling. Names are shared by the host and all extensions.
-    private static let categoryStoreCapacity = 46
+    // Three legacy stores + at most 42 category cohorts + 4 overflow stores
+    // stay below Apple's 50 named-store ceiling. Names are shared by the host
+    // and all extensions. (2.0.0 allowed 46 cohorts; 42–45 are swept once.)
+    private static let categoryStoreCapacity = 42
+    private static let legacyCategoryStoreCapacity = 46
+    private static let legacyCohortsSweptKey = "latch.scheduleCategoryStores.swept42.v1"
+
+    // MARK: 50-token cap (2.0.1)
+    //
+    // Apple shields at most 50 app tokens and 50 web-domain tokens per store
+    // setting (documented for sites, categories and exceptions; reported for
+    // apps): with more, the store shields NOTHING. Up to 50, everything stays
+    // in `latch.main` exactly as before. Above that, each token goes to a
+    // store chosen by a stable hash of its bytes, so a token never moves
+    // between stores while the set changes around it. A full bucket, or an
+    // exception list over 50, is trimmed (under-blocking a few tokens, or
+    // over-blocking a few allowed ones) and recorded for Details.
+    private static let tokensPerStore = 50
+    private static let overflowStoreCount = 4
+    private static func overflowStore(_ index: Int) -> ManagedSettingsStore {
+        ManagedSettingsStore(named: .init("latch.overflow.\(index)"))
+    }
+
+    /// FNV-1a over the token's encoded bytes: stable across processes and
+    /// launches, unlike Swift's seeded `Hasher`.
+    private static func stableHash<T: Encodable>(_ token: T) -> UInt64 {
+        guard let data = try? JSONEncoder().encode(token) else { return 0 }
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in data { hash ^= UInt64(byte); hash = hash &* 0x100000001b3 }
+        // Finalizer (MurmurHash3 fmix64): FNV's low bits are skewed when
+        // encodings share a suffix, which would crowd one store.
+        hash ^= hash >> 33; hash = hash &* 0xff51afd7ed558ccd
+        hash ^= hash >> 33; hash = hash &* 0xc4ceb9fe1a85ec53
+        hash ^= hash >> 33
+        return hash
+    }
+
+    /// Store 0 is `latch.main`; 1… are the overflow stores.
+    private static func distribute<T: Hashable & Encodable>(_ tokens: Set<T>) -> (stores: [Set<T>], trimmed: Bool) {
+        var stores = Array(repeating: Set<T>(), count: 1 + overflowStoreCount)
+        if tokens.count <= tokensPerStore { stores[0] = tokens; return (stores, false) }
+        var trimmed = false
+        let ordered = tokens.map { ($0, stableHash($0)) }.sorted { $0.1 < $1.1 }
+        for (token, hash) in ordered {
+            // Home store by hash; if it's full, the next store with room.
+            let home = Int(hash % UInt64(stores.count))
+            if let bucket = (0..<stores.count).map({ (home + $0) % stores.count })
+                .first(where: { stores[$0].count < tokensPerStore }) {
+                stores[bucket].insert(token)
+            } else {
+                trimmed = true
+            }
+        }
+        return (stores, trimmed)
+    }
+
+    /// At most 50 exceptions, chosen stably. Dropped exceptions stay shielded.
+    private static func capped<T: Hashable & Encodable>(_ tokens: Set<T>) -> (tokens: Set<T>, trimmed: Bool) {
+        guard tokens.count > tokensPerStore else { return (tokens, false) }
+        let kept = tokens.map { ($0, stableHash($0)) }.sorted { $0.1 < $1.1 }.prefix(tokensPerStore).map(\.0)
+        return (Set(kept), true)
+    }
     private static let categoryStoreCountKey = "latch.scheduleCategoryStores.v1"
     private static let categoryStoreUnverifiedKey = "latch.scheduleCategoryStores.unverified.v1"
     private static func categoryStore(_ index: Int) -> ManagedSettingsStore {
         ManagedSettingsStore(named: .init("latch.schedule.category.\(index)"))
     }
+
+    /// Set while a refresh trims a token list to Apple's 50 (recorded after).
+    private static var tokenCapHit = false
 
     @discardableResult
     private static func applyCategoryShields(_ cohorts: [FamilyActivitySelection]) -> Bool {
@@ -76,14 +138,23 @@ struct ShieldController {
             // Install the new restrictions before retiring obsolete cohorts.
             for (index, group) in groups.enumerated() {
                 let target = categoryStore(index)
-                target.shield.applicationCategories = .specific(group.categoryTokens, except: group.applicationTokens)
-                target.shield.webDomainCategories = .specific(group.categoryTokens, except: group.webDomainTokens)
+                let apps = capped(group.applicationTokens), sites = capped(group.webDomainTokens)
+                if apps.trimmed || sites.trimmed { tokenCapHit = true }
+                target.shield.applicationCategories = .specific(group.categoryTokens, except: apps.tokens)
+                target.shield.webDomainCategories = .specific(group.categoryTokens, except: sites.tokens)
             }
             for index in groups.count..<highWater {
                 let target = categoryStore(index)
                 if target.shield.applicationCategories != nil || target.shield.webDomainCategories != nil {
                     target.clearAllSettings()
                 }
+            }
+            // Once: 2.0.0 could use cohorts 42–45, now beyond the capacity.
+            if !SharedStore.defaults.bool(forKey: legacyCohortsSweptKey) {
+                for index in categoryStoreCapacity..<legacyCategoryStoreCapacity {
+                    categoryStore(index).clearAllSettings()
+                }
+                SharedStore.defaults.set(true, forKey: legacyCohortsSweptKey)
             }
             return true
         } ?? false
@@ -148,6 +219,7 @@ struct ShieldController {
     /// Remove every shield this store owns.
     private static func clearAll() {
         applyCategoryShields([])
+        for index in 1...overflowStoreCount { overflowStore(index).clearAllSettings() }
         dayNightSelected.clearAllSettings()
         dayNightOther.clearAllSettings()
         store.shield.applications = nil
@@ -185,12 +257,36 @@ struct ShieldController {
                 }
             },
             groupWakeActive: { wakeActive(DayNightWake.status(group: $0, at: now)) })
+        tokenCapHit = false
         let categoriesApplied = applyCategoryShields(plan.categoryShields)
-        store.shield.applications = plan.blocked.applicationTokens.isEmpty ? nil : plan.blocked.applicationTokens
-        store.shield.webDomains = plan.blocked.webDomainTokens.isEmpty ? nil : plan.blocked.webDomainTokens
+        let apps = distribute(plan.blocked.applicationTokens)
+        let sites = distribute(plan.blocked.webDomainTokens)
+        if apps.trimmed || sites.trimmed { tokenCapHit = true }
+        // Order so a token is never briefly unshielded: when the set grows
+        // into the overflow stores, write them before latch.main drops the
+        // token; when it shrinks back, latch.main takes the tokens first and
+        // only then are the overflow stores cleared. Whether overflow stores
+        // hold anything is read from the stores themselves (no flag to strand).
+        let overflowNeeded = apps.stores.dropFirst().contains { !$0.isEmpty }
+            || sites.stores.dropFirst().contains { !$0.isEmpty }
+        func writeOverflow() {
+            for index in 1...overflowStoreCount {
+                let target = overflowStore(index)
+                let newApps = apps.stores[index].isEmpty ? nil : apps.stores[index]
+                let newSites = sites.stores[index].isEmpty ? nil : sites.stores[index]
+                if target.shield.applications != newApps { target.shield.applications = newApps }
+                if target.shield.webDomains != newSites { target.shield.webDomains = newSites }
+            }
+        }
+        if overflowNeeded { writeOverflow() }
+        store.shield.applications = apps.stores[0].isEmpty ? nil : apps.stores[0]
+        store.shield.webDomains = sites.stores[0].isEmpty ? nil : sites.stores[0]
+        if !overflowNeeded { writeOverflow() }
         if let allow = plan.allowed {
-            store.shield.applicationCategories = .all(except: allow.applicationTokens)
-            store.shield.webDomainCategories = .all(except: allow.webDomainTokens)
+            let allowedApps = capped(allow.applicationTokens), allowedSites = capped(allow.webDomainTokens)
+            if allowedApps.trimmed || allowedSites.trimmed { tokenCapHit = true }
+            store.shield.applicationCategories = .all(except: allowedApps.tokens)
+            store.shield.webDomainCategories = .all(except: allowedSites.tokens)
         } else {
             store.shield.applicationCategories = nil
             store.shield.webDomainCategories = nil
@@ -213,6 +309,13 @@ struct ShieldController {
                 : .specific(plan.blocked.categoryTokens)
             SharedStore.recordEnforcementFailure(SharedStore.EnforcementKey.categoryShields,
                                                  detail: "category shields not published")
+        }
+
+        if tokenCapHit {
+            SharedStore.recordEnforcementFailure(SharedStore.EnforcementKey.tokenCap,
+                                                 detail: "more than 50 apps or sites in one shield")
+        } else {
+            SharedStore.clearEnforcementFailure(SharedStore.EnforcementKey.tokenCap)
         }
 
         // App-deletion lock (blocks deleting ANY app, incl. this one).

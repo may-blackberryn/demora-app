@@ -1102,6 +1102,13 @@ enum ChangeEngine {
         // their rule, never through the ordinary schedule actions.
         if case .addSchedule(let schedule) = action {
             guard schedule.ownerRuleID == nil else { return nil }
+            // 2.0.1: "all except" can't exempt categories (see acceptsSelection).
+            guard schedule.mode != .blockAllExcept || schedule.selection.categoryTokens.isEmpty
+            else { return nil }
+        }
+        if case .addPlanned(let window) = action {
+            guard window.kind != .blockAllExcept || window.selection.categoryTokens.isEmpty
+            else { return nil }
         }
         if case .removeSchedule(let id) = action {
             guard state.schedules.first(where: { $0.id == id })?.ownerRuleID == nil else { return nil }
@@ -1739,10 +1746,14 @@ enum ChangeEngine {
             }
         case .addSchedule(let s):
             state.schedules.append(s)
-        case .updateScheduleSelection(let id, let selection):
+        case .updateScheduleSelection(let id, var selection):
             // A removed schedule must not be resurrected by a stale edit.
-            if let index = state.schedules.firstIndex(where: { $0.id == id }),
-               state.schedules[index].acceptsSelection(selection) {
+            guard let index = state.schedules.firstIndex(where: { $0.id == id }) else { break }
+            // 2.0.1: an edit queued by 2.0.0 may still allowlist categories.
+            // iOS never exempted them (they were blocked anyway), so drop them
+            // and apply the rest rather than silently discarding the edit.
+            if state.schedules[index].mode == .blockAllExcept { selection.categoryTokens = [] }
+            if state.schedules[index].acceptsSelection(selection) {
                 state.schedules[index].selection = selection
             }
         case .removeSchedule(let id):
@@ -1804,12 +1815,29 @@ enum ChangeEngine {
             rule.revision = state.conditionalRules[index].revision + 1
             rule.addedAt = state.conditionalRules[index].addedAt
             state.conditionalRules[index] = rule
+            // Owned window IDs encode their times, so a time edit renames them.
+            // 2.0.1: carry a priority choice over to the renamed windows, in
+            // the same place in the order (the edit itself waited its delay).
+            let oldKeys = Set(state.schedules.filter { $0.ownerRuleID == rule.id }
+                .map { "schedule-\($0.id.uuidString)" })
+            let priorityIndex = state.prioritizedScheduleKeys.firstIndex { oldKeys.contains($0) }
+            state.prioritizedScheduleKeys.removeAll { oldKeys.contains($0) }
             state.schedules.removeAll { $0.ownerRuleID == rule.id }
-            state.schedules.append(contentsOf: rule.ownedSchedules())
+            let owned = rule.ownedSchedules()
+            state.schedules.append(contentsOf: owned)
+            if let priorityIndex {
+                let newKeys = owned.map { "schedule-\($0.id.uuidString)" }
+                    .filter { !state.prioritizedScheduleKeys.contains($0) }
+                state.prioritizedScheduleKeys.insert(contentsOf: newKeys,
+                    at: min(priorityIndex, state.prioritizedScheduleKeys.count))
+            }
         case .removeConditionalRule(let id):
             // C14: a running session keeps its end (at most 4 h); End early
             // stays available. Owned windows go with the rule.
             state.conditionalRules.removeAll { $0.id == id }
+            let oldKeys = Set(state.schedules.filter { $0.ownerRuleID == id }
+                .map { "schedule-\($0.id.uuidString)" })
+            state.prioritizedScheduleKeys.removeAll { oldKeys.contains($0) }
             state.schedules.removeAll { $0.ownerRuleID == id }
         case .startConditionalSession(let request):
             // Revalidated against this exact state. Stale → nothing applied.
@@ -2318,7 +2346,9 @@ enum ChangeEngine {
         where only?.contains(window.name) ?? true {
             let schedule = DeviceActivitySchedule(intervalStart: window.start,
                                                   intervalEnd: window.end, repeats: true,
-                                                  warningTime: boundaryWarning)
+                                                  warningTime: window.warningMinutes.map {
+                                                      DateComponents(minute: $0)
+                                                  } ?? boundaryWarning)
             do {
                 try MonitorRegistration.start(DeviceActivityName(window.name), during: schedule)
             } catch {

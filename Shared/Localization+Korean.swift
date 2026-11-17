@@ -1279,6 +1279,7 @@ let koreanStrings: [String: String] = [
     "with a trusted contact": "믿을 만한 사람과 함께",
     "Give it a name.": "이름을 지어 주세요.",
     "Choose at least one app.": "앱을 하나 이상 고르세요.",
+    "“All except” can keep apps and websites, not whole categories.": "‘다음 외 모두’에는 앱과 웹사이트만 남길 수 있고, 카테고리 전체는 남길 수 없어요.",
     "Choose at least one day.": "요일을 하나 이상 고르세요.",
     "Start and end can't be the same time.": "시작과 종료 시각은 같을 수 없어요.",
     "End after it starts.": "시작 이후에 끝나야 해요.",

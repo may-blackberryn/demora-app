@@ -1279,6 +1279,7 @@ let japaneseStrings: [String: String] = [
     "with a trusted contact": "信頼できる人と一緒に",
     "Give it a name.": "名前を付けてください。",
     "Choose at least one app.": "アプリを1つ以上選んでください。",
+    "“All except” can keep apps and websites, not whole categories.": "「これら以外すべて」で残せるのはAppとWebサイトだけで、カテゴリ全体は残せません。",
     "Choose at least one day.": "曜日を1つ以上選んでください。",
     "Start and end can't be the same time.": "開始と終了を同じ時刻にはできません。",
     "End after it starts.": "終了は開始より後にしてください。",

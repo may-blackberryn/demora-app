@@ -1279,6 +1279,7 @@ let kannadaStrings: [String: String] = [
     "with a trusted contact": "ನಂಬಿಕಸ್ಥ ಸಂಪರ್ಕದಿಂದ",
     "Give it a name.": "ಒಂದು ಹೆಸರು ಕೊಡಿ.",
     "Choose at least one app.": "ಕನಿಷ್ಠ ಒಂದು ಆ್ಯಪ್ ಆರಿಸಿ.",
+    "“All except” can keep apps and websites, not whole categories.": "“ಇವನ್ನು ಬಿಟ್ಟು ಎಲ್ಲವೂ” ಆ್ಯಪ್‌ಗಳು ಮತ್ತು ವೆಬ್‌ಸೈಟ್‌ಗಳನ್ನು ಬಿಡಬಹುದು, ಸಂಪೂರ್ಣ ವರ್ಗಗಳನ್ನಲ್ಲ.",
     "Choose at least one day.": "ಕನಿಷ್ಠ ಒಂದು ದಿನ ಆರಿಸಿ.",
     "Start and end can't be the same time.": "ಆರಂಭ ಮತ್ತು ಅಂತ್ಯ ಒಂದೇ ಸಮಯ ಆಗಿರಬಾರದು.",
     "End after it starts.": "ಆರಂಭದ ನಂತರ ಮುಗಿಸಿ.",

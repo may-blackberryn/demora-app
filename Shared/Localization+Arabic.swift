@@ -1279,6 +1279,7 @@ let arabicStrings: [String: String] = [
     "with a trusted contact": "بجهة اتصال موثوقة",
     "Give it a name.": "أعطه اسمًا.",
     "Choose at least one app.": "اختر تطبيقًا واحدًا على الأقل.",
+    "“All except” can keep apps and websites, not whole categories.": "يمكن لخيار «الكل باستثناء» إبقاء التطبيقات والمواقع فقط، لا فئات كاملة.",
     "Choose at least one day.": "اختر يومًا واحدًا على الأقل.",
     "Start and end can't be the same time.": "لا يمكن أن يكون البدء والانتهاء في الوقت نفسه.",
     "End after it starts.": "ينتهي بعد أن يبدأ.",

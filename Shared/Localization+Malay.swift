@@ -1279,6 +1279,7 @@ let malayStrings: [String: String] = [
     "with a trusted contact": "dengan kenalan dipercayai",
     "Give it a name.": "Beri nama.",
     "Choose at least one app.": "Pilih sekurang-kurangnya satu apl.",
+    "“All except” can keep apps and websites, not whole categories.": "“Semua kecuali” boleh mengecualikan apl dan laman web, bukan keseluruhan kategori.",
     "Choose at least one day.": "Pilih sekurang-kurangnya satu hari.",
     "Start and end can't be the same time.": "Mula dan tamat tidak boleh pada masa yang sama.",
     "End after it starts.": "Tamat selepas ia bermula.",

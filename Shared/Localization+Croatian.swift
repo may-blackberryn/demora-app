@@ -1279,6 +1279,7 @@ let croatianStrings: [String: String] = [
     "with a trusted contact": "s osobom od povjerenja",
     "Give it a name.": "Daj mu ime.",
     "Choose at least one app.": "Odaberi barem jednu aplikaciju.",
+    "“All except” can keep apps and websites, not whole categories.": "„Sve osim” može zadržati aplikacije i web-stranice, ne cijele kategorije.",
     "Choose at least one day.": "Odaberi barem jedan dan.",
     "Start and end can't be the same time.": "Početak i kraj ne mogu biti u isto vrijeme.",
     "End after it starts.": "Završi nakon početka.",

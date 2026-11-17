@@ -248,6 +248,8 @@ struct SharedStore {
         static let limitRuntime = "runtime.limits"
         /// The day/night wake runtime couldn't be read or saved.
         static let dayNightRuntime = "runtime.dayNight"
+        /// A shield list was over Apple's 50-token limit and was trimmed.
+        static let tokenCap = "shields.tokenCap"
     }
 
     private static let enforcementFailuresKey = "latch.enforcementFailures.v1"
@@ -326,7 +328,8 @@ struct SharedStore {
             defaults.removeObject(forKey: legacyDegradedKey)
         }
         let fixed: Set<String> = [EnforcementKey.stateLock, EnforcementKey.categoryShields,
-                                  EnforcementKey.limitRuntime, EnforcementKey.dayNightRuntime]
+                                  EnforcementKey.limitRuntime, EnforcementKey.dayNightRuntime,
+                                  EnforcementKey.tokenCap]
         withFailureLock {
             var values = failureMap()
             let before = values.count

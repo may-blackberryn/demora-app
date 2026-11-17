@@ -1279,6 +1279,7 @@ let czechStrings: [String: String] = [
     "with a trusted contact": "s důvěryhodným kontaktem",
     "Give it a name.": "Dejte tomu název.",
     "Choose at least one app.": "Vyberte alespoň jednu aplikaci.",
+    "“All except” can keep apps and websites, not whole categories.": "„Vše kromě“ může ponechat aplikace a weby, ne celé kategorie.",
     "Choose at least one day.": "Vyberte alespoň jeden den.",
     "Start and end can't be the same time.": "Začátek a konec nemohou být stejný čas.",
     "End after it starts.": "Konec musí být po začátku.",

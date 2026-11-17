@@ -1279,6 +1279,7 @@ let slovenianStrings: [String: String] = [
     "with a trusted contact": "z zaupnim stikom",
     "Give it a name.": "Daj ji ime.",
     "Choose at least one app.": "Izberi vsaj eno aplikacijo.",
+    "“All except” can keep apps and websites, not whole categories.": "»Vse razen« lahko pusti aplikacije in spletna mesta, ne celih kategorij.",
     "Choose at least one day.": "Izberi vsaj en dan.",
     "Start and end can't be the same time.": "Začetek in konec ne moreta biti ob istem času.",
     "End after it starts.": "Konec naj bo po začetku.",

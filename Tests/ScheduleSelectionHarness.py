@@ -107,6 +107,7 @@ enum SharedStore {
         static let categoryShields = "shields.categories"
         static let limitRuntime = "runtime.limits"
         static let dayNightRuntime = "runtime.dayNight"
+        static let tokenCap = "shields.tokenCap"
     }
     static var enforcementFailureKeys: Set<String> = []
     static func recordEnforcementFailure(_ key: String, detail: String, capacity: Bool = false) {
@@ -282,6 +283,16 @@ for mode in ScheduleMode.allCases {
                 expect(ChangeEngine.queue(action) == nil, "reject empty blocklist")
                 ChangeEngine.applyForTest(action, state: &state)
                 expect(state.schedules == [schedule], "persisted invalid edit is ignored")
+                continue
+            }
+            // 2.0.1: iOS's "all except" exempts apps and websites only.
+            if selection == category && mode == .blockAllExcept {
+                expect(ChangeEngine.queue(action) == nil, "reject allowlisted categories")
+                // A 2.0.0-queued edit still applies, minus the categories iOS
+                // never exempted (same effective shield as before).
+                ChangeEngine.applyForTest(action, state: &state)
+                expect(state.schedules.first?.selection == FamilyActivitySelection(),
+                       "persisted category allowlist edit applies without categories")
                 continue
             }
             guard let queued = ChangeEngine.queue(action) else { fatalError("valid edit rejected") }

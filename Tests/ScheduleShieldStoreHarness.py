@@ -170,6 +170,7 @@ enum SharedStore {
         static let categoryShields = "shields.categories"
         static let limitRuntime = "runtime.limits"
         static let dayNightRuntime = "runtime.dayNight"
+        static let tokenCap = "shields.tokenCap"
     }
     static var enforcementFailureKeys: Set<String> = []
     static func recordEnforcementFailure(_ key: String, detail: String, capacity: Bool = false) {
@@ -237,7 +238,10 @@ func named(_ index: Int) -> ManagedSettingsStore {
 func reset() {
     Trace.onMutation = nil
     ManagedSettingsStore.reset()
-    SharedStore.defaults.values = [:]; SharedStore.defaults.writes = 0
+    // An install that already ran the one-time 2.0.1 sweep of cohorts 42–45
+    // (tested on its own below), so write counts measure the manifest only.
+    SharedStore.defaults.values = ["latch.scheduleCategoryStores.swept42.v1": true]
+    SharedStore.defaults.writes = 0
     SharedStore.defaults.rejectWrites = false; SharedStore.defaults.rejectSynchronize = false
     SharedStore.defaults.corruptWrittenValue = false
     SharedStore.enforcementDegraded = false; SharedStore.rejectCoordination = false
@@ -474,22 +478,37 @@ for failureMode in 0..<3 {
 
 // Pathological >46-cohort input cannot silently omit blocked categories.
 reset()
-let overflowGroups = (0..<48).map { selection(["cat-\($0)"], apps: ["app-\($0)"], sites: ["site-\($0)"]) }
+// 2.0.1: 42 cohorts (four stores went to the 50-token overflow).
+let overflowGroups = (0..<44).map { selection(["cat-\($0)"], apps: ["app-\($0)"], sites: ["site-\($0)"]) }
 expect(ShieldController.renderForHarness(overflowGroups), "overflow renderer succeeds conservatively")
-expect(SharedStore.defaults.object(forKey: manifest) as? Int == 46, "overflow stays within declared cohort capacity")
-expect(named(44).shield.applicationCategories == .specific(["cat-44"], except: ["app-44"]), "non-overflow cohort keeps exceptions")
-expect(named(45).shield.applicationCategories == .specific(["cat-45", "cat-46", "cat-47"]), "overflow preserves all categories without app exceptions")
-expect(named(45).shield.webDomainCategories == .specific(["cat-45", "cat-46", "cat-47"]), "overflow website fallback has no exceptions")
+expect(SharedStore.defaults.object(forKey: manifest) as? Int == 42, "overflow stays within declared cohort capacity")
+expect(named(40).shield.applicationCategories == .specific(["cat-40"], except: ["app-40"]), "non-overflow cohort keeps exceptions")
+expect(named(41).shield.applicationCategories == .specific(["cat-41", "cat-42", "cat-43"]), "overflow preserves all categories without app exceptions")
+expect(named(41).shield.webDomainCategories == .specific(["cat-41", "cat-42", "cat-43"]), "overflow website fallback has no exceptions")
+
 expect(SharedStore.enforcementDegraded, "overflow reports conservative degradation")
+
+// 2.0.1: cohorts 42–45 (valid in 2.0.0) are swept once, then never touched.
+reset()
+SharedStore.defaults.values["latch.scheduleCategoryStores.swept42.v1"] = nil
+named(43).shield.applicationCategories = .specific(["stale-43"])
+named(45).shield.webDomainCategories = .specific(["stale-45"])
+expect(ShieldController.renderForHarness([spentC]), "sweep run succeeds")
+expect(named(43).shield.applicationCategories == nil && named(45).shield.webDomainCategories == nil,
+       "2.0.0 cohorts beyond the new capacity are cleared")
+expect(SharedStore.defaults.bool(forKey: "latch.scheduleCategoryStores.swept42.v1"), "sweep is recorded")
+named(44).shield.applicationCategories = .specific(["later"])
+expect(ShieldController.renderForHarness([spentC]) && named(44).shield.applicationCategories == .specific(["later"]),
+       "sweep runs only once")
 
 // Unreadable/out-of-range manifest conservatively sweeps all allocated slots.
 for corrupt: Any in ["unreadable", -1, 1000] {
     reset()
     SharedStore.defaults.values[manifest] = corrupt
-    named(45).shield.applicationCategories = .specific(["stale"])
-    named(45).shield.webDomainCategories = .specific(["stale-site"])
+    named(41).shield.applicationCategories = .specific(["stale"])
+    named(41).shield.webDomainCategories = .specific(["stale-site"])
     expect(ShieldController.renderForHarness([spentC]), "corrupt manifest recovery succeeds")
-    expect(named(45).shield.applicationCategories == nil && named(45).shield.webDomainCategories == nil,
+    expect(named(41).shield.applicationCategories == nil && named(41).shield.webDomainCategories == nil,
            "corrupt manifest cannot strand last cohort")
     expect(named(0).shield.applicationCategories == .specific(["C"], except: ["A"]), "corrupt manifest preserves current cohort")
 }
@@ -504,6 +523,47 @@ expect(SharedStore.defaults.values.keys.filter { $0.hasPrefix("latch.") }.sorted
        "debug wipe preserves no latch state, tokens, usage or language settings")
 expect(SharedStore.defaults.object(forKey: "other.setting") as? Bool == true, "debug wipe remains limited to latch namespace")
 for failure in failures { print("FAIL: \(failure)") }
+// 2.0.1: Apple shields at most 50 apps/sites per store setting. Above that,
+// tokens spread over latch.main + latch.overflow.1…4 by a stable hash; a
+// token never moves while the set changes, and each store stays within 50.
+reset()
+let many = Set((0..<120).map { "app-\($0)" }), manySites = Set((0..<70).map { "site-\($0)" })
+var big = LatchState()
+big.limits = [AppLimit(name: "Many", selection: selection([], apps: many, sites: manySites), minutesPerDay: 0)]
+ShieldController.applyForHarness(big)
+let stores = [ManagedSettingsStore(named: .init("latch.main"))]
+    + (1...4).map { ManagedSettingsStore(named: .init("latch.overflow.\($0)")) }
+let placedApps = stores.map { $0.shield.applications ?? [] }
+let placedSites = stores.map { $0.shield.webDomains ?? [] }
+expect(placedApps.allSatisfy { $0.count <= 50 } && placedSites.allSatisfy { $0.count <= 50 },
+       "no store holds more than 50 apps or sites")
+expect(placedApps.reduce(Set<String>()) { $0.union($1) } == many, "all 120 apps shielded across stores")
+expect(placedSites.reduce(Set<String>()) { $0.union($1) } == manySites, "all 70 sites shielded across stores")
+expect(placedApps.map(\.count).reduce(0, +) == 120, "each app shielded in exactly one store")
+expect(!SharedStore.hasEnforcementFailure(SharedStore.EnforcementKey.tokenCap), "no trim within 250")
+// Adding one app must not move any existing app to another store.
+let before = Dictionary(uniqueKeysWithValues: stores.enumerated().flatMap { index, store in
+    (store.shield.applications ?? []).map { ($0, index) } })
+big.limits[0].selection.applicationTokens.insert("app-new")
+ShieldController.applyForHarness(big)
+let after = Dictionary(uniqueKeysWithValues: stores.enumerated().flatMap { index, store in
+    (store.shield.applications ?? []).map { ($0, index) } })
+expect(before.allSatisfy { after[$0.key] == $0.value }, "existing apps stay in their store when the set grows")
+// Back under 50: everything returns to latch.main, overflow stores cleared.
+big.limits[0].selection = selection([], apps: ["a", "b"], sites: ["s"])
+ShieldController.applyForHarness(big)
+expect(stores[0].shield.applications == ["a", "b"] && stores[0].shield.webDomains == ["s"],
+       "small sets live in latch.main as before")
+expect(stores.dropFirst().allSatisfy { $0.shield.applications == nil && $0.shield.webDomains == nil },
+       "overflow stores cleared once nothing overflows")
+// Over 250: trimmed (fewer shielded, never zero) and recorded for Details.
+big.limits[0].selection = selection([], apps: Set((0..<300).map { "x-\($0)" }))
+ShieldController.applyForHarness(big)
+let trimmedCounts = stores.map { ($0.shield.applications ?? []).count }
+expect(trimmedCounts.allSatisfy { $0 <= 50 } && trimmedCounts.reduce(0, +) > 0, "over 250: every store within 50, still shielding")
+expect(SharedStore.hasEnforcementFailure(SharedStore.EnforcementKey.tokenCap), "trim recorded for Details")
+
+for failure in failures { print("FAIL: " + failure) }
 print("Schedule shield stores: \(assertions) assertions, \(failures.count) failures")
 print("Actual controller/plan/models; in-memory named-store/defaults/coordination/status adapters; no Apple XPC or live persistence")
 if !failures.isEmpty { exit(1) }

@@ -1279,6 +1279,7 @@ let indonesianStrings: [String: String] = [
     "with a trusted contact": "dengan kontak tepercaya",
     "Give it a name.": "Beri nama.",
     "Choose at least one app.": "Pilih setidaknya satu aplikasi.",
+    "“All except” can keep apps and websites, not whole categories.": "“Semua kecuali” dapat mengecualikan app dan situs web, bukan seluruh kategori.",
     "Choose at least one day.": "Pilih setidaknya satu hari.",
     "Start and end can't be the same time.": "Mulai dan selesai tidak boleh sama.",
     "End after it starts.": "Berakhir setelah mulai.",

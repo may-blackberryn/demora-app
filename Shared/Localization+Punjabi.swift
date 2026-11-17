@@ -1279,6 +1279,7 @@ let punjabiStrings: [String: String] = [
     "with a trusted contact": "ਭਰੋਸੇਯੋਗ ਸੰਪਰਕ ਨਾਲ",
     "Give it a name.": "ਇਸਨੂੰ ਨਾਮ ਦਿਓ।",
     "Choose at least one app.": "ਘੱਟੋ-ਘੱਟ ਇੱਕ ਐਪ ਚੁਣੋ।",
+    "“All except” can keep apps and websites, not whole categories.": "“ਇਹਨਾਂ ਤੋਂ ਇਲਾਵਾ ਸਭ” ਐਪਾਂ ਅਤੇ ਵੈੱਬਸਾਈਟਾਂ ਰੱਖ ਸਕਦਾ ਹੈ, ਪੂਰੀਆਂ ਸ਼੍ਰੇਣੀਆਂ ਨਹੀਂ।",
     "Choose at least one day.": "ਘੱਟੋ-ਘੱਟ ਇੱਕ ਦਿਨ ਚੁਣੋ।",
     "Start and end can't be the same time.": "ਸ਼ੁਰੂ ਅਤੇ ਅੰਤ ਦਾ ਸਮਾਂ ਇੱਕੋ ਨਹੀਂ ਹੋ ਸਕਦਾ।",
     "End after it starts.": "ਸ਼ੁਰੂ ਤੋਂ ਬਾਅਦ ਖ਼ਤਮ ਕਰੋ।",

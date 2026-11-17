@@ -1279,6 +1279,7 @@ let vietnameseStrings: [String: String] = [
     "with a trusted contact": "với một liên hệ tin cậy",
     "Give it a name.": "Đặt cho nó một cái tên.",
     "Choose at least one app.": "Chọn ít nhất một ứng dụng.",
+    "“All except” can keep apps and websites, not whole categories.": "“Tất cả trừ” chỉ có thể chừa ứng dụng và trang web, không chừa cả danh mục.",
     "Choose at least one day.": "Chọn ít nhất một ngày.",
     "Start and end can't be the same time.": "Bắt đầu và kết thúc không thể cùng một giờ.",
     "End after it starts.": "Kết thúc sau khi bắt đầu.",

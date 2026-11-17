@@ -1279,6 +1279,7 @@ let malayalamStrings: [String: String] = [
     "with a trusted contact": "ഒരു വിശ്വസ്ത കോൺടാക്റ്റിനൊപ്പം",
     "Give it a name.": "ഒരു പേര് നൽകൂ.",
     "Choose at least one app.": "കുറഞ്ഞത് ഒരു ആപ്പ് തിരഞ്ഞെടുക്കൂ.",
+    "“All except” can keep apps and websites, not whole categories.": "“ഇവ ഒഴികെ എല്ലാം” ആപ്പുകളും വെബ്‌സൈറ്റുകളും ഒഴിവാക്കാം, മുഴുവൻ വിഭാഗങ്ങൾ അല്ല.",
     "Choose at least one day.": "കുറഞ്ഞത് ഒരു ദിവസം തിരഞ്ഞെടുക്കൂ.",
     "Start and end can't be the same time.": "തുടക്കവും അവസാനവും ഒരേ സമയമാകരുത്.",
     "End after it starts.": "തുടങ്ങിയ ശേഷമായിരിക്കണം അവസാനം.",

@@ -1279,6 +1279,7 @@ let odiaStrings: [String: String] = [
     "with a trusted contact": "ଜଣେ ଭରସାଯୋଗ୍ୟ ବ୍ୟକ୍ତି ସହ",
     "Give it a name.": "ଏହାକୁ ଏକ ନାମ ଦିଅନ୍ତୁ।",
     "Choose at least one app.": "ଅତି କମରେ ଗୋଟିଏ ଆପ୍ ବାଛନ୍ତୁ।",
+    "“All except” can keep apps and websites, not whole categories.": "“ଏଗୁଡ଼ିକ ଛଡ଼ା ସବୁ” ଆପ୍ ଓ ୱେବସାଇଟ୍ ରଖିପାରେ, ସମ୍ପୂର୍ଣ୍ଣ ଶ୍ରେଣୀ ନୁହେଁ।",
     "Choose at least one day.": "ଅତି କମରେ ଗୋଟିଏ ଦିନ ବାଛନ୍ତୁ।",
     "Start and end can't be the same time.": "ଆରମ୍ଭ ଓ ଶେଷ ଏକା ସମୟ ହୋଇପାରିବ ନାହିଁ।",
     "End after it starts.": "ଆରମ୍ଭ ପରେ ଶେଷ କରନ୍ତୁ।",

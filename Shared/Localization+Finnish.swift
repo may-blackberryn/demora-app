@@ -1279,6 +1279,7 @@ let finnishStrings: [String: String] = [
     "with a trusted contact": "luotetulla henkilöllä",
     "Give it a name.": "Anna sille nimi.",
     "Choose at least one app.": "Valitse vähintään yksi sovellus.",
+    "“All except” can keep apps and websites, not whole categories.": "”Kaikki paitsi” voi jättää vapaaksi appeja ja verkkosivustoja, ei kokonaisia luokkia.",
     "Choose at least one day.": "Valitse vähintään yksi päivä.",
     "Start and end can't be the same time.": "Alku ja loppu eivät voi olla sama aika.",
     "End after it starts.": "Lopeta alun jälkeen.",

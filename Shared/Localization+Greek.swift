@@ -1279,6 +1279,7 @@ let greekStrings: [String: String] = [
     "with a trusted contact": "με έμπιστο πρόσωπο",
     "Give it a name.": "Δώσε του ένα όνομα.",
     "Choose at least one app.": "Διάλεξε τουλάχιστον μία εφαρμογή.",
+    "“All except” can keep apps and websites, not whole categories.": "Το «Όλα εκτός» μπορεί να εξαιρεί εφαρμογές και ιστότοπους, όχι ολόκληρες κατηγορίες.",
     "Choose at least one day.": "Διάλεξε τουλάχιστον μία ημέρα.",
     "Start and end can't be the same time.": "Η έναρξη και η λήξη δεν μπορούν να είναι η ίδια ώρα.",
     "End after it starts.": "Η λήξη να είναι μετά την έναρξη.",

@@ -1279,6 +1279,7 @@ let chineseTraditionalStrings: [String: String] = [
     "with a trusted contact": "由信任聯絡人批准",
     "Give it a name.": "請為它命名。",
     "Choose at least one app.": "請至少選擇一個 App。",
+    "“All except” can keep apps and websites, not whole categories.": "「除以下項目外全部」只能保留 App 和網站，不能保留整個類別。",
     "Choose at least one day.": "請至少選擇一天。",
     "Start and end can't be the same time.": "開始與結束時間不能相同。",
     "End after it starts.": "結束時間必須在開始之後。",

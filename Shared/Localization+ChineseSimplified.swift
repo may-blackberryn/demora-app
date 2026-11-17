@@ -1279,6 +1279,7 @@ let chineseSimplifiedStrings: [String: String] = [
     "with a trusted contact": "由信任联系人",
     "Give it a name.": "给它起个名字。",
     "Choose at least one app.": "请至少选择一个 app。",
+    "“All except” can keep apps and websites, not whole categories.": "“除以下项目外全部”只能保留 App 和网站，不能保留整个类别。",
     "Choose at least one day.": "请至少选择一天。",
     "Start and end can't be the same time.": "开始和结束不能是同一时间。",
     "End after it starts.": "结束要晚于开始。",

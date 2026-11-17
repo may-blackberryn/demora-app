@@ -1248,6 +1248,7 @@ let frenchStrings: [String: String] = [
     "with a trusted contact": "avec un contact de confiance",
     "Give it a name.": "Donnez-lui un nom.",
     "Choose at least one app.": "Choisissez au moins une app.",
+    "“All except” can keep apps and websites, not whole categories.": "« Tout sauf » peut garder des apps et des sites web, pas des catégories entières.",
     "Choose at least one day.": "Choisissez au moins un jour.",
     "Start and end can't be the same time.": "Le début et la fin ne peuvent pas être à la même heure.",
     "End after it starts.": "La fin doit suivre le début.",

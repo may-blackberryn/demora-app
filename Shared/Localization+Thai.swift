@@ -1279,6 +1279,7 @@ let thaiStrings: [String: String] = [
     "with a trusted contact": "ด้วยผู้ติดต่อที่ไว้ใจ",
     "Give it a name.": "ตั้งชื่อให้มัน",
     "Choose at least one app.": "เลือกอย่างน้อยหนึ่งแอป",
+    "“All except” can keep apps and websites, not whole categories.": "“ทั้งหมดยกเว้น” เว้นได้เฉพาะแอปและเว็บไซต์ ไม่ใช่ทั้งหมวดหมู่",
     "Choose at least one day.": "เลือกอย่างน้อยหนึ่งวัน",
     "Start and end can't be the same time.": "เวลาเริ่มและสิ้นสุดเป็นเวลาเดียวกันไม่ได้",
     "End after it starts.": "สิ้นสุดหลังเวลาเริ่ม",

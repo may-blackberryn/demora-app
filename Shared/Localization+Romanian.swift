@@ -1279,6 +1279,7 @@ let romanianStrings: [String: String] = [
     "with a trusted contact": "cu un contact de încredere",
     "Give it a name.": "Dă-i un nume.",
     "Choose at least one app.": "Alege cel puțin o aplicație.",
+    "“All except” can keep apps and websites, not whole categories.": "„Toate în afară de” poate păstra aplicații și site-uri, nu categorii întregi.",
     "Choose at least one day.": "Alege cel puțin o zi.",
     "Start and end can't be the same time.": "Începutul și sfârșitul nu pot fi la aceeași oră.",
     "End after it starts.": "Se termină după ce începe.",

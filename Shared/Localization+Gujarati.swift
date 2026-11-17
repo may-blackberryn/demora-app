@@ -1279,6 +1279,7 @@ let gujaratiStrings: [String: String] = [
     "with a trusted contact": "વિશ્વાસુ વ્યક્તિથી",
     "Give it a name.": "તેને નામ આપો.",
     "Choose at least one app.": "ઓછામાં ઓછી એક એપ પસંદ કરો.",
+    "“All except” can keep apps and websites, not whole categories.": "“આ સિવાય બધું” ઍપ અને વેબસાઇટ રાખી શકે છે, આખી કૅટેગરી નહીં.",
     "Choose at least one day.": "ઓછામાં ઓછો એક દિવસ પસંદ કરો.",
     "Start and end can't be the same time.": "શરૂઆત અને અંત એક જ સમય ન હોઈ શકે.",
     "End after it starts.": "શરૂઆત પછી પૂરું કરો.",

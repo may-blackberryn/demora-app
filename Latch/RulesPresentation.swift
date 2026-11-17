@@ -1172,6 +1172,8 @@ enum NewRuleKind: CaseIterable, Equatable {
 /// is exactly the old editors' `isValid`; the harness checks both on a table.
 enum EditorProblem: Equatable {
     case name, apps, noDays, sameTimes, monthlyMidnight, endBeforeStart
+    /// iOS's "all except" shield exempts apps and websites only (2.0.1).
+    case allExceptCategories
     case extraTooLong, extraGate
     /// When & where (`EditorValidation.conditional`).
     case nameTooLong, noConditions, tooManyConditions, datesOrder
@@ -1183,6 +1185,7 @@ enum EditorProblem: Equatable {
         switch self {
         case .name: return "Give it a name."
         case .apps: return "Choose at least one app."
+        case .allExceptCategories: return "“All except” can keep apps and websites, not whole categories."
         case .noDays: return "Choose at least one day."
         case .sameTimes: return "Start and end can't be the same time."
         case .monthlyMidnight: return "Monthly schedules can't cross midnight — set the end time after the start time."
@@ -1256,6 +1259,7 @@ enum EditorValidation {
         if isMonthly(recurrence) && start >= end { return .monthlyMidnight }
         if case .weekly(let days) = recurrence, days.isEmpty { return .noDays }
         if isFree { return nil }
+        if draft.mode == .blockAllExcept && !draft.selection.categoryTokens.isEmpty { return .allExceptCategories }
         return draft.acceptsSelection(draft.selection) ? nil : .apps
     }
 
@@ -1266,6 +1270,7 @@ enum EditorValidation {
         if endsAt <= startsAt { return .endBeforeStart }
         if kind == .blockSelected && selection.applicationTokens.isEmpty
             && selection.categoryTokens.isEmpty { return .apps }
+        if kind == .blockAllExcept && !selection.categoryTokens.isEmpty { return .allExceptCategories }
         return nil
     }
 

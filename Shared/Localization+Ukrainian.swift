@@ -1279,6 +1279,7 @@ let ukrainianStrings: [String: String] = [
     "with a trusted contact": "з довіреною особою",
     "Give it a name.": "Дайте йому назву.",
     "Choose at least one app.": "Виберіть принаймні один застосунок.",
+    "“All except” can keep apps and websites, not whole categories.": "«Усе, крім» може залишати програми й сайти, але не цілі категорії.",
     "Choose at least one day.": "Виберіть принаймні один день.",
     "Start and end can't be the same time.": "Початок і кінець не можуть збігатися.",
     "End after it starts.": "Кінець має бути після початку.",

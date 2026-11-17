@@ -1279,6 +1279,7 @@ let hungarianStrings: [String: String] = [
     "with a trusted contact": "megbízható személlyel",
     "Give it a name.": "Adj neki nevet.",
     "Choose at least one app.": "Válassz legalább egy appot.",
+    "“All except” can keep apps and websites, not whole categories.": "A „Minden, kivéve” appokat és webhelyeket hagyhat szabadon, teljes kategóriákat nem.",
     "Choose at least one day.": "Válassz legalább egy napot.",
     "Start and end can't be the same time.": "A kezdés és a befejezés nem lehet ugyanaz az idő.",
     "End after it starts.": "A befejezés a kezdés után legyen.",

@@ -1279,6 +1279,7 @@ let bengaliStrings: [String: String] = [
     "with a trusted contact": "একজন বিশ্বস্ত মানুষ দিয়ে",
     "Give it a name.": "একটা নাম দিন।",
     "Choose at least one app.": "অন্তত একটা অ্যাপ বাছুন।",
+    "“All except” can keep apps and websites, not whole categories.": "“এগুলো ছাড়া সব” অ্যাপ ও ওয়েবসাইট রাখতে পারে, পুরো ক্যাটাগরি নয়।",
     "Choose at least one day.": "অন্তত একটা দিন বাছুন।",
     "Start and end can't be the same time.": "শুরু আর শেষ একই সময় হতে পারে না।",
     "End after it starts.": "শুরুর পরে শেষ করুন।",

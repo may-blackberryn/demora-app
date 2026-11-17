@@ -1249,6 +1249,7 @@ let hindiStrings: [String: String] = [
     "with a trusted contact": "किसी भरोसेमंद संपर्क से",
     "Give it a name.": "इसे एक नाम दें।",
     "Choose at least one app.": "कम से कम एक ऐप चुनें।",
+    "“All except” can keep apps and websites, not whole categories.": "“इनके सिवा सब” ऐप और वेबसाइट छोड़ सकता है, पूरी श्रेणियाँ नहीं।",
     "Choose at least one day.": "कम से कम एक दिन चुनें।",
     "Start and end can't be the same time.": "शुरू और ख़त्म का समय एक नहीं हो सकता।",
     "End after it starts.": "ख़त्म होना शुरू होने के बाद हो।",

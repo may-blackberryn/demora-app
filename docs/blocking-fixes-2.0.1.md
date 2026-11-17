@@ -95,12 +95,35 @@ below are authorized by that request; everything else in `CLAUDE.md` stands.
 - Report: count category time once (skip its apps), include web domains, and
   add the limit's free-time credit to the budget shown.
 
-## Not in this sweep (recorded, not forgotten)
-- Splitting `latch.main` tokens across stores (Apple per-store cap unverified).
-- "All except" schedules accepting categories (editor validation).
-- Extra-time step edits re-basing thresholds; conflict-screen winner naming;
-  owned-window priority on time edits; legacy wake rules on pre-release
-  installs; `DayNightPolicy` harness gap; slimming the extension binary.
+## Second batch (2.0.1, owner: "start on that as 2.0.1")
+Version is now 2.0.1 in all targets.
+- **50-token shield cap.** Apple shields at most 50 app and 50 site tokens per
+  store setting (documented for sites, categories and exceptions; developers
+  report >50 apps shields nothing). Up to 50 everything stays in `latch.main`;
+  above, tokens spread over `latch.main` + `latch.overflow.1…4` (stable hash,
+  next store with room), so up to 250 apps and 250 sites. Exception lists
+  ("all except", category cohorts) are capped at 50 (extra allowed apps stay
+  blocked). Any trim is recorded for Details. Category cohorts drop from 46 to
+  42 to stay under the 50-store ceiling; 2.0.0's cohorts 42–45 are swept once.
+- **Late and short windows.** A daily/weekly segment starting after 23:44 is
+  registered 23:44–23:59 with its warning at the real start; short windows are
+  padded with the end warning at the real end; monthly windows are fitted the
+  same way (they were unpadded, so short ones were refused).
+- **"All except" can't keep categories**: editor message, queue validation
+  for new schedules/plans and selection edits.
+- **When & where owned windows keep their priority** across a time edit
+  (owned IDs encode their times); removed rules drop their keys.
+
+Decided not to change (owner can override):
+- Conflict-screen winner naming: cosmetic; needs a UI decision on how to show
+  "a stricter block still applies on top of All except".
+- Extra-time step edits re-basing thresholds: bounded by the edit's own wait;
+  fixing it would either mint or burn requests.
+- Legacy wake/sleep on pre-release installs: both already show as their own
+  cards in Rules and can be removed there.
+- `DayNightPolicy` is unused production code still covered by its harness;
+  retiring it is test work, not a user-facing fix.
+- Slimming the extension binary: no JetsamEvent reports.
 
 ## Verification
 Full verify after each step; commit per step by name; fresh reviewer at the

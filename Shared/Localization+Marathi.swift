@@ -1279,6 +1279,7 @@ let marathiStrings: [String: String] = [
     "with a trusted contact": "विश्वासू व्यक्तीने",
     "Give it a name.": "त्याला नाव द्या.",
     "Choose at least one app.": "किमान एक अॅप निवडा.",
+    "“All except” can keep apps and websites, not whole categories.": "“हे सोडून सर्व” ॲप्स आणि वेबसाइट्स ठेवू शकते, संपूर्ण श्रेणी नाही.",
     "Choose at least one day.": "किमान एक दिवस निवडा.",
     "Start and end can't be the same time.": "सुरुवात आणि शेवट एकच वेळ असू शकत नाही.",
     "End after it starts.": "सुरुवातीनंतर संपवा.",

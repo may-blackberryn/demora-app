@@ -1279,6 +1279,7 @@ let italianStrings: [String: String] = [
     "with a trusted contact": "con un contatto di fiducia",
     "Give it a name.": "Dagli un nome.",
     "Choose at least one app.": "Scegli almeno un'app.",
+    "“All except” can keep apps and websites, not whole categories.": "“Tutto tranne” può lasciare app e siti web, non intere categorie.",
     "Choose at least one day.": "Scegli almeno un giorno.",
     "Start and end can't be the same time.": "Inizio e fine non possono essere alla stessa ora.",
     "End after it starts.": "Termina dopo l'inizio.",

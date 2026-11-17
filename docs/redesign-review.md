@@ -2346,3 +2346,27 @@ failure-record races, stuck one-shot failures and a sheet that closed under
 the user; unreadable state keeping the deletion lock; a session name reused by
 a new check-in being stopped. All fixed as above. Not addressed: late (>23:44)
 daily starts and short monthly windows (`MonitoringBudget` unchanged, deferred).
+
+### 2.0.1 second batch — 2026-11-17
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| Spread blocked apps/sites over `latch.main` + 4 overflow stores above 50; cap exception lists at 50; record trims | Apple's 50-token per-setting cap: above it a store can shield nothing. Stable FNV+fmix hash with next-store probing keeps tokens in place as sets change | Yes |
+| Category cohorts 46 → 42, sweep 2.0.0's 42–45 once | Keep under the 50-store ceiling with the overflow stores | Yes |
+| Fit late (>23:44) and short windows with an exact warning; fit monthly windows | Late starts had no callback until the next segment; short monthly windows were refused | Yes |
+| "All except" rejects categories (editor + queue) | iOS's all(except:) only exempts apps/sites; categories were silently blocked | Yes |
+| Carry When & where owned-window priority across time edits | Owned IDs encode times; priority was silently dropped | Yes |
+| Not changed: conflict naming, extra-step re-basing, legacy wake (visible in Rules), DayNightPolicy harness, extension size | See `docs/blocking-fixes-2.0.1.md` → Second batch | No |
+
+Fresh review of the second batch found and fixed: day/night boundaries at
+23:45+ produced an `hour: 24` end (now clamped into the late path); late short
+windows ended up to 14 min late (now anchored at the real end); shrinking back
+under 50 tokens briefly unshielded overflow tokens (main is written first on
+shrink, overflow first on growth) and an unsynchronized in-use flag could
+strand stale overflow shields (replaced by reading the stores); a 2.0.0-queued
+"all except" edit with categories was silently dropped (now applied without
+the categories iOS never exempted); a 15-minute warning on a 15-minute window
+(dropped). Accepted: a few more monitor names for late windows; existing short
+windows keep their old registration until the next full rebuild; whether
+Apple's 50-token cap is per store or combined needs a device test with 51+
+apps.

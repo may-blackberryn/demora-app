@@ -8,6 +8,29 @@ enum MonitoringBudget {
         var name: String
         var start: DateComponents
         var end: DateComponents
+        /// Set when the registration had to be moved or padded to meet
+        /// Apple's 15-minute minimum (2.0.1): the warning callback then lands
+        /// exactly on the real boundary instead of minutes late.
+        var warningMinutes: Int? = nil
+    }
+
+    /// Fit [start, end) (minutes, same day, end > start) to Apple's 15-minute
+    /// minimum without moving a boundary callback (2.0.1):
+    /// - long enough: registered as is;
+    /// - short but early enough: padded to 15 minutes, with the end warning
+    ///   at the real end;
+    /// - starting after 23:44: registered as 23:44–23:59 with the end warning
+    ///   at the real start (before 2.0.1 such a window got no callback at
+    ///   all until the next day's segment).
+    static func fitted(start: Int, end: Int) -> (start: Int, end: Int, warning: Int?) {
+        // Boundary windows pass start+15, which can run past 23:59.
+        let end = min(end, 1439)
+        func warning(_ minutes: Int) -> Int? { minutes > 0 && minutes < 15 ? minutes : nil }
+        if end - start >= 15 { return (start, end, nil) }
+        if start + 15 <= 1439 { return (start, start + 15, warning(start + 15 - end)) }
+        // Late: anchor at the real end, so the interval end lands on it and
+        // the warning on the real start.
+        return (end - 15, end, warning(end - start))
     }
 
     /// Weekdays are checked by windowActive, not by separate OS registrations.
@@ -29,23 +52,31 @@ enum MonitoringBudget {
         case .daily, .weekly:
             if case .weekly(let days) = recurrence, days.isEmpty { return [] }
             let segments = wraps ? [(start, 1439), (0, end)] : [(start, end)]
-            return segments.enumerated().compactMap { index, segment in
-                let paddedEnd = min(max(segment.1, segment.0 + 15), 1439)
-                guard paddedEnd - segment.0 >= 15 else { return nil }
+            return segments.enumerated().map { index, segment in
+                // A morning segment ending at 00:00 still registers 00:00–00:15:
+                // its callback is what ends a window that runs until midnight.
+                let fit = fitted(start: segment.0, end: segment.1)
                 return Window(name: "\(prefix)-\(index)",
-                    start: DateComponents(hour: segment.0 / 60, minute: segment.0 % 60),
-                    end: DateComponents(hour: paddedEnd / 60, minute: paddedEnd % 60))
+                    start: DateComponents(hour: fit.start / 60, minute: fit.start % 60),
+                    end: DateComponents(hour: fit.end / 60, minute: fit.end % 60),
+                    warningMinutes: fit.warning)
             }
         case .monthlyDay(let day):
+            // Monthly windows were registered unpadded; a short one was
+            // refused by iOS (2.0.1: fitted like daily windows).
+            let fit = wraps ? (start, end, nil) : fitted(start: start, end: end)
             return [Window(name: "\(prefix)-m",
-                start: DateComponents(day: day, hour: start / 60, minute: start % 60),
-                end: DateComponents(day: day, hour: end / 60, minute: end % 60))]
+                start: DateComponents(day: day, hour: fit.0 / 60, minute: fit.0 % 60),
+                end: DateComponents(day: day, hour: fit.1 / 60, minute: fit.1 % 60),
+                warningMinutes: fit.2)]
         case .monthlyOrdinal(let weekday, let ordinal):
+            let fit = wraps ? (start, end, nil) : fitted(start: start, end: end)
             return [Window(name: "\(prefix)-o",
-                start: DateComponents(hour: start / 60, minute: start % 60,
+                start: DateComponents(hour: fit.0 / 60, minute: fit.0 % 60,
                                       weekday: weekday, weekdayOrdinal: ordinal),
-                end: DateComponents(hour: end / 60, minute: end % 60,
-                                    weekday: weekday, weekdayOrdinal: ordinal))]
+                end: DateComponents(hour: fit.1 / 60, minute: fit.1 % 60,
+                                    weekday: weekday, weekdayOrdinal: ordinal),
+                warningMinutes: fit.2)]
         }
     }
 

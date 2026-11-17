@@ -1279,6 +1279,7 @@ let dutchStrings: [String: String] = [
     "with a trusted contact": "met een vertrouwd contact",
     "Give it a name.": "Geef het een naam.",
     "Choose at least one app.": "Kies minstens één app.",
+    "“All except” can keep apps and websites, not whole categories.": "‘Alles behalve’ kan apps en websites vrijlaten, geen hele categorieën.",
     "Choose at least one day.": "Kies minstens één dag.",
     "Start and end can't be the same time.": "Begin en einde kunnen niet dezelfde tijd zijn.",
     "End after it starts.": "Eindig na het begin.",

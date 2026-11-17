@@ -1279,6 +1279,7 @@ let urduStrings: [String: String] = [
     "with a trusted contact": "بھروسے مند رابطے کے ساتھ",
     "Give it a name.": "اسے ایک نام دیں۔",
     "Choose at least one app.": "کم از کم ایک ایپ منتخب کریں۔",
+    "“All except” can keep apps and websites, not whole categories.": "“ان کے سوا سب” ایپس اور ویب سائٹس رکھ سکتا ہے، پوری کیٹگریز نہیں۔",
     "Choose at least one day.": "کم از کم ایک دن منتخب کریں۔",
     "Start and end can't be the same time.": "آغاز اور اختتام ایک ہی وقت نہیں ہو سکتے۔",
     "End after it starts.": "اختتام آغاز کے بعد رکھیں۔",

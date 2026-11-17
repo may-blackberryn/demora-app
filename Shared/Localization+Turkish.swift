@@ -1249,6 +1249,7 @@ let turkishStrings: [String: String] = [
     "with a trusted contact": "güvenilir bir kişiyle",
     "Give it a name.": "Bir ad ver.",
     "Choose at least one app.": "En az bir uygulama seç.",
+    "“All except” can keep apps and websites, not whole categories.": "“Bunlar dışında tümü” uygulama ve web sitelerini bırakabilir, kategorilerin tamamını değil.",
     "Choose at least one day.": "En az bir gün seç.",
     "Start and end can't be the same time.": "Başlangıç ve bitiş aynı saat olamaz.",
     "End after it starts.": "Bitiş başlangıçtan sonra olmalı.",

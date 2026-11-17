@@ -1085,7 +1085,10 @@ struct ScheduleSelectionEditorView: View {
         calendar.locale = locale
         let shown = current ?? schedule
         return RuleEditorPage(title: shown.name, isDirty: selection != schedule.selection,
-                              problem: shown.acceptsSelection(selection) ? nil : tr("Choose at least one app."),
+                              problem: shown.acceptsSelection(selection) ? nil
+                                : shown.mode == .blockAllExcept
+                                    ? tr("“All except” can keep apps and websites, not whole categories.")
+                                    : tr("Choose at least one app."),
                               canReview: isValid, waiting: pending, onReview: review) {
             EditorSection(tr("When")) {
                 FactRow(label: tr("Type"), value: shown.mode == .blockAllExcept

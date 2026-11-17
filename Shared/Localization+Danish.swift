@@ -1279,6 +1279,7 @@ let danishStrings: [String: String] = [
     "with a trusted contact": "med en betroet person",
     "Give it a name.": "Giv det et navn.",
     "Choose at least one app.": "Vælg mindst én app.",
+    "“All except” can keep apps and websites, not whole categories.": "“Alt undtagen” kan beholde apps og websteder, ikke hele kategorier.",
     "Choose at least one day.": "Vælg mindst én dag.",
     "Start and end can't be the same time.": "Start og slut kan ikke være det samme tidspunkt.",
     "End after it starts.": "Slut efter starten.",

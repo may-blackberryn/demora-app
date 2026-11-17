@@ -1279,6 +1279,7 @@ let hebrewStrings: [String: String] = [
     "with a trusted contact": "עם איש קשר מהימן",
     "Give it a name.": "תנו לזה שם.",
     "Choose at least one app.": "בחרו אפליקציה אחת לפחות.",
+    "“All except” can keep apps and websites, not whole categories.": "„הכול חוץ מ…” יכול להשאיר אפליקציות ואתרים, לא קטגוריות שלמות.",
     "Choose at least one day.": "בחרו יום אחד לפחות.",
     "Start and end can't be the same time.": "התחלה וסיום לא יכולים להיות באותה שעה.",
     "End after it starts.": "מסתיים אחרי ההתחלה.",

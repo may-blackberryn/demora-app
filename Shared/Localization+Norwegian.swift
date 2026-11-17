@@ -1279,6 +1279,7 @@ let norwegianStrings: [String: String] = [
     "with a trusted contact": "med en betrodd person",
     "Give it a name.": "Gi den et navn.",
     "Choose at least one app.": "Velg minst én app.",
+    "“All except” can keep apps and websites, not whole categories.": "«Alt unntatt» kan beholde apper og nettsteder, ikke hele kategorier.",
     "Choose at least one day.": "Velg minst én dag.",
     "Start and end can't be the same time.": "Start og slutt kan ikke være samme tidspunkt.",
     "End after it starts.": "Slutt etter starten.",
