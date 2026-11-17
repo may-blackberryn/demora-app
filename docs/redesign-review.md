@@ -1,6 +1,13 @@
 # Demora iOS full redesign — review
 
 ## Start here
+- **2.0.1 blocking fixes (2026-11-17, branch `fix/blocking-2.0.1`):** the
+  owner reported much less reliable blocking in 2.0 (a spent limit not blocked
+  with the app open; "Background blocking may be incomplete" with a small
+  setup). Full review of the blocking code (seven areas), then the owner said
+  "implement the full sweep of fixes". Spec and root causes:
+  `docs/blocking-fixes-2.0.1.md`; decisions and checks in "2.0.1 blocking
+  fixes" at the end. Not seen on a phone yet.
 - **When & where is complete (step 6, 2026-11-12):** block rules and their
   check-in (`8318ebe` + review fixes `a01c8c6`): blocks save (chosen apps; a
   place or country; under any of only times run on their own); a met block
@@ -2299,3 +2306,43 @@ arm64 Debug device build: `Latch.debug.dylib` no longer contains the
 build: it does, and the demo still opens the same on the iPhone Duo simulator.
 Unsigned arm64 Release device build: the release guard's binary scan finds no
 demo strings. Nothing installed on a device.
+
+## 2.0.1 blocking fixes — 2026-11-17
+
+Owner request: blocking much less reliable in 2.0; "implement the full sweep
+of fixes" after the seven-area review. No JetsamEvent reports this month, so
+extension memory was not treated as a cause. Real 1.x baseline: `7fa886d`.
+
+| Decision | Why | Done? |
+| --- | --- | --- |
+| Monitor callbacks defer widget/notification publishing (`DisplayPublishing`) and refresh shields right after the rollover as well as at the end | iOS can stop the extension at any point; shields must land first. Publishing still happens once per callback | Yes |
+| `loadBlockedLimitIDs` reads the atomically written file, defaults only as fallback | The open app's defaults cache can lag the extension's write; its 30 s refresh could drop a fresh block | Yes |
+| Shield refresh keeps app shields when saved state is missing or undecodable, but lifts the deletion lock | A blank setup lifted every block. With unreadable rules the app can't save or recover, so reinstalling must stay possible (review) | Yes |
+| Housekeeping re-registers the daily monitor only when missing; stop-before-start kept | A stop+failed start removed every threshold for the day and only foreground repaired it. Replacing in place was tried and reverted after review: iOS may not re-fire already-fired events on replacement (recheck, free-window re-arm), and a failed start would leave yesterday's events running | Yes |
+| `applyDueChanges` refreshes shields right after the commit | New blocks/sessions are shielded before the slower Screen Time registrations | Yes |
+| Prune and `applyNow` read-modify-write inside the state lock | Snapshots saved outside it could undo a just-queued Block now | Yes |
+| Host holds a background-task assertion while it holds the state lock | A suspended app holding the lock could stall the extension until killed | Yes |
+| Free-window credit capped at minutes the free sources really covered (guarded elapsed, and wall end vs wall start); checkpoints capped by elapsed time | Late-processed ends and bogus early callbacks inflated limit thresholds ("Used up" but not blocked). Review: never compare a guarded start with a wall end | Yes |
+| Session end monitor spans [end, end+15 min]; `session-` interval start prunes; housekeeping re-registers a missing one; failures logged | Short sessions ended ~11–17 min late, long ones had one end callback, a failed registration was never repaired | Yes |
+| Wake waits (global, day/night, per limit) start at `looseningStart` | A lagging guarded clock made a wait end early after the next sync | Yes |
+| Rollover keeps runtime entries (wake taps, split, extra grants) keyed to today; daily blocks are not kept | A late rollover erased taps/grants earned after midnight. Keeping daily blocks was reverted after review: the includesPastActivity re-registration re-fires today's spent limits, and keeping risked yesterday's thresholds | Yes |
+| An unpreparable wake-gate change waits; the rest of the due batch applies | One failure used to stall every due change | Yes |
+| Failures recorded per monitor/runtime with error and time (cross-process lock), cleared when that thing works, is no longer needed or is a day old (except the daily monitor); extra time only depends on the daily monitor; banner blames the rule count only for a real capacity error; Details opens a diagnostics page owned by the screen | The old Bool was a sticky catch-all set in 22 places, disabled extra time and blamed the number of rules. Review: lost updates, stuck one-shot failures, sheet closing under the user | Yes |
+| Split rebuilds serialized across processes (`splitRebuild.lock`) | Interleaved epochs could leave a portion that never blocks | Yes |
+| Limit edits reset only what they invalidate | Split/wake/extra edits erased credits, the wake tap and grants | Yes |
+| Window repair by difference (stop extra, start missing) | One rejected window restarted every window on every foreground | Yes |
+| Report counts category time once, includes sites, subtracts free credit | "Used up" could show before Screen Time's threshold | Yes |
+| Deferred, recorded in the spec: per-store token cap, All-except categories validation, extra-step re-basing, conflict naming, owned-window priority, late (>23:44) daily starts, legacy wake on pre-release installs, extension slimming | Lower value or unverified Apple behaviour; not needed for the reported failures | No |
+
+Device checks still required (app closed): a limit reaching its threshold
+blocks within seconds with the app open and closed; Block now and short free
+check-ins end on time; midnight reset; the banner and Details page.
+
+Fresh independent review (2026-11-17) found: replacing the daily monitor in
+place could leave spent limits unblocked or grant extra time on yesterday's
+events (reverted to stop-first + repair); keeping post-midnight blocks could
+carry yesterday's thresholds (reverted); the free-time cap mixed clocks;
+failure-record races, stuck one-shot failures and a sheet that closed under
+the user; unreadable state keeping the deletion lock; a session name reused by
+a new check-in being stopped. All fixed as above. Not addressed: late (>23:44)
+daily starts and short monthly windows (`MonitoringBudget` unchanged, deferred).
