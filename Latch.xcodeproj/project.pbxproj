@@ -117,6 +117,54 @@
 			);
 			target = AC0000000000000000000006 /* LatchWidgets */;
 		};
+		AD0000000000000000000001 /* Exceptions for "Shared" folder in "LatchMonitor" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"Localization+Arabic.swift",
+				"Localization+Bengali.swift",
+				"Localization+Catalan.swift",
+				"Localization+ChineseSimplified.swift",
+				"Localization+ChineseTraditional.swift",
+				"Localization+Croatian.swift",
+				"Localization+Czech.swift",
+				"Localization+Danish.swift",
+				"Localization+Dutch.swift",
+				"Localization+Finnish.swift",
+				"Localization+French.swift",
+				"Localization+German.swift",
+				"Localization+Greek.swift",
+				"Localization+Gujarati.swift",
+				"Localization+Hebrew.swift",
+				"Localization+Hindi.swift",
+				"Localization+Hungarian.swift",
+				"Localization+Indonesian.swift",
+				"Localization+Italian.swift",
+				"Localization+Japanese.swift",
+				"Localization+Kannada.swift",
+				"Localization+Korean.swift",
+				"Localization+Malay.swift",
+				"Localization+Malayalam.swift",
+				"Localization+Marathi.swift",
+				"Localization+Norwegian.swift",
+				"Localization+Odia.swift",
+				"Localization+Polish.swift",
+				"Localization+Portuguese.swift",
+				"Localization+Punjabi.swift",
+				"Localization+Romanian.swift",
+				"Localization+Russian.swift",
+				"Localization+Slovak.swift",
+				"Localization+Slovenian.swift",
+				"Localization+Swedish.swift",
+				"Localization+Tamil.swift",
+				"Localization+Telugu.swift",
+				"Localization+Thai.swift",
+				"Localization+Turkish.swift",
+				"Localization+Ukrainian.swift",
+				"Localization+Urdu.swift",
+				"Localization+Vietnamese.swift",
+			);
+			target = BB0000000000000000000002 /* LatchMonitor */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -154,6 +202,9 @@
 		};
 		AA0000000000000000000004 /* Shared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AD0000000000000000000001 /* Exceptions for "Shared" folder in "LatchMonitor" target */,
+			);
 			path = Shared;
 			sourceTree = "<group>";
 		};
@@ -744,6 +795,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = may.latch.dev.monitor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "MONITOR_EXTENSION $(inherited)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -768,6 +820,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = may.latch.monitor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "MONITOR_EXTENSION $(inherited)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};

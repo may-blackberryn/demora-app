@@ -17,6 +17,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         SharedStore.holdBackgroundTime = { BackgroundTimeAssertion.begin() }
+        // Before anything can wake the monitor: its copy comes from here.
+        PublishedStrings.publish()
         #if DEBUG
         if DemoMode.isOn { return true }   // screenshot demo: no CloudKit or BG tasks
         #endif

@@ -134,6 +134,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         }
         set {
             SharedStore.defaults.set(newValue.rawValue, forKey: "latch.language")
+            PublishedStrings.publish()
             DemoraWidgetSnapshot.publish(state: SharedStore.loadState())
             DemoraNotifications.rescheduleFreeBoundaries(state: SharedStore.loadState())
         }
@@ -195,8 +196,19 @@ extension Int {
 }
 
 func tr(_ key: String) -> String {
+    #if MONITOR_EXTENSION
+    return PublishedStrings.table(for: AppLanguage.current)?[key] ?? key
+    #else
+    return compiledTable(for: AppLanguage.current)?[key] ?? key
+    #endif
+}
+
+#if !MONITOR_EXTENSION
+/// The language's compiled-in table (nil for English). Not built into the
+/// monitor extension; see `PublishedStrings`.
+func compiledTable(for language: AppLanguage) -> [String: String]? {
     let table: [String: String]?
-    switch AppLanguage.current {
+    switch language {
     case .english: table = nil
     case .spanish: table = spanishStrings
     case .german: table = germanStrings
@@ -242,9 +254,77 @@ func tr(_ key: String) -> String {
     case .hebrew: table = hebrewStrings
     case .urdu: table = urduStrings
     }
-    return table?[key] ?? key
+    return table
+}
+#endif
+
+/// 2.0.1: the monitor extension runs under iOS's 6 MB memory cap. With all 43
+/// translation tables compiled in (about 2.3 MB of static data), iOS killed it
+/// at launch (JETSAM per-process-limit, ~50 ms after spawn, before any
+/// callback ran), so limits, schedules and sessions never applied in the
+/// background. The monitor is now built without the tables
+/// (MONITOR_EXTENSION). The host publishes only the current language's table
+/// to the App Group; the monitor reads it lazily, the first time it needs copy
+/// (display publishing runs after enforcement), and falls back to English when
+/// the file is missing or for another language.
+enum PublishedStrings {
+    private static let fileName = "strings.v1.plist"
+    private static let languageKey = "language"
+    private static let buildKey = "build"
+    private static let tableKey = "table"
+
+    private static var url: URL? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: LatchConstants.appGroupID)?
+            .appendingPathComponent(fileName)
+    }
+
+    #if MONITOR_EXTENSION
+    private static let lock = NSLock()
+    private static var cached: (language: String, table: [String: String])?
+
+    static func table(for language: AppLanguage) -> [String: String]? {
+        guard language != .english else { return nil }
+        lock.lock(); defer { lock.unlock() }
+        if let cached, cached.language == language.rawValue { return cached.table }
+        guard let url, let data = try? Data(contentsOf: url),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil)
+                as? [String: Any],
+              plist[languageKey] as? String == language.rawValue,
+              let table = plist[tableKey] as? [String: String]
+        else { return nil }
+        cached = (language.rawValue, table)
+        return table
+    }
+
+    static func publish() {}
+    #else
+    /// Host (and shield) only: write the current language's table if the
+    /// published copy is for another language or another build. Cheap when
+    /// nothing changed; safe to call on every launch and foreground.
+    static func publish() {
+        guard let url else { return }
+        let language = AppLanguage.current
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        if let data = try? Data(contentsOf: url),
+           let plist = try? PropertyListSerialization.propertyList(from: data, format: nil)
+            as? [String: Any],
+           plist[languageKey] as? String == language.rawValue,
+           plist[buildKey] as? String == build {
+            return
+        }
+        let plist: [String: Any] = [
+            languageKey: language.rawValue,
+            buildKey: build,
+            tableKey: compiledTable(for: language) ?? [:],
+        ]
+        guard let data = try? PropertyListSerialization.data(
+            fromPropertyList: plist, format: .binary, options: 0) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+    #endif
 }
 
+#if !MONITOR_EXTENSION
 let spanishStrings: [String: String] = [
     // Widget redesign: gallery and runtime copy (existing shared terms reused).
     "Now & next": "Ahora y después",
@@ -1957,3 +2037,4 @@ let spanishStrings: [String: String] = [
     "Demora needs your precise location for this check, to tell whether you're inside a rule's place or country.": "Demora necesita tu ubicación exacta para esta comprobación, para saber si estás dentro del lugar o del país de una regla.",
     "Take a photo to use as a trusted contact's picture.": "Haz una foto para usarla como imagen de un contacto de confianza.",
 ]
+#endif

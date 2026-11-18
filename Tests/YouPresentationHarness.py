@@ -688,7 +688,9 @@ table_names = ('spanishStrings', 'germanStrings', 'frenchStrings', 'portugueseSt
 table_sources = []
 for (_, suffix), name in zip(TABLES.items(), table_names):
     source = (ROOT / f'Shared/Localization{suffix}.swift').read_text()
-    table_sources.append('let ' + name + source.split('let ' + name, 1)[1])
+    body = 'let ' + name + source.split('let ' + name, 1)[1]
+    # The Spanish table closes the monitor-only #if (MonitorMemoryHarness).
+    table_sources.append(body.rstrip().removesuffix('#endif'))
 with tempfile.TemporaryDirectory(prefix='demora-you-localization-') as directory:
     folder = Path(directory)
     (folder / 'Tables.swift').write_text('import Foundation\n' + '\n'.join(table_sources))

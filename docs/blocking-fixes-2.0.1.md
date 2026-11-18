@@ -123,7 +123,35 @@ Decided not to change (owner can override):
   cards in Rules and can be removed there.
 - `DayNightPolicy` is unused production code still covered by its harness;
   retiring it is test work, not a user-facing fix.
-- Slimming the extension binary: no JetsamEvent reports.
+- Slimming the extension binary: no JetsamEvent reports. **Wrong — reversed
+  below (Root cause found on the phone).**
+
+## Root cause found on the phone (2026-11-18)
+
+The Details monitor log stayed empty while socials, youtube and games were
+registered correctly (`limit-*` events, 5 min, `+past`, right token counts).
+The iPhone's system log (`sudo log collect`, 18 h) showed why:
+
+- `LatchMonitor` was killed **67 times** with `JETSAM_REASON_MEMORY_PERPROCESSLIMIT`,
+  e.g. at the 22:00 night boundary it "ran for 52ms". RunningBoard sets its
+  limit to **6 MB** (active and inactive). It died before any callback ran,
+  so no threshold, schedule or session ever applied in the background.
+- No `.ips` jetsam report appears in Settings for this kind of kill, which is
+  why the earlier "no JetsamEvent" check missed it.
+- Cause: all 43 translation tables were compiled into the extension
+  (`__DATA` 2.4 MB, 43 × 53 KB statically initialised arrays of string
+  pointers; 1.x had 7). Only the monitor was killed (shield 0, widgets 1).
+
+Fix: the monitor target excludes every `Localization+*.swift` and builds with
+`MONITOR_EXTENSION`; the Spanish table and the table switch are hidden from
+it. `tr()` in the monitor reads `PublishedStrings`, the current language's
+table that the host writes to the App Group (`strings.v1.plist`) at launch,
+on foreground and on a language change (rewritten after an update). The
+monitor loads it lazily, only when it needs copy (after enforcement), and
+falls back to English when it's missing or for another language. The
+monitor log now records the extension's memory footprint on every line.
+Guard: `Tests/MonitorMemoryHarness.py` (set `DEMORA_MONITOR_BINARY` to also
+check the built binary's `__DATA` size).
 
 ## Verification
 Full verify after each step; commit per step by name; fresh reviewer at the

@@ -848,10 +848,25 @@ enum MonitorTrace {
                                                formatOptions: [.withTime, .withColonSeparatorInTime])
         lock.lock(); defer { lock.unlock() }
         var lines = SharedStore.defaults.stringArray(forKey: key) ?? []
-        lines.append("\(time) \(phase) \(kind) \(name)")
+        lines.append("\(time) \(phase) \(kind) \(name) \(footprint)")
         if lines.count > 20 { lines.removeFirst(lines.count - 20) }
         SharedStore.defaults.set(lines, forKey: key)
     }
 
     static var lines: [String] { SharedStore.defaults.stringArray(forKey: key) ?? [] }
+
+    /// This process's memory footprint, the number iOS compares with the
+    /// monitor extension's 6 MB cap.
+    private static var footprint: String {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { return "?MB" }
+        return String(format: "%.1fMB", Double(info.phys_footprint) / 1_048_576)
+    }
 }

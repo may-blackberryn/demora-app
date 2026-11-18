@@ -32,7 +32,7 @@ labels = dict(re.findall(r'case \.(\w+): return "([^"]+)"', enum))
 assert set(labels) == {name for name, _ in cases}, 'every language has a native label'
 assert len(set(labels.values())) == len(labels), 'labels are distinct'
 assert labels['japanese'] == '日本語' and labels['chineseTraditional'] == '繁體中文', labels
-tr_body = localization.split('func tr(_ key: String) -> String {', 1)[1].split('\n}\n', 1)[0]
+tr_body = localization.split('func compiledTable(for language: AppLanguage) -> [String: String]? {', 1)[1].split('\n}\n', 1)[0]
 wired = dict(re.findall(r'case \.(\w+): table = (\w+)', tr_body))
 assert 'case .english: table = nil' in tr_body
 for (name, code) in cases[1:]:

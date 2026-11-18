@@ -89,6 +89,10 @@ struct LatchApp: App {
             if DemoMode.isOn { return }
             #endif
             if phase == .active {
+                // The monitor extension localizes from this published copy
+                // (it has no compiled-in tables); the device language may have
+                // changed while Demora was in the background.
+                PublishedStrings.publish()
                 if !SharedStore.defaults.bool(forKey: "latch.healedRaceCondition") {
                     SharedStore.saveBlockedLimitIDs([])
                     ShieldController.refresh()
