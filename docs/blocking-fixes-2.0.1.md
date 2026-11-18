@@ -96,7 +96,7 @@ below are authorized by that request; everything else in `CLAUDE.md` stands.
   add the limit's free-time credit to the budget shown.
 
 ## Second batch (2.0.1, owner: "start on that as 2.0.1")
-Version is now 2.0.1 in all targets.
+Version: these fixes ship as 2.0.0 (owner, 2026-11-17: nothing released yet; the version was set back from 2.0.1 to 2.0.0). "2.0.1" in code comments and docs names this fix round, not a release.
 - **50-token shield cap.** Apple shields at most 50 app and 50 site tokens per
   store setting (documented for sites, categories and exceptions; developers
   report >50 apps shields nothing). Up to 50 everything stays in `latch.main`;
