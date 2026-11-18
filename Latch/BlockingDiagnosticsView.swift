@@ -42,7 +42,9 @@ struct BlockingDiagnosticsView: View {
         var unreadable: Bool
         var unblockSessions: [String] = []
         var technical: [String] = []
+        var trace: [String] = []
     }
+    @State private var trace: [String] = []
     @State private var technical: [String] = []
     @State private var unblockSessions: [String] = []
     @State private var monitors: [String] = []
@@ -57,6 +59,7 @@ struct BlockingDiagnosticsView: View {
                     limitsSection
                     running
                     technicalSection
+                    traceSection
                     Button {
                         retry()
                     } label: {
@@ -179,6 +182,24 @@ struct BlockingDiagnosticsView: View {
         .textSelection(.enabled)
     }
 
+    /// Raw extension activity (2.0.1): start/done per callback, newest last.
+    private var traceSection: some View {
+        VStack(alignment: .leading, spacing: DemoraSpace.xxs) {
+            DemoraSectionTitle(title: "monitor log")
+            if trace.isEmpty {
+                Text("(no callbacks recorded)")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(Ink.inkSoft)
+            }
+            ForEach(Array(trace.enumerated()), id: \.offset) { _, line in
+                Text(line)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(Ink.inkSoft)
+            }
+        }
+        .textSelection(.enabled)
+    }
+
     private var running: some View {
         VStack(alignment: .leading, spacing: DemoraSpace.s) {
             DemoraSectionTitle(title: String(format: tr("Running monitors: %d of %d"),
@@ -240,7 +261,7 @@ struct BlockingDiagnosticsView: View {
                 "suppressed: " + (suppressed.compactMap { limitNames[$0] }.sorted().joined(separator: ", ")).ifEmpty("-"),
                 "exemptions active: \(state.exemptions.filter { $0.isActive() }.count), sessions active: \(state.sessions.filter(\.isActive).map { "\($0.kind.rawValue)" }.joined(separator: ","))",
                 "pending due: \(state.pending.filter(\.isDue).count) of \(state.pending.count)",
-            ]
+            ] + dailyEventLines(limitNames: limitNames)
             return Snapshot(monitors: names, limits: rows, unreadable: false,
                             unblockSessions: unblocks, technical: technical)
         }.value
@@ -249,6 +270,7 @@ struct BlockingDiagnosticsView: View {
         rulesUnreadable = snapshot.unreadable
         unblockSessions = snapshot.unblockSessions
         technical = snapshot.technical
+        trace = MonitorTrace.lines
         freeSince = SharedStore.freeWindowStart
         monitors = snapshot.monitors
         loaded = true
@@ -268,4 +290,25 @@ struct BlockingDiagnosticsView: View {
 
 private extension String {
     func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
+}
+
+/// The daily monitor's registered events as iOS reports them (2.0.1): proves
+/// whether each limit's threshold event exists and at what threshold.
+private func dailyEventLines(limitNames: [UUID: String]) -> [String] {
+    let center = DeviceActivityCenter()
+    let daily = DeviceActivityName(LatchConstants.dailyActivityName)
+    let events = center.events(for: daily)
+    guard !events.isEmpty else { return ["daily events: none"] }
+    return events.map { name, event -> String in
+        var label = name.rawValue
+        for (id, limitName) in limitNames where label.contains(id.uuidString) {
+            label = label.replacingOccurrences(of: id.uuidString, with: limitName)
+        }
+        let t = event.threshold
+        let threshold = "\(t.hour ?? 0)h\(t.minute ?? 0)m"
+        var past = ""
+        if #available(iOS 17.4, *) { past = event.includesPastActivity ? " +past" : "" }
+        let parts = "apps \(event.applications.count) cats \(event.categories.count) sites \(event.webDomains.count)"
+        return "event \(label): \(threshold)\(past), \(parts)"
+    }.sorted()
 }

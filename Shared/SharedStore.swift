@@ -834,3 +834,24 @@ enum DisplayPublishing {
         DemoraWidgetSnapshot.publish(state: state)
     }
 }
+
+/// The last 20 monitor-extension callbacks, start and finish (2.0.1), shown
+/// in Details. Answers "does iOS run the extension at all, and does it get
+/// killed mid-callback?" One small defaults write per line; activity and
+/// event names only (no usage, no app identities).
+enum MonitorTrace {
+    private static let key = "latch.monitorTrace.v1"
+    private static let lock = NSLock()
+
+    static func note(_ phase: String, _ kind: String, _ name: String) {
+        let time = ISO8601DateFormatter.string(from: Date(), timeZone: .current,
+                                               formatOptions: [.withTime, .withColonSeparatorInTime])
+        lock.lock(); defer { lock.unlock() }
+        var lines = SharedStore.defaults.stringArray(forKey: key) ?? []
+        lines.append("\(time) \(phase) \(kind) \(name)")
+        if lines.count > 20 { lines.removeFirst(lines.count - 20) }
+        SharedStore.defaults.set(lines, forKey: key)
+    }
+
+    static var lines: [String] { SharedStore.defaults.stringArray(forKey: key) ?? [] }
+}

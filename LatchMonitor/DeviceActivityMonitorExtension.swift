@@ -21,7 +21,9 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
     override func intervalDidStart(for activity: DeviceActivityName) {
         super.intervalDidStart(for: activity)
+        MonitorTrace.note("start", "intervalStart", activity.rawValue)
         DisplayPublishing.deferring { handleIntervalDidStart(activity) }
+        MonitorTrace.note("done", "intervalStart", activity.rawValue)
     }
 
     private func handleIntervalDidStart(_ activity: DeviceActivityName) {
@@ -92,7 +94,9 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
     override func intervalDidEnd(for activity: DeviceActivityName) {
         super.intervalDidEnd(for: activity)
+        MonitorTrace.note("start", "intervalEnd", activity.rawValue)
         DisplayPublishing.deferring { handleIntervalDidEnd(activity) }
+        MonitorTrace.note("done", "intervalEnd", activity.rawValue)
     }
 
     private func handleIntervalDidEnd(_ activity: DeviceActivityName) {
@@ -123,17 +127,22 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     // callback left stale — missed window ends, due changes, day rollover.
     override func intervalWillStartWarning(for activity: DeviceActivityName) {
         super.intervalWillStartWarning(for: activity)
+        MonitorTrace.note("start", "startWarning", activity.rawValue)
         DisplayPublishing.deferring { ChangeEngine.housekeeping() }
+        MonitorTrace.note("done", "startWarning", activity.rawValue)
     }
 
     override func intervalWillEndWarning(for activity: DeviceActivityName) {
         super.intervalWillEndWarning(for: activity)
+        MonitorTrace.note("start", "endWarning", activity.rawValue)
         DisplayPublishing.deferring { ChangeEngine.housekeeping() }
+        MonitorTrace.note("done", "endWarning", activity.rawValue)
     }
 
     override func eventWillReachThresholdWarning(_ event: DeviceActivityEvent.Name,
                                                  activity: DeviceActivityName) {
         super.eventWillReachThresholdWarning(event, activity: activity)
+        MonitorTrace.note("start", "thresholdWarning", event.rawValue)
         guard activity.rawValue == LatchConstants.dailyActivityName,
               event.rawValue.hasPrefix("limit-"),
               let id = UUID(uuidString: String(event.rawValue.dropFirst(6)))
@@ -144,7 +153,9 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name,
                                          activity: DeviceActivityName) {
         super.eventDidReachThreshold(event, activity: activity)
+        MonitorTrace.note("start", "threshold", event.rawValue)
         DisplayPublishing.deferring { handleThreshold(event, activity: activity) }
+        MonitorTrace.note("done", "threshold", event.rawValue)
     }
 
     private func handleThreshold(_ event: DeviceActivityEvent.Name,
