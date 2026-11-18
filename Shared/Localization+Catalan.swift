@@ -852,6 +852,8 @@ let catalanStrings: [String: String] = [
     "Problems": "Problemes",
     "Everything is set up.": "Tot està configurat.",
     "Running monitors: %d of %d": "Monitors actius: %d de %d",
+    "Limit reached during free time": "Límit assolit durant el temps lliure",
+    "Unblock session running: %@": "Sessió de desbloqueig activa: %@",
     "Blocked now": "Bloquejat ara",
     "Not blocked": "No bloquejat",
     "Limit reached at %@": "Límit assolit a les %@",

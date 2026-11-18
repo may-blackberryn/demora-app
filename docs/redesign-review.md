@@ -2388,3 +2388,14 @@ caused the original banner).
 
 Harness: new regression checks — `synchronize()` false alone publishes, and an
 older build's stuck flag clears. Not yet seen on the phone.
+
+Follow-up the same day: after the fix the warning cleared, but "socials" still
+showed Used up without a block. Details only opened from the warning, so it
+is now also under You → App → Background blocking, and adds: limit reached
+during free time, running unblock sessions, and a raw `state` block (clock
+offset, wall/guarded/reset days, spent, credit, free-window markers, active
+exemptions/sessions, due changes). Housekeeping also re-registers a daily
+monitor still set up for an earlier day (its extra-time event names carry the
+old date, so a granted extra time could never end). Insights keeps its
+refresh button: its list scrolls inside Apple's report process, which a host
+pull-to-refresh can't reach.

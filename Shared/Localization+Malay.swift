@@ -852,6 +852,8 @@ let malayStrings: [String: String] = [
     "Problems": "Masalah",
     "Everything is set up.": "Semuanya sudah disediakan.",
     "Running monitors: %d of %d": "Pemantau aktif: %d daripada %d",
+    "Limit reached during free time": "Had dicapai semasa masa bebas",
+    "Unblock session running: %@": "Sesi nyahsekat berjalan: %@",
     "Blocked now": "Disekat sekarang",
     "Not blocked": "Tidak disekat",
     "Limit reached at %@": "Had dicapai pada %@",

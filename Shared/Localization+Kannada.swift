@@ -852,6 +852,8 @@ let kannadaStrings: [String: String] = [
     "Problems": "ಸಮಸ್ಯೆಗಳು",
     "Everything is set up.": "ಎಲ್ಲವೂ ಹೊಂದಿಸಲಾಗಿದೆ.",
     "Running monitors: %d of %d": "ಚಾಲನೆಯಲ್ಲಿರುವ ಮಾನಿಟರ್‌ಗಳು: %d / %d",
+    "Limit reached during free time": "ಉಚಿತ ಸಮಯದಲ್ಲಿ ಮಿತಿ ತಲುಪಿದೆ",
+    "Unblock session running: %@": "ಅನ್‌ಬ್ಲಾಕ್ ಸೆಷನ್ ನಡೆಯುತ್ತಿದೆ: %@",
     "Blocked now": "ಈಗ ನಿರ್ಬಂಧಿಸಲಾಗಿದೆ",
     "Not blocked": "ನಿರ್ಬಂಧಿಸಿಲ್ಲ",
     "Limit reached at %@": "%@ ಕ್ಕೆ ಮಿತಿ ತಲುಪಿದೆ",

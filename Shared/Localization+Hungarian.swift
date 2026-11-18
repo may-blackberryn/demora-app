@@ -852,6 +852,8 @@ let hungarianStrings: [String: String] = [
     "Problems": "Problémák",
     "Everything is set up.": "Minden be van állítva.",
     "Running monitors: %d of %d": "Futó figyelők: %d / %d",
+    "Limit reached during free time": "Korlát elérve szabadidő alatt",
+    "Unblock session running: %@": "Feloldási munkamenet fut: %@",
     "Blocked now": "Most blokkolva",
     "Not blocked": "Nincs blokkolva",
     "Limit reached at %@": "Korlát elérve: %@",

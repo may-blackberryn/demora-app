@@ -852,6 +852,8 @@ let odiaStrings: [String: String] = [
     "Problems": "ସମସ୍ୟା",
     "Everything is set up.": "ସବୁକିଛି ସେଟ୍ ହୋଇଛି।",
     "Running monitors: %d of %d": "ଚାଲୁଥିବା ମନିଟର: %d / %d",
+    "Limit reached during free time": "ଫ୍ରି ଟାଇମ୍ ସମୟରେ ସୀମା ପୂରଣ ହେଲା",
+    "Unblock session running: %@": "ଅନ୍‌ବ୍ଲକ୍ ସେସନ୍ ଚାଲିଛି: %@",
     "Blocked now": "ଏବେ ବ୍ଲକ୍ ହୋଇଛି",
     "Not blocked": "ବ୍ଲକ୍ ହୋଇନାହିଁ",
     "Limit reached at %@": "%@ ରେ ସୀମା ପୂରଣ ହେଲା",

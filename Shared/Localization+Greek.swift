@@ -852,6 +852,8 @@ let greekStrings: [String: String] = [
     "Problems": "Προβλήματα",
     "Everything is set up.": "Όλα έχουν ρυθμιστεί.",
     "Running monitors: %d of %d": "Ενεργές παρακολουθήσεις: %d από %d",
+    "Limit reached during free time": "Το όριο εξαντλήθηκε σε ελεύθερο χρόνο",
+    "Unblock session running: %@": "Περίοδος άρσης αποκλεισμού σε εξέλιξη: %@",
     "Blocked now": "Αποκλεισμένο τώρα",
     "Not blocked": "Δεν είναι αποκλεισμένο",
     "Limit reached at %@": "Το όριο εξαντλήθηκε στις %@",

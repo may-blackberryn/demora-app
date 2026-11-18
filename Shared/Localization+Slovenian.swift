@@ -852,6 +852,8 @@ let slovenianStrings: [String: String] = [
     "Problems": "Težave",
     "Everything is set up.": "Vse je nastavljeno.",
     "Running monitors: %d of %d": "Aktivni nadzorniki: %d od %d",
+    "Limit reached during free time": "Omejitev dosežena v prostem času",
+    "Unblock session running: %@": "Seja odblokiranja teče: %@",
     "Blocked now": "Zdaj blokirano",
     "Not blocked": "Ni blokirano",
     "Limit reached at %@": "Omejitev dosežena ob %@",

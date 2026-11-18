@@ -852,6 +852,8 @@ let finnishStrings: [String: String] = [
     "Problems": "Ongelmat",
     "Everything is set up.": "Kaikki on käytössä.",
     "Running monitors: %d of %d": "Käynnissä olevat valvonnat: %d / %d",
+    "Limit reached during free time": "Raja saavutettu vapaa-ajalla",
+    "Unblock session running: %@": "Eston poisto käynnissä: %@",
     "Blocked now": "Estetty nyt",
     "Not blocked": "Ei estetty",
     "Limit reached at %@": "Raja saavutettu klo %@",

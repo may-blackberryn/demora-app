@@ -823,6 +823,8 @@ let frenchStrings: [String: String] = [
     "Problems": "Problèmes",
     "Everything is set up.": "Tout est configuré.",
     "Running monitors: %d of %d": "Surveillances actives : %d sur %d",
+    "Limit reached during free time": "Limite atteinte pendant le temps libre",
+    "Unblock session running: %@": "Session de déblocage en cours : %@",
     "Blocked now": "Bloquée maintenant",
     "Not blocked": "Non bloquée",
     "Limit reached at %@": "Limite atteinte à %@",

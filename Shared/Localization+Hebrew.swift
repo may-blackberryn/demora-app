@@ -852,6 +852,8 @@ let hebrewStrings: [String: String] = [
     "Problems": "בעיות",
     "Everything is set up.": "הכול מוגדר.",
     "Running monitors: %d of %d": "מעקבים פעילים: %d / %d",
+    "Limit reached during free time": "המגבלה הושגה בזמן חופשי",
+    "Unblock session running: %@": "סשן ביטול חסימה פעיל: %@",
     "Blocked now": "חסום עכשיו",
     "Not blocked": "לא חסום",
     "Limit reached at %@": "המגבלה הושגה ב-%@",

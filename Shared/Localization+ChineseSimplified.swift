@@ -852,6 +852,8 @@ let chineseSimplifiedStrings: [String: String] = [
     "Problems": "问题",
     "Everything is set up.": "一切都已设置好。",
     "Running monitors: %d of %d": "正在运行的监控：%d / %d",
+    "Limit reached during free time": "在自由时间内达到限额",
+    "Unblock session running: %@": "解除封锁的时段进行中：%@",
     "Blocked now": "当前已封锁",
     "Not blocked": "未封锁",
     "Limit reached at %@": "已于 %@ 达到限额",

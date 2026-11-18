@@ -852,6 +852,8 @@ let chineseTraditionalStrings: [String: String] = [
     "Problems": "問題",
     "Everything is set up.": "一切都已設定好。",
     "Running monitors: %d of %d": "正在執行的監控：%d / %d",
+    "Limit reached during free time": "在自由時間內達到限額",
+    "Unblock session running: %@": "解除封鎖的時段進行中：%@",
     "Blocked now": "目前已封鎖",
     "Not blocked": "未封鎖",
     "Limit reached at %@": "已於 %@ 達到限額",

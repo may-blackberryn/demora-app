@@ -785,6 +785,8 @@ let hindiStrings: [String: String] = [
     "Problems": "समस्याएँ",
     "Everything is set up.": "सब कुछ सेट है।",
     "Running monitors: %d of %d": "चल रहे मॉनिटर: %d / %d",
+    "Limit reached during free time": "फ़्री टाइम में सीमा पूरी हुई",
+    "Unblock session running: %@": "अनब्लॉक सेशन चल रहा है: %@",
     "Blocked now": "अभी ब्लॉक है",
     "Not blocked": "ब्लॉक नहीं",
     "Limit reached at %@": "%@ पर सीमा पूरी हुई",

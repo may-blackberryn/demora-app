@@ -852,6 +852,8 @@ let czechStrings: [String: String] = [
     "Problems": "Problémy",
     "Everything is set up.": "Vše je nastaveno.",
     "Running monitors: %d of %d": "Aktivní monitory: %d z %d",
+    "Limit reached during free time": "Limit dosažen během volného času",
+    "Unblock session running: %@": "Běží relace odblokování: %@",
     "Blocked now": "Teď blokováno",
     "Not blocked": "Neblokováno",
     "Limit reached at %@": "Limit dosažen v %@",

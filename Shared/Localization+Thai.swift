@@ -852,6 +852,8 @@ let thaiStrings: [String: String] = [
     "Problems": "ปัญหา",
     "Everything is set up.": "ตั้งค่าครบทุกอย่างแล้ว",
     "Running monitors: %d of %d": "ตัวติดตามที่ทำงานอยู่: %d จาก %d",
+    "Limit reached during free time": "ถึงขีดจำกัดระหว่างเวลาว่าง",
+    "Unblock session running: %@": "เซสชันปลดบล็อกกำลังทำงาน: %@",
     "Blocked now": "บล็อกอยู่ตอนนี้",
     "Not blocked": "ไม่ได้บล็อก",
     "Limit reached at %@": "ถึงขีดจำกัดเมื่อ %@",

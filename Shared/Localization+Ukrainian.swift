@@ -852,6 +852,8 @@ let ukrainianStrings: [String: String] = [
     "Problems": "Проблеми",
     "Everything is set up.": "Усе налаштовано.",
     "Running monitors: %d of %d": "Активні монітори: %d з %d",
+    "Limit reached during free time": "Ліміт досягнуто під час вільного часу",
+    "Unblock session running: %@": "Триває сеанс розблокування: %@",
     "Blocked now": "Зараз заблоковано",
     "Not blocked": "Не заблоковано",
     "Limit reached at %@": "Ліміт досягнуто о %@",

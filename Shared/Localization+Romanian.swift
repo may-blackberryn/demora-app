@@ -852,6 +852,8 @@ let romanianStrings: [String: String] = [
     "Problems": "Probleme",
     "Everything is set up.": "Totul este configurat.",
     "Running monitors: %d of %d": "Monitoare active: %d din %d",
+    "Limit reached during free time": "Limită atinsă în timpul liber",
+    "Unblock session running: %@": "Sesiune de deblocare activă: %@",
     "Blocked now": "Blocat acum",
     "Not blocked": "Neblocat",
     "Limit reached at %@": "Limită atinsă la %@",

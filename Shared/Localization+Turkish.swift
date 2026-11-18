@@ -785,6 +785,8 @@ let turkishStrings: [String: String] = [
     "Problems": "Sorunlar",
     "Everything is set up.": "Her şey ayarlandı.",
     "Running monitors: %d of %d": "Çalışan izleyiciler: %d / %d",
+    "Limit reached during free time": "Sınıra serbest zamanda ulaşıldı",
+    "Unblock session running: %@": "Engel kaldırma oturumu sürüyor: %@",
     "Blocked now": "Şu an engelli",
     "Not blocked": "Engelli değil",
     "Limit reached at %@": "Sınıra %@ itibarıyla ulaşıldı",

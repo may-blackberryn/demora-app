@@ -1590,7 +1590,16 @@ enum ChangeEngine {
         let state = SharedStore.loadState()
         guard !state.limits.isEmpty else { return }
         let daily = DeviceActivityName(LatchConstants.dailyActivityName)
-        guard !DeviceActivityCenter().activities.contains(daily) else { return }
+        let running = DeviceActivityCenter().activities.contains(daily)
+        // Also a monitor still registered for an earlier day (its midnight
+        // re-registration never happened): its extra-time events carry the old
+        // date, so a granted extra time could never end, and weekday budgets
+        // are yesterday's. Only the day is compared here, so a healthy monitor
+        // for today is never restarted.
+        let saved = SharedStore.defaults.string(forKey: dailyMonitorFingerprintKey)
+        let today = SharedStore.dayKey(for: Date())
+        let staleDay = saved.map { $0.split(separator: ";").dropFirst().first.map(String.init) != today } ?? false
+        guard !running || staleDay else { return }
         reconfigureDailyMonitoring(state: state)
     }
 

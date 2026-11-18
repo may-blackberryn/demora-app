@@ -1091,6 +1091,8 @@ let spanishStrings: [String: String] = [
     "Problems": "Problemas",
     "Everything is set up.": "Todo está configurado.",
     "Running monitors: %d of %d": "Monitores activos: %d de %d",
+    "Limit reached during free time": "Límite alcanzado durante el tiempo libre",
+    "Unblock session running: %@": "Sesión de desbloqueo activa: %@",
     "Blocked now": "Bloqueado ahora",
     "Not blocked": "No bloqueado",
     "Limit reached at %@": "Límite alcanzado a las %@",

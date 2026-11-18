@@ -852,6 +852,8 @@ let arabicStrings: [String: String] = [
     "Problems": "المشكلات",
     "Everything is set up.": "تم إعداد كل شيء.",
     "Running monitors: %d of %d": "المراقبات النشطة: %d من %d",
+    "Limit reached during free time": "تم بلوغ الحد أثناء الوقت الحر",
+    "Unblock session running: %@": "جلسة إلغاء الحظر تعمل: %@",
     "Blocked now": "محظور الآن",
     "Not blocked": "غير محظور",
     "Limit reached at %@": "تم بلوغ الحد في %@",

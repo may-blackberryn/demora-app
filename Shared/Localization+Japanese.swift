@@ -852,6 +852,8 @@ let japaneseStrings: [String: String] = [
     "Problems": "問題",
     "Everything is set up.": "すべて設定済みです。",
     "Running monitors: %d of %d": "実行中のモニター：%d / %d",
+    "Limit reached during free time": "自由時間中に制限に到達",
+    "Unblock session running: %@": "ブロック解除セッション中：%@",
     "Blocked now": "現在ブロック中",
     "Not blocked": "ブロックされていません",
     "Limit reached at %@": "%@に制限に到達",

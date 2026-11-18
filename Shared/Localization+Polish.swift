@@ -785,6 +785,8 @@ let polishStrings: [String: String] = [
     "Problems": "Problemy",
     "Everything is set up.": "Wszystko jest skonfigurowane.",
     "Running monitors: %d of %d": "Aktywne monitory: %d z %d",
+    "Limit reached during free time": "Limit osiągnięty w czasie wolnym",
+    "Unblock session running: %@": "Trwa sesja odblokowania: %@",
     "Blocked now": "Teraz zablokowane",
     "Not blocked": "Niezablokowane",
     "Limit reached at %@": "Limit osiągnięty o %@",

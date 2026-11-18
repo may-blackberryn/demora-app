@@ -852,6 +852,8 @@ let marathiStrings: [String: String] = [
     "Problems": "समस्या",
     "Everything is set up.": "सर्व काही सेट आहे.",
     "Running monitors: %d of %d": "चालू मॉनिटर: %d / %d",
+    "Limit reached during free time": "फ्री टाइममध्ये मर्यादा पूर्ण झाली",
+    "Unblock session running: %@": "अनब्लॉक सत्र सुरू आहे: %@",
     "Blocked now": "आता ब्लॉक आहे",
     "Not blocked": "ब्लॉक नाही",
     "Limit reached at %@": "%@ ला मर्यादा पूर्ण झाली",

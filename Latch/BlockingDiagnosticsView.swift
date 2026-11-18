@@ -31,13 +31,20 @@ struct BlockingDiagnosticsView: View {
         let reachedAt: Date?
         let credit: Int
         let extraRunning: Bool
+        /// Screen Time said the limit was reached while free time ran; it
+        /// re-arms when free time ends (not a block by itself).
+        let reachedDuringFree: Bool
     }
 
     private struct Snapshot: Sendable {
         var monitors: [String]
         var limits: [LimitRow]
         var unreadable: Bool
+        var unblockSessions: [String] = []
+        var technical: [String] = []
     }
+    @State private var technical: [String] = []
+    @State private var unblockSessions: [String] = []
     @State private var monitors: [String] = []
     @State private var loaded = false
     @State private var retrying = false
@@ -49,6 +56,7 @@ struct BlockingDiagnosticsView: View {
                     problems
                     limitsSection
                     running
+                    technicalSection
                     Button {
                         retry()
                     } label: {
@@ -111,6 +119,11 @@ struct BlockingDiagnosticsView: View {
                     .demoraType(.meta)
                     .foregroundStyle(Ink.ink)
             }
+            ForEach(unblockSessions, id: \.self) { name in
+                Text(String(format: tr("Unblock session running: %@"), name))
+                    .demoraType(.meta)
+                    .foregroundStyle(Ink.ink)
+            }
             if let freeSince {
                 Text(String(format: tr("Free time running since %@"),
                             freeSince.appFormatted(date: .omitted, time: .shortened)))
@@ -131,6 +144,11 @@ struct BlockingDiagnosticsView: View {
                     } ?? tr("No limit-reached signal today"))
                         .demoraType(.meta)
                         .foregroundStyle(Ink.inkSoft)
+                    if row.reachedDuringFree {
+                        Text(tr("Limit reached during free time"))
+                            .demoraType(.meta)
+                            .foregroundStyle(Ink.inkSoft)
+                    }
                     if row.extraRunning {
                         Text(tr("Extra time running"))
                             .demoraType(.meta)
@@ -145,6 +163,20 @@ struct BlockingDiagnosticsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+
+    /// Raw engine markers for support, not translated: clock offset, the
+    /// last midnight reset and free-period bookkeeping (2.0.1).
+    private var technicalSection: some View {
+        VStack(alignment: .leading, spacing: DemoraSpace.xxs) {
+            DemoraSectionTitle(title: "state")
+            ForEach(technical, id: \.self) { line in
+                Text(line)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(Ink.inkSoft)
+            }
+        }
+        .textSelection(.enabled)
     }
 
     private var running: some View {
@@ -180,19 +212,43 @@ struct BlockingDiagnosticsView: View {
             let credit = SharedStore.loadFreeCreditByLimit()
             let extra = LimitFeatures.extraUnblockedIDs(state: state, at: now)
             let feature = LimitFeatures.blockedFeatureIDs(state: state, at: now, includeWake: false)
+            let suppressed = SharedStore.loadFreeWindowSuppressedLimitIDs()
+            let unblocks = state.sessions.filter { $0.isActive && $0.kind == .unblock }.map(\.name)
             let rows = state.limits.map { limit in
                 let baseline = (limit.minutes(on: now) == 0 || spent.contains(limit.id))
                     && !extra.contains(limit.id)
                 return LimitRow(id: limit.id, name: limit.name,
                                 blockedNow: baseline || feature.contains(limit.id),
                                 reachedAt: reached[limit.id], credit: credit[limit.id] ?? 0,
-                                extraRunning: extra.contains(limit.id))
+                                extraRunning: extra.contains(limit.id),
+                                reachedDuringFree: suppressed.contains(limit.id))
             }
-            return Snapshot(monitors: names, limits: rows, unreadable: false)
+            func stamp(_ date: Date?) -> String {
+                date.map { ISO8601DateFormatter.string(from: $0, timeZone: .current,
+                                                        formatOptions: [.withFullTime, .withFullDate]) } ?? "-"
+            }
+            let guarded = TimeGuard.now()
+            let limitNames = Dictionary(uniqueKeysWithValues: state.limits.map { ($0.id, $0.name) })
+            let technical = [
+                "clock offset: \(Int(guarded.timeIntervalSince(now)))s",
+                "day wall/guarded/reset: \(SharedStore.dayKey(for: now)) / \(SharedStore.dayKey(for: guarded)) / \(SharedStore.lastResetDay)",
+                "spent: " + (spent.compactMap { limitNames[$0] }.sorted().joined(separator: ", ")).ifEmpty("-"),
+                "credit: " + credit.compactMap { id, minutes in limitNames[id].map { "\($0)=\(minutes)" } }
+                    .sorted().joined(separator: ", ").ifEmpty("-"),
+                "free start/known end/unbounded: \(stamp(SharedStore.freeWindowStart)) / \(stamp(SharedStore.freeWindowKnownEnd)) / \(SharedStore.freeWindowUnbounded)",
+                "free epoch: \(SharedStore.freeWindowTrackingEpoch ?? "-")",
+                "suppressed: " + (suppressed.compactMap { limitNames[$0] }.sorted().joined(separator: ", ")).ifEmpty("-"),
+                "exemptions active: \(state.exemptions.filter { $0.isActive() }.count), sessions active: \(state.sessions.filter(\.isActive).map { "\($0.kind.rawValue)" }.joined(separator: ","))",
+                "pending due: \(state.pending.filter(\.isDue).count) of \(state.pending.count)",
+            ]
+            return Snapshot(monitors: names, limits: rows, unreadable: false,
+                            unblockSessions: unblocks, technical: technical)
         }.value
         failures = SharedStore.enforcementFailures
         limits = snapshot.limits
         rulesUnreadable = snapshot.unreadable
+        unblockSessions = snapshot.unblockSessions
+        technical = snapshot.technical
         freeSince = SharedStore.freeWindowStart
         monitors = snapshot.monitors
         loaded = true
@@ -208,4 +264,8 @@ struct BlockingDiagnosticsView: View {
             retrying = false
         }
     }
+}
+
+private extension String {
+    func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
 }

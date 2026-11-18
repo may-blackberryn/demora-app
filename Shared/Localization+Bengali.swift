@@ -852,6 +852,8 @@ let bengaliStrings: [String: String] = [
     "Problems": "সমস্যা",
     "Everything is set up.": "সবকিছু সেট আপ করা আছে।",
     "Running monitors: %d of %d": "চালু মনিটর: %d / %d",
+    "Limit reached during free time": "ফ্রি টাইমে সীমা পূর্ণ হয়েছে",
+    "Unblock session running: %@": "আনব্লক সেশন চলছে: %@",
     "Blocked now": "এখন ব্লক করা",
     "Not blocked": "ব্লক করা নয়",
     "Limit reached at %@": "%@-এ সীমা পূর্ণ হয়েছে",

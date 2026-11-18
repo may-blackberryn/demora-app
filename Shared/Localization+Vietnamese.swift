@@ -852,6 +852,8 @@ let vietnameseStrings: [String: String] = [
     "Problems": "Sự cố",
     "Everything is set up.": "Mọi thứ đã được thiết lập.",
     "Running monitors: %d of %d": "Trình theo dõi đang chạy: %d / %d",
+    "Limit reached during free time": "Đạt giới hạn trong thời gian tự do",
+    "Unblock session running: %@": "Phiên bỏ chặn đang chạy: %@",
     "Blocked now": "Đang chặn",
     "Not blocked": "Không bị chặn",
     "Limit reached at %@": "Đạt giới hạn lúc %@",

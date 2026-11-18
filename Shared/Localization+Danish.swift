@@ -852,6 +852,8 @@ let danishStrings: [String: String] = [
     "Problems": "Problemer",
     "Everything is set up.": "Alt er sat op.",
     "Running monitors: %d of %d": "Aktive overvågninger: %d af %d",
+    "Limit reached during free time": "Grænsen nået under fritid",
+    "Unblock session running: %@": "Ophævelsessession kører: %@",
     "Blocked now": "Blokeret nu",
     "Not blocked": "Ikke blokeret",
     "Limit reached at %@": "Grænsen nået kl. %@",

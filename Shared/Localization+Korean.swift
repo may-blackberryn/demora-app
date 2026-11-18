@@ -852,6 +852,8 @@ let koreanStrings: [String: String] = [
     "Problems": "문제",
     "Everything is set up.": "모두 설정되었어요.",
     "Running monitors: %d of %d": "실행 중인 모니터: %d / %d",
+    "Limit reached during free time": "자유 시간 중 제한 도달",
+    "Unblock session running: %@": "차단 해제 세션 진행 중: %@",
     "Blocked now": "지금 차단됨",
     "Not blocked": "차단되지 않음",
     "Limit reached at %@": "%@에 제한 도달",

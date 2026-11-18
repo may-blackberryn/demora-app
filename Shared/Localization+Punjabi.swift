@@ -852,6 +852,8 @@ let punjabiStrings: [String: String] = [
     "Problems": "ਸਮੱਸਿਆਵਾਂ",
     "Everything is set up.": "ਸਭ ਕੁਝ ਸੈੱਟ ਹੈ।",
     "Running monitors: %d of %d": "ਚੱਲ ਰਹੇ ਮਾਨੀਟਰ: %d / %d",
+    "Limit reached during free time": "ਫ੍ਰੀ ਟਾਈਮ ਦੌਰਾਨ ਸੀਮਾ ਪੂਰੀ ਹੋਈ",
+    "Unblock session running: %@": "ਅਨਬਲੌਕ ਸੈਸ਼ਨ ਚੱਲ ਰਿਹਾ ਹੈ: %@",
     "Blocked now": "ਹੁਣ ਬਲੌਕ ਹੈ",
     "Not blocked": "ਬਲੌਕ ਨਹੀਂ",
     "Limit reached at %@": "%@ ਵਜੇ ਸੀਮਾ ਪੂਰੀ ਹੋਈ",

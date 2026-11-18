@@ -852,6 +852,8 @@ let russianStrings: [String: String] = [
     "Problems": "Проблемы",
     "Everything is set up.": "Всё настроено.",
     "Running monitors: %d of %d": "Активные мониторы: %d из %d",
+    "Limit reached during free time": "Лимит достигнут во время свободного времени",
+    "Unblock session running: %@": "Идёт сеанс разблокировки: %@",
     "Blocked now": "Сейчас заблокировано",
     "Not blocked": "Не заблокировано",
     "Limit reached at %@": "Лимит достигнут в %@",

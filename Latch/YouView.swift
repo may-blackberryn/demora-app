@@ -32,6 +32,7 @@ struct YouView: View {
     @State private var blockTarget: ContactsRelay.IncomingInvite?
     @State private var receipt: ChangeReceiptRequest?
     @State private var showAdd = false
+    @State private var showDiagnostics = false
     @AppStorage("appearance") private var appearanceRaw = Appearance.system.rawValue
     @AppStorage("textCasing") private var textCasingRaw = TextCasing.fallback.rawValue
     @AppStorage("latch.accentColor", store: SharedStore.defaults)
@@ -98,6 +99,7 @@ struct YouView: View {
             }
             .changeReceipt($receipt)
             .sheet(isPresented: $showAdd) { AddSkipWaySheet() }
+            .sheet(isPresented: $showDiagnostics) { BlockingDiagnosticsView() }
             .confirmationDialog(tr("Block this person? They can't send you requests."),
                                 isPresented: Binding(get: { blockTarget != nil },
                                                      set: { if !$0 { blockTarget = nil } }),
@@ -158,6 +160,11 @@ struct YouView: View {
                 YouRowDivider()
                 YouNavigationRow(title: tr("Help & guide")) {
                     model.youPath.append(.help)
+                }
+                YouRowDivider()
+                // 2.0.1: Details is reachable even without the warning.
+                YouNavigationRow(title: tr("Background blocking")) {
+                    showDiagnostics = true
                 }
             }
             .paperCard(padding: 0)

@@ -852,6 +852,8 @@ let tamilStrings: [String: String] = [
     "Problems": "சிக்கல்கள்",
     "Everything is set up.": "எல்லாம் அமைக்கப்பட்டுள்ளது.",
     "Running monitors: %d of %d": "இயங்கும் கண்காணிப்புகள்: %d / %d",
+    "Limit reached during free time": "இலவச நேரத்தில் வரம்பு எட்டப்பட்டது",
+    "Unblock session running: %@": "தடை நீக்க அமர்வு நடக்கிறது: %@",
     "Blocked now": "இப்போது தடுக்கப்பட்டுள்ளது",
     "Not blocked": "தடுக்கப்படவில்லை",
     "Limit reached at %@": "%@ க்கு வரம்பு எட்டப்பட்டது",

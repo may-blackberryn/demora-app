@@ -850,6 +850,8 @@ let germanStrings: [String: String] = [
     "Problems": "Probleme",
     "Everything is set up.": "Alles ist eingerichtet.",
     "Running monitors: %d of %d": "Aktive Überwachungen: %d von %d",
+    "Limit reached during free time": "Limit in der Freizeit erreicht",
+    "Unblock session running: %@": "Freigabe-Sitzung läuft: %@",
     "Blocked now": "Jetzt blockiert",
     "Not blocked": "Nicht blockiert",
     "Limit reached at %@": "Limit erreicht um %@",

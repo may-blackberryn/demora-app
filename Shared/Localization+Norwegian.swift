@@ -852,6 +852,8 @@ let norwegianStrings: [String: String] = [
     "Problems": "Problemer",
     "Everything is set up.": "Alt er satt opp.",
     "Running monitors: %d of %d": "Aktive overvåkinger: %d av %d",
+    "Limit reached during free time": "Grensen nådd i fritid",
+    "Unblock session running: %@": "Opphevingsøkt pågår: %@",
     "Blocked now": "Blokkert nå",
     "Not blocked": "Ikke blokkert",
     "Limit reached at %@": "Grensen nådd kl. %@",

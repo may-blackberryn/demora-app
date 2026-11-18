@@ -852,6 +852,8 @@ let urduStrings: [String: String] = [
     "Problems": "مسائل",
     "Everything is set up.": "سب کچھ سیٹ اپ ہو گیا ہے۔",
     "Running monitors: %d of %d": "چلنے والے مانیٹرز: %d / %d",
+    "Limit reached during free time": "فری ٹائم کے دوران حد پوری ہوئی",
+    "Unblock session running: %@": "ان بلاک سیشن جاری ہے: %@",
     "Blocked now": "ابھی بلاک ہے",
     "Not blocked": "بلاک نہیں",
     "Limit reached at %@": "%@ پر حد پوری ہوئی",

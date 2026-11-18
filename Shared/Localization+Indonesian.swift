@@ -852,6 +852,8 @@ let indonesianStrings: [String: String] = [
     "Problems": "Masalah",
     "Everything is set up.": "Semuanya sudah diatur.",
     "Running monitors: %d of %d": "Pemantau aktif: %d dari %d",
+    "Limit reached during free time": "Batas tercapai saat waktu bebas",
+    "Unblock session running: %@": "Sesi buka blokir berjalan: %@",
     "Blocked now": "Diblokir sekarang",
     "Not blocked": "Tidak diblokir",
     "Limit reached at %@": "Batas tercapai pukul %@",

@@ -852,6 +852,8 @@ let gujaratiStrings: [String: String] = [
     "Problems": "સમસ્યાઓ",
     "Everything is set up.": "બધું સેટ છે.",
     "Running monitors: %d of %d": "ચાલુ મોનિટર: %d / %d",
+    "Limit reached during free time": "ફ્રી ટાઇમમાં મર્યાદા પૂરી થઈ",
+    "Unblock session running: %@": "અનબ્લૉક સેશન ચાલુ છે: %@",
     "Blocked now": "હમણાં બ્લૉક છે",
     "Not blocked": "બ્લૉક નથી",
     "Limit reached at %@": "%@ વાગ્યે મર્યાદા પૂરી થઈ",

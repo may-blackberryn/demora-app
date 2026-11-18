@@ -852,6 +852,8 @@ let italianStrings: [String: String] = [
     "Problems": "Problemi",
     "Everything is set up.": "È tutto configurato.",
     "Running monitors: %d of %d": "Monitoraggi attivi: %d di %d",
+    "Limit reached during free time": "Limite raggiunto durante il tempo libero",
+    "Unblock session running: %@": "Sessione di sblocco in corso: %@",
     "Blocked now": "Bloccato ora",
     "Not blocked": "Non bloccato",
     "Limit reached at %@": "Limite raggiunto alle %@",

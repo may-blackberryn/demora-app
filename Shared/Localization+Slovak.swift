@@ -852,6 +852,8 @@ let slovakStrings: [String: String] = [
     "Problems": "Problémy",
     "Everything is set up.": "Všetko je nastavené.",
     "Running monitors: %d of %d": "Aktívne monitory: %d z %d",
+    "Limit reached during free time": "Limit dosiahnutý počas voľného času",
+    "Unblock session running: %@": "Beží relácia odblokovania: %@",
     "Blocked now": "Teraz blokované",
     "Not blocked": "Neblokované",
     "Limit reached at %@": "Limit dosiahnutý o %@",

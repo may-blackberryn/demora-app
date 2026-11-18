@@ -852,6 +852,8 @@ let malayalamStrings: [String: String] = [
     "Problems": "പ്രശ്നങ്ങൾ",
     "Everything is set up.": "എല്ലാം സജ്ജമാണ്.",
     "Running monitors: %d of %d": "പ്രവർത്തിക്കുന്ന മോണിറ്ററുകൾ: %d / %d",
+    "Limit reached during free time": "ഫ്രീ ടൈമിൽ പരിധി എത്തി",
+    "Unblock session running: %@": "അൺബ്ലോക്ക് സെഷൻ നടക്കുന്നു: %@",
     "Blocked now": "ഇപ്പോൾ ബ്ലോക്ക് ചെയ്‌തിരിക്കുന്നു",
     "Not blocked": "ബ്ലോക്ക് ചെയ്‌തിട്ടില്ല",
     "Limit reached at %@": "%@-ന് പരിധി എത്തി",

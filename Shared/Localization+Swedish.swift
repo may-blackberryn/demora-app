@@ -852,6 +852,8 @@ let swedishStrings: [String: String] = [
     "Problems": "Problem",
     "Everything is set up.": "Allt är inställt.",
     "Running monitors: %d of %d": "Aktiva övervakningar: %d av %d",
+    "Limit reached during free time": "Gränsen nådd under fritid",
+    "Unblock session running: %@": "Upplåsningssession pågår: %@",
     "Blocked now": "Blockerad nu",
     "Not blocked": "Inte blockerad",
     "Limit reached at %@": "Gränsen nådd kl. %@",

@@ -852,6 +852,8 @@ let teluguStrings: [String: String] = [
     "Problems": "సమస్యలు",
     "Everything is set up.": "అన్నీ సెటప్ అయ్యాయి.",
     "Running monitors: %d of %d": "నడుస్తున్న మానిటర్‌లు: %d / %d",
+    "Limit reached during free time": "ఫ్రీ టైమ్‌లో పరిమితి చేరుకుంది",
+    "Unblock session running: %@": "అన్‌బ్లాక్ సెషన్ నడుస్తోంది: %@",
     "Blocked now": "ఇప్పుడు బ్లాక్ అయ్యింది",
     "Not blocked": "బ్లాక్ కాలేదు",
     "Limit reached at %@": "%@కి పరిమితి చేరుకుంది",

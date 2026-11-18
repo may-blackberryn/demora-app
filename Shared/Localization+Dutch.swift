@@ -852,6 +852,8 @@ let dutchStrings: [String: String] = [
     "Problems": "Problemen",
     "Everything is set up.": "Alles is ingesteld.",
     "Running monitors: %d of %d": "Actieve monitors: %d van %d",
+    "Limit reached during free time": "Limiet bereikt tijdens vrije tijd",
+    "Unblock session running: %@": "Deblokkeersessie loopt: %@",
     "Blocked now": "Nu geblokkeerd",
     "Not blocked": "Niet geblokkeerd",
     "Limit reached at %@": "Limiet bereikt om %@",
